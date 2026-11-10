@@ -18,7 +18,10 @@ pub mod routes;
 mod view;
 pub use view::ReadView;
 #[cfg(unix)]
-pub use view::{ComposedReadAdmission, ComposedReadPermit, ComposedReadView};
+pub use view::{
+    ComposedQueryOutput, ComposedReadAdmission, ComposedReadPermit, ComposedReadReservation,
+    ComposedReadView,
+};
 #[cfg(test)]
 mod tests;
 

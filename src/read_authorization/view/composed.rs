@@ -9,8 +9,9 @@ use super::{AuthorizedRead, MAX_VIEW_BYTES, MAX_VIEW_FACTS, ReadOperation, ReadV
 use crate::{Result, Store, store::graph_owner::CapturedRead};
 
 /// Request-owned authorized RDF view of one strict owner cut. This API does
-/// not install a route or reserve evaluator/RSS capacity. The trusted caller
-/// must admit its scratch connection and heap lifetime before opening the view.
+/// not install a route or meter allocator/RSS usage. The shared admission handle
+/// reserves declared view/query shares; the initializer must qualify their sizes
+/// and enforce the aggregate process/cgroup limit before server integration.
 pub struct ComposedReadView {
     view: ReadView,
     bindings: BTreeMap<String, (crate::graph_catalog::Route, u64)>,
@@ -132,15 +133,26 @@ impl AuthorizedRead {
 impl ComposedReadView {
     /// Reuse the existing recursive GRAPH/FROM/SERVICE authorization preflight
     /// and serializer over one scratch dictionary, never merge result sets.
-    pub fn query(&self, text: &str, resident_model: bool, now: u64) -> Result<Vec<u8>> {
+    pub fn query(
+        &self,
+        text: &str,
+        resident_model: bool,
+        now: u64,
+    ) -> Result<super::ComposedQueryOutput> {
+        if Instant::now() >= self.deadline || text.len() > 65_536 {
+            return Err(denied());
+        }
+        let lease = self._permit.reserve_query()?;
+        let response = self.view.query_response_bounded(
+            text,
+            resident_model,
+            now,
+            self._permit.max_response_bytes(),
+        )?;
         if Instant::now() >= self.deadline {
             return Err(denied());
         }
-        let bytes = self.view.query(text, resident_model, now)?;
-        if Instant::now() >= self.deadline {
-            return Err(denied());
-        }
-        Ok(bytes)
+        Ok(super::ComposedQueryOutput::new(response, lease))
     }
 
     /// Fresh policy, identity and complete current owner-generation check before

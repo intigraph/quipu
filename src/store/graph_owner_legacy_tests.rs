@@ -51,8 +51,11 @@ fn legacy_fixture(root: &Path) -> (Owner, Owner, ComposedReadAdmission) {
         .with_legacy_participant(pin.clone())
         .unwrap(),
     );
-    assert!(ComposedReadAdmission::new(catalog.clone(), 512, 2, 1).is_err());
-    let admission = ComposedReadAdmission::new(catalog.clone(), 512, 3, 1).unwrap();
+    assert!(
+        ComposedReadAdmission::new(catalog.clone(), 512, 2, 1, composition_reservation()).is_err()
+    );
+    let admission =
+        ComposedReadAdmission::new(catalog.clone(), 512, 3, 1, composition_reservation()).unwrap();
     assert_eq!(admission.allocation().connections, 7);
     let legacy = Owner::prepare_with_memory(
         catalog.clone(),
@@ -101,6 +104,7 @@ fn legacy_root_composes_only_explicit_scope_at_common_snapshot() {
         512,
         3,
         1,
+        composition_reservation(),
     )
     .unwrap();
     let deadline = strict_deadline();

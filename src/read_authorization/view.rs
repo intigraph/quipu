@@ -203,6 +203,27 @@ impl ReadView {
         resident_model: bool,
         now: u64,
     ) -> Result<(&'static str, Vec<u8>)> {
+        self.query_response_inner(text, resident_model, now, None)
+    }
+
+    #[cfg(unix)]
+    fn query_response_bounded(
+        &self,
+        text: &str,
+        resident_model: bool,
+        now: u64,
+        max_bytes: usize,
+    ) -> Result<(&'static str, Vec<u8>)> {
+        self.query_response_inner(text, resident_model, now, Some(max_bytes))
+    }
+
+    fn query_response_inner(
+        &self,
+        text: &str,
+        resident_model: bool,
+        now: u64,
+        max_bytes: Option<usize>,
+    ) -> Result<(&'static str, Vec<u8>)> {
         self.require(ReadOperation::Query, now)?;
         let parsed = crate::sparql_structure::parse_query(sparql::sparql_parser(), text)?
             .map_err(|_| denied())?;
@@ -254,7 +275,11 @@ impl ReadView {
             }
             sparql::QueryResult::Graph(_) => crate::w3c::ResultFormat::NTriples,
         };
-        crate::w3c::serialize(&self.store, &result, format)?.ok_or_else(denied)
+        match max_bytes {
+            Some(limit) => crate::w3c::serialize_bounded(&self.store, &result, format, limit)?,
+            None => crate::w3c::serialize(&self.store, &result, format)?,
+        }
+        .ok_or_else(denied)
     }
 
     /// A complete current graph export/acquisition, with no global transaction,
@@ -346,4 +371,6 @@ pub use composed::ComposedReadView;
 #[cfg(unix)]
 mod composed_admission;
 #[cfg(unix)]
-pub use composed_admission::{ComposedReadAdmission, ComposedReadPermit};
+pub use composed_admission::{
+    ComposedQueryOutput, ComposedReadAdmission, ComposedReadPermit, ComposedReadReservation,
+};

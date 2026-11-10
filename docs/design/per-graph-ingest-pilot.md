@@ -107,6 +107,29 @@ all of those must use this same fence before a server may advertise composed
 strict reads. Evaluator/RSS reservation and durable startup/bypass qualification
 also remain separate requirements.
 
+The shared admission initializer also requires an explicit
+`ComposedReadReservation`: runtime headroom, each view's scratch/dictionary/model
+share, each outstanding query's evaluator/output share, and a serialized-body
+ceiling. These shares come from the evaluator half of the same aggregate service
+budget as the SQLite allocation. Zero, overflow and overcommit refuse before
+capture. There is no production sizing default; native controls use synthetic
+reservation values to exercise admission, not to certify a production profile.
+
+A view holds its view lease through destruction of scratch state. Each query
+acquires a separate lease before parsing/evaluation. The returned
+`ComposedQueryOutput` retains that lease with its bytes, even after the view is
+dropped, so retained responses cannot silently free capacity for another query.
+The W3C output writer refuses before extending its buffer past the declared
+serialized-body ceiling; overflow returns an error rather than a partial answer.
+Consumers borrow bytes and the serializer's media type. Any consumer-made copies
+need separate accounting. Existing fresh policy/cut recheck requirements still
+apply immediately before publication; retaining bytes is not publication authority.
+
+These are reservation and output-byte controls, not an allocator meter or proof
+of a hard evaluator RSS bound. Parser, resident-model, join, format-conversion and
+runtime peaks still require workload measurements and the aggregate process/cgroup
+boundary. The in-process prototype must not be advertised as an RSS-isolated server.
+
 ## Qualification sequence
 
 1. Complete the producer/consumer matrix and namespace integration. Land the

@@ -1117,9 +1117,14 @@ fn composed_cut_joins_canonical_terms_with_bags_and_exact_graph_grants() {
     );
     let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
     let policy = policy.snapshot().unwrap();
-    let admission =
-        crate::read_authorization::ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1)
-            .unwrap();
+    let admission = crate::read_authorization::ComposedReadAdmission::new(
+        a.catalog.clone(),
+        512,
+        1,
+        1,
+        composition_reservation(),
+    )
+    .unwrap();
     let deadline = strict_deadline();
     let permit = admission.try_reserve().unwrap();
     Owner::read_strict(&[&b, &a], deadline, |reads| {
@@ -1133,8 +1138,8 @@ fn composed_cut_joins_canonical_terms_with_bags_and_exact_graph_grants() {
             format!("SELECT ?v WHERE {{ GRAPH <{}> {{ <urn:shared> <urn:typed> ?v }} }}", b.route.graph),
             "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }".into(),
         ] {
-            assert_eq!(view.query(&query, false, 2)?, reference.query(&query, false, 2)?, "{query}");
-            assert_eq!(view.query(&query, true, 2)?, reference.query(&query, true, 2)?, "resident: {query}");
+            assert_eq!(view.query(&query, false, 2)?.as_bytes(), reference.query(&query, false, 2)?.as_slice(), "{query}");
+            assert_eq!(view.query(&query, true, 2)?.as_bytes(), reference.query(&query, true, 2)?.as_slice(), "resident: {query}");
         }
         for query in [
             "ASK { GRAPH <urn:hidden> { ?s ?p ?o } }",
@@ -1161,9 +1166,14 @@ fn composed_cut_refuses_scope_operation_expiry_deadline_and_oversized_values() {
     let policy = policy.snapshot().unwrap();
     let (subset, _) = composition_authority(&[&a.route.graph]);
     let subset = subset.snapshot().unwrap();
-    let admission =
-        crate::read_authorization::ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1)
-            .unwrap();
+    let admission = crate::read_authorization::ComposedReadAdmission::new(
+        a.catalog.clone(),
+        512,
+        1,
+        1,
+        composition_reservation(),
+    )
+    .unwrap();
     Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
         assert!(
             subset
@@ -1226,9 +1236,14 @@ fn composed_cut_recheck_binds_generation_policy_and_expired_buffer() {
     let graphs = [&a.route.graph, &b.route.graph];
     let (mut owner_policy, identity) = composition_authority(&[graphs[0], graphs[1]]);
     let policy = owner_policy.snapshot().unwrap();
-    let admission =
-        crate::read_authorization::ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1)
-            .unwrap();
+    let admission = crate::read_authorization::ComposedReadAdmission::new(
+        a.catalog.clone(),
+        512,
+        1,
+        1,
+        composition_reservation(),
+    )
+    .unwrap();
     Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
         let view = policy
@@ -1296,10 +1311,21 @@ fn composed_cut_admission_refuses_zero_underfunding_and_foreign_catalog() {
     use crate::read_authorization::{ComposedReadAdmission, ReadOperation};
     let temp = tempfile::tempdir().unwrap();
     let (a, b) = strict_fixture(temp.path());
-    assert!(ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 0).is_err());
-    assert!(ComposedReadAdmission::new(a.catalog.clone(), 511, 1, 1).is_err());
-    assert!(ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 2).is_err());
-    let admission = ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1).unwrap();
+    assert!(
+        ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 0, composition_reservation())
+            .is_err()
+    );
+    assert!(
+        ComposedReadAdmission::new(a.catalog.clone(), 511, 1, 1, composition_reservation())
+            .is_err()
+    );
+    assert!(
+        ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 2, composition_reservation())
+            .is_err()
+    );
+    let admission =
+        ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1, composition_reservation())
+            .unwrap();
     assert_eq!(admission.allocation().connections, 8);
     let permit = admission.try_reserve().unwrap();
     assert!(admission.clone().try_reserve().is_err());
@@ -1307,8 +1333,14 @@ fn composed_cut_admission_refuses_zero_underfunding_and_foreign_catalog() {
     assert!(admission.try_reserve().is_ok());
     let mut changed = a.route.clone();
     changed.generation += 1;
-    let other =
-        ComposedReadAdmission::new(catalog(vec![changed, b.route.clone()]), 512, 1, 1).unwrap();
+    let other = ComposedReadAdmission::new(
+        catalog(vec![changed, b.route.clone()]),
+        512,
+        1,
+        1,
+        composition_reservation(),
+    )
+    .unwrap();
     let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
     let policy = policy.snapshot().unwrap();
     let permit = other.try_reserve().unwrap();
@@ -1349,7 +1381,9 @@ fn composed_cut_sees_post_open_terms_without_cross_file_numeric_aliases() {
     }
     let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
     let policy = policy.snapshot().unwrap();
-    let admission = ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1).unwrap();
+    let admission =
+        ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1, composition_reservation())
+            .unwrap();
     let joined = format!(
         "SELECT ?value WHERE {{ GRAPH <{}> {{ <urn:start> <urn:step>+ ?x }} GRAPH <{}> {{ ?x <urn:value> ?value }} }} ORDER BY ?value",
         a.route.graph, b.route.graph
@@ -1405,7 +1439,10 @@ fn composed_cut_sees_post_open_terms_without_cross_file_numeric_aliases() {
             .open(&baseline, 2)?;
         for resident in [false, true] {
             let bytes = view.query(&joined, resident, 2)?;
-            assert_eq!(bytes, reference.query(&joined, resident, 2)?);
+            assert_eq!(
+                bytes.as_bytes(),
+                reference.query(&joined, resident, 2)?.as_slice()
+            );
             let result: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(result["results"]["bindings"].as_array().unwrap().len(), 1);
             assert_eq!(
@@ -1413,7 +1450,10 @@ fn composed_cut_sees_post_open_terms_without_cross_file_numeric_aliases() {
                 "fresh-answer"
             );
             let bytes = view.query(&collision, resident, 2)?;
-            assert_eq!(bytes, reference.query(&collision, resident, 2)?);
+            assert_eq!(
+                bytes.as_bytes(),
+                reference.query(&collision, resident, 2)?.as_slice()
+            );
             assert_eq!(
                 serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["boolean"],
                 false
@@ -1431,7 +1471,9 @@ fn composed_cut_recheck_refuses_deadline_expiring_during_identity_sql() {
     let (a, b) = strict_fixture(temp.path());
     let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
     let policy = policy.snapshot().unwrap();
-    let admission = ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1).unwrap();
+    let admission =
+        ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1, composition_reservation())
+            .unwrap();
     Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
         let deadline = std::time::Instant::now() + Duration::from_millis(300);
         let view = policy
@@ -1486,3 +1528,15 @@ fn composed_cut_recheck_refuses_deadline_expiring_during_identity_sql() {
 
 #[path = "graph_owner_legacy_tests.rs"]
 mod legacy_participant;
+
+fn composition_reservation() -> crate::read_authorization::ComposedReadReservation {
+    crate::read_authorization::ComposedReadReservation {
+        runtime_bytes: 128 * 1_048_576,
+        view_bytes: 64 * 1_048_576,
+        query_bytes: 32 * 1_048_576,
+        max_response_bytes: 1_048_576,
+    }
+}
+
+#[path = "graph_owner_resource_tests.rs"]
+mod resource_reservation;
