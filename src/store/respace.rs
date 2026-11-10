@@ -383,6 +383,7 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
     // The next writer open reinstalls triggers and mints fresh instance pins.
     tx.execute_batch(
         "DELETE FROM writer_grants; DELETE FROM writer_graph_instances;
+        DELETE FROM client_changeset_grants; DELETE FROM client_changeset_receipts;
         DROP TRIGGER writer_graph_insert; DROP TRIGGER writer_graph_delete;
         DROP TRIGGER writer_graph_update;",
     )?;

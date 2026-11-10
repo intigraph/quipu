@@ -476,3 +476,265 @@ fn an_oversized_value_refuses_before_materializing_a_partial_view() {
         .unwrap();
     assert!(authorization.open(&source, 2).is_err());
 }
+
+/// True when a scoped query result exposes the hidden fact stored only in B.
+fn exposes_hidden(view: &ReadView) -> bool {
+    let bytes = view
+        .query(
+            "SELECT ?o WHERE { GRAPH ?g { ?s <urn:predicate:hidden> ?o } }",
+            false,
+            2,
+        )
+        .unwrap();
+    String::from_utf8(bytes).unwrap().contains("secret")
+}
+
+/// Each enforcement point has a paired negative. With the point intact the
+/// negative holds; with exactly that point disabled the same negative must
+/// observe the disclosure. A mutant that changes nothing would mean the
+/// negative does not actually test its enforcement point.
+#[test]
+fn controlled_mutants_each_turn_their_paired_negative_red() {
+    use super::mutants::{Mutant, with};
+    let policy = policy();
+    let source = source("secret");
+    let snapshot = policy.snapshot().unwrap();
+    let selected_ab: BTreeSet<String> = [A.into(), B.into()].into();
+    let p_view = || view(&policy, &source, P, ReadOperation::Query);
+
+    let mut revoked_policy = OwnerReadPolicy::open(":memory:", OWNER).unwrap();
+    let original = grant(P, &[A], ReadOperation::Query);
+    revoked_policy.apply(&original, "fixture:grant").unwrap();
+    let mut revoked = original.clone();
+    revoked.revoked = true;
+    revoked.revision = 2;
+    revoked_policy.apply(&revoked, "fixture:revoke").unwrap();
+    let revoked_snapshot = revoked_policy.snapshot().unwrap();
+
+    // (mutant, disclosed?) where `disclosed` is the paired negative's observation.
+    let cases: Vec<(Mutant, Box<dyn Fn() -> bool + '_>)> = vec![
+        (
+            // Q's grant over B must never widen P's default view.
+            Mutant::PrincipalMatch,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, None, 2)
+                    .and_then(|read| read.open(&source, 2))
+                    .is_ok_and(|view| exposes_hidden(&view))
+            }),
+        ),
+        (
+            // P holds no Replicate grant; query/export grants must not stand in.
+            Mutant::OperationMatch,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Replicate, None, 2)
+                    .is_ok()
+            }),
+        ),
+        (
+            Mutant::RevokedGrant,
+            Box::new(|| {
+                revoked_snapshot
+                    .authorize(&identity(P), ReadOperation::Query, None, 2)
+                    .is_ok()
+            }),
+        ),
+        (
+            // now=0 is before every fixture grant's valid_from=1.
+            Mutant::GrantValidity,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, None, 0)
+                    .is_ok()
+            }),
+        ),
+        (
+            // An explicit {A,B} dataset must refuse in full, never open B.
+            Mutant::DatasetSubset,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, Some(&selected_ab), 2)
+                    .and_then(|read| read.open(&source, 2))
+                    .is_ok_and(|view| exposes_hidden(&view))
+            }),
+        ),
+        (
+            // An intersection is nonempty for {A,B}, but B remains denied.
+            Mutant::DatasetIntersection,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, Some(&selected_ab), 2)
+                    .and_then(|read| read.open(&source, 2))
+                    .is_ok_and(|view| exposes_hidden(&view))
+            }),
+        ),
+        (
+            // The scoped copy holds only A and C, so the observable failure is
+            // the refusal itself turning into an answer about an ungranted graph.
+            Mutant::QueryDatasetClause,
+            Box::new(|| {
+                p_view()
+                    .query("ASK FROM <urn:graph:b> { ?s ?p ?o }", false, 2)
+                    .is_ok()
+            }),
+        ),
+        (
+            Mutant::QueryGraphScope,
+            Box::new(|| {
+                p_view()
+                    .query("ASK { GRAPH <urn:graph:b> { ?s ?p ?o } }", false, 2)
+                    .is_ok()
+            }),
+        ),
+    ];
+    for (mutant, disclosed) in &cases {
+        assert!(
+            !disclosed(),
+            "{mutant:?}: negative must hold with enforcement intact"
+        );
+        assert!(
+            with(*mutant, disclosed),
+            "{mutant:?}: disabling this enforcement point went undetected"
+        );
+        assert!(!disclosed(), "{mutant:?}: the switch must clear after use");
+    }
+}
+
+/// aegis-44r G3: two real stores that differ ONLY in denied material, across
+/// more surfaces than one hidden fact: the denied graph's label, store-wide
+/// shape names, and the NUMBER of earlier writes (so transaction ids, term ids
+/// and per-store counts of the allowed data differ). Every surface a scoped
+/// view exposes (query bytes and media type, export, metadata) and every
+/// refusal body must be identical. Search is not a surface of `ReadView`.
+fn rich(hidden: &str, extra_writes: usize) -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    let b = store.graph_create(B).unwrap();
+    for n in 0..=extra_writes {
+        let text = format!("<urn:hidden:{hidden}:{n}> <urn:predicate:hidden> \"{hidden} {n}\" .\n");
+        crate::rdf::ingest_assigned_rdf(
+            &mut store,
+            text.as_bytes(),
+            oxrdfio::RdfFormat::NTriples,
+            None,
+            "2026-01-01T00:00:00Z",
+            Some(&format!("actor-{hidden}")),
+            Some(&format!("source-{hidden}-{n}")),
+            b,
+        )
+        .unwrap();
+    }
+    let kind = if extra_writes == 0 {
+        "operational"
+    } else {
+        "archive"
+    };
+    let label = crate::store::labels::GraphLabel {
+        kind: Some(crate::lattice_kind::DataKind::parse(kind).unwrap()),
+        ..Default::default()
+    };
+    store
+        .set_graph_label(B, &label, "2026-01-01T00:00:00Z", Some(hidden))
+        .unwrap();
+    store
+        .graph_create(&format!("urn:hidden:graph:{hidden}"))
+        .unwrap();
+    #[cfg(feature = "shacl")]
+    store
+        .load_shapes(
+            &format!("hidden-shapes-{hidden}"),
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:shape:x> a sh:NodeShape .\n",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+    for (graph, text) in [
+        (
+            A,
+            "<urn:e> <urn:p> <urn:value> .\n<urn:value> <urn:p> <urn:end> .\n",
+        ),
+        (C, "<urn:context> <urn:p> \"context\" .\n"),
+    ] {
+        let g = store.graph_create(graph).unwrap();
+        crate::rdf::ingest_assigned_rdf(
+            &mut store,
+            text.as_bytes(),
+            oxrdfio::RdfFormat::NTriples,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    }
+    store
+}
+
+#[test]
+fn denied_labels_shapes_and_write_history_change_no_public_output() {
+    let policy = policy();
+    let left = rich("one", 0);
+    let right = rich("two", 5);
+    let (a, b) = (
+        view(&policy, &left, P, ReadOperation::Query),
+        view(&policy, &right, P, ReadOperation::Query),
+    );
+    for model in [false, true] {
+        for query in [
+            "SELECT ?s ?p ?o WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o",
+            "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }",
+            "SELECT ?g (COUNT(*) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } } GROUP BY ?g ORDER BY ?g",
+            "SELECT DISTINCT ?p WHERE { ?s ?p ?o } ORDER BY ?p",
+            "SELECT (STR(?o) AS ?v) WHERE { ?s ?p ?o FILTER(isLiteral(?o)) } ORDER BY ?v",
+            "ASK { ?s <urn:predicate:hidden> ?o }",
+        ] {
+            let first = a.query_response(query, model, 2).unwrap();
+            let second = b.query_response(query, model, 2).unwrap();
+            assert_eq!(first, second, "model={model} {query}");
+        }
+    }
+    let hidden_absent = a
+        .query("ASK { ?s <urn:predicate:hidden> ?o }", false, 2)
+        .unwrap();
+    assert!(String::from_utf8(hidden_absent).unwrap().contains("false"));
+    // Refusal bodies: a denied graph, a graph that exists only in the LEFT
+    // store, one only in the RIGHT store, and one in neither all read the same.
+    for graph in [
+        B,
+        "urn:hidden:graph:one",
+        "urn:hidden:graph:two",
+        "urn:missing",
+    ] {
+        for query in [
+            format!("ASK {{ GRAPH <{graph}> {{ ?s ?p ?o }} }}"),
+            format!("ASK FROM <{graph}> {{ ?s ?p ?o }}"),
+        ] {
+            let first = a.query(&query, false, 2).unwrap_err().to_string();
+            let second = b.query(&query, false, 2).unwrap_err().to_string();
+            assert_eq!(first, second, "{query}");
+            assert_eq!(first, denied().to_string(), "{query}");
+        }
+        let selected = [graph.to_owned()].into_iter().collect();
+        for store in [&left, &right] {
+            let err = policy
+                .snapshot()
+                .unwrap()
+                .authorize(&identity(P), ReadOperation::Query, Some(&selected), 2)
+                .err()
+                .unwrap()
+                .to_string();
+            assert_eq!(err, denied().to_string(), "{graph}");
+            let _ = store;
+        }
+    }
+    let (ea, eb) = (
+        view(&policy, &left, P, ReadOperation::Export),
+        view(&policy, &right, P, ReadOperation::Export),
+    );
+    assert_eq!(ea.export(2).unwrap(), eb.export(2).unwrap());
+    let (ma, mb) = (
+        view(&policy, &left, P, ReadOperation::Metadata),
+        view(&policy, &right, P, ReadOperation::Metadata),
+    );
+    assert_eq!(ma.metadata(2).unwrap(), mb.metadata(2).unwrap());
+}

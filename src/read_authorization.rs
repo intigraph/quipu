@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{Error, Result, Store};
 
+pub(crate) mod mutants;
 pub mod profile;
 pub mod routes;
 mod view;
@@ -67,6 +68,16 @@ pub struct ReadGrant {
 }
 
 impl ReadGrant {
+    fn scope(&self) -> crate::grant_scope::GrantScope<'_> {
+        crate::grant_scope::GrantScope {
+            principal: &self.principal,
+            graphs: &self.graphs,
+            valid_from: self.valid_from,
+            valid_until: self.valid_until,
+            revoked: self.revoked,
+        }
+    }
+
     fn validate(&self, owner: &str) -> Result<()> {
         if self.version != 1
             || !valid_iri(&self.id)
@@ -332,12 +343,13 @@ impl ReadPolicy {
         }
         let mut graphs = BTreeSet::new();
         let mut expiry = identity.valid_until;
+        use mutants::{Mutant, active};
         for grant in self.grants.values().filter(|g| {
-            !g.revoked
-                && g.principal == identity.principal
-                && g.operations.contains(&operation)
-                && g.valid_from <= now
-                && now < g.valid_until
+            let scope = g.scope();
+            (!scope.revoked || active(Mutant::RevokedGrant))
+                && (scope.matches_principal(&identity.principal) || active(Mutant::PrincipalMatch))
+                && (g.operations.contains(&operation) || active(Mutant::OperationMatch))
+                && (scope.valid_at(now) || active(Mutant::GrantValidity))
         }) {
             graphs.extend(grant.graphs.iter().cloned());
             expiry = expiry.min(grant.valid_until);
@@ -346,7 +358,12 @@ impl ReadPolicy {
             return Err(denied());
         }
         if let Some(selected) = dataset {
-            if selected.is_empty() || !selected.is_subset(&graphs) {
+            let permitted = if active(Mutant::DatasetIntersection) {
+                !selected.is_disjoint(&graphs)
+            } else {
+                crate::grant_scope::GrantScope::contains_graphs(&graphs, selected)
+            };
+            if selected.is_empty() || (!permitted && !active(Mutant::DatasetSubset)) {
                 return Err(denied());
             }
             graphs = selected.clone();

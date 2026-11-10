@@ -346,6 +346,7 @@ pub(crate) fn execute(
         // Lower before receive alters any ROOT provenance view.
         let receive = datums(store, &prepared.receive)?;
         let decide = datums(store, &prepared.decide)?;
+        crate::merge_plan_gate::datums(store, &[&receive, &decide], Some(ledger))?;
         let parent = prepared
             .request
             .parent

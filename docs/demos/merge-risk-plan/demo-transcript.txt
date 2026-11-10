@@ -1,0 +1,12 @@
+$ same copied candidate: INACTIVE (private in-memory fixture)
+root-only plan: Pass, score=4
+same receiver verifies original proof: PASS
+same receiver rejects mutated proof: PASS
+inactive actual fork promotion: APPLIED; existing behavior retained
+all stores were private and in memory; no deployment policy was installed
+$ same copied candidate: CONFIGURED (private in-memory fixture)
+root-only plan: Pass, score=4
+same receiver verifies original proof: PASS
+same receiver rejects mutated proof: PASS
+configured actual fork promotion: REFUSED; ROOT unchanged
+all stores were private and in memory; no deployment policy was installed

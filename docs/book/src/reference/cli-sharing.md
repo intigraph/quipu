@@ -22,7 +22,7 @@ exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this chec
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
             [--shapes NAME]... [--no-shapes] [--queries NAME]... [--no-queries]
-            [--parent-share ID] [--since <parent-reference>] [--turtle]
+            [--competency competency.toml] [--parent-share ID] [--since <parent-reference>] [--turtle]
             [--destination internal]
 ```
 
@@ -40,11 +40,27 @@ when there are any), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 | `--shapes <NAME>` | include a named shape set; repeatable |
 | `--no-shapes` | omit `shapes.ttl` — the receiver then has no constraints to validate against, so prefer not to |
 | `--queries <NAME>` | carry exactly these stored queries in `queries.ttl`; repeatable. Default: every query *registered against* the scope — see [Stored queries](#stored-queries-queriesttl) |
-| `--no-queries` | carry no stored queries; no `queries.ttl` is written |
+| `--no-queries` | carry no independent stored queries; competency contracts still produce their compiled question member |
+| `--competency <FILE>` | carry verbatim authoring source and compiled question/command RDF, with every member sealed into the share identity |
 | `--parent-share <ID>` | record lineage: the share this one descends from |
 | `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL, not a `share_id` |
 | `--turtle` | additionally write a Turtle view for humans |
 | `--destination internal` | skip the outward scrub and stamp the manifest `destination: internal`. LAN-internal destinations only — see below |
+
+### Competency contract carriage
+
+`--competency competency.toml` compiles the offline contract and carries its
+source bytes, `queries.ttl` and `commands.ttl`. All three SHA-256 digests are
+part of the share identity. References resolve only against the selected carried
+queries; unresolved references and conflicting question/query names refuse.
+A share without this option retains the legacy member layout and identity.
+
+Import checks declarations and hashes, recompiles the source, and refuses any
+compiled RDF difference before staging. It retains the verified source and RDF
+as inert contract data. Only independent stored queries enter the existing
+query-promotion path; competency definitions do not become unconstrained legacy
+executable queries, and import never executes a command. Graph-only merge,
+composition and delta consumers currently refuse competency-enabled shares.
 
 ### The outward scrub, and `--destination internal`
 
@@ -906,6 +922,55 @@ These are operator actions, never automatic server startup repairs. Source
 installation does not authorize production adoption. See the
 ownership and failure contract in `docs/design/store-ownership.md` for partial
 completion, supported host identity and rollout limits.
+
+## Merge declared DataBooks in Git
+
+Declare selected DataBook paths in `.gitattributes` before branching:
+
+```gitattributes
+people.databook.md merge=quipu-databook
+```
+
+`quipu git-merge <ref>` preflights overlapping declared DataBooks and supplies
+immutable Git snapshots to the store-free `databook-merge-driver`. It merges
+RDF slots through the same operator as pendant merges, separately for each
+named graph, after merging shapes. It preserves Markdown prose, unknown YAML
+fields, inert query/update fences and unchanged payload bytes. It never opens
+a store or executes a query. This is a DataBook adapter, not a general RDF or
+Markdown merge driver.
+
+Pending choices are bound to full input bytes in
+`people.databook.md.decisions.json`. Use the shared decision layout:
+
+```sh
+quipu merge show people.databook.md.decisions.json
+quipu merge resolve people.databook.md.decisions.json graph:0/conflict:0 --choose theirs --by reviewer
+quipu git-mergetool people.databook.md --by reviewer
+```
+
+Row IDs are graph-qualified; choose only choices offered by the layout. EOF or
+quit leaves pending rows unresolved. The mergetool refuses changed Git inputs,
+altered sidecars and manual result edits. Keep manual alternatives on a branch
+before regenerating a merge. Stage both the document and its sidecar explicitly.
+After committing, verify the original immutable inputs and result:
+
+```sh
+quipu databook-check "$base" "$ours" "$theirs" HEAD people.databook.md
+```
+
+The check rebuilds the plan and compares every output byte. Editing a hash or
+sidecar alone cannot make a changed result pass. Declared payload hashes and
+the exporter's single-data-block hash-derived document ID are verified and
+recomputed; custom document IDs remain identity. Existing process/transaction
+metadata describes its original input, not a new store transaction or producer
+signature. No conformance claim is made when a document contains no shapes.
+
+This initial profile requires explicit unique data/shape block IDs and refuses
+blank nodes, ambiguous cross-block slot ownership, unsupported encrypted/data
+profiles, inline annotations inside RDF payloads, changed block graph/format
+identity, overlapping opaque edits and whole-document add/add or delete/modify
+conflicts. Move annotations before payloads and resolve unsupported identity or
+opaque edits in the branches. Signature-bound payloads refuse rewriting.
 
 ## Export a cold snapshot without writes
 

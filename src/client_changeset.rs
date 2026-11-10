@@ -338,6 +338,9 @@ pub use preview::OverlayPreview;
 mod rebase;
 pub use rebase::{RebaseOutcome, RebasedChangeSet, Supersession};
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod master;
+
 #[cfg(test)]
 #[path = "client_changeset_tests.rs"]
 mod tests;

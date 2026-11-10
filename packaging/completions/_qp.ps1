@@ -72,9 +72,11 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('asof-rdf', 'asof-rdf', [CompletionResultType]::ParameterValue, 'Convert one retained as-of share into bounded coherent RDF chunks offline')
             [CompletionResult]::new('acquire', 'acquire', [CompletionResultType]::ParameterValue, 'Measure the bounded scope of a direct-main graph acquisition')
             [CompletionResult]::new('migrate-vectors', 'migrate-vectors', [CompletionResultType]::ParameterValue, 'Move stored vectors between backends (lancedb feature)')
-            [CompletionResult]::new('git-mergetool', 'git-mergetool', [CompletionResultType]::ParameterValue, 'Interactively resolve a pendant using the standard merge layout')
+            [CompletionResult]::new('git-mergetool', 'git-mergetool', [CompletionResultType]::ParameterValue, 'Interactively resolve a pendant or declared DataBook using the standard merge layout')
             [CompletionResult]::new('git-merge', 'git-merge', [CompletionResultType]::ParameterValue, 'Merge pendants from Git snapshots and stop before committing')
             [CompletionResult]::new('merge-driver', 'merge-driver', [CompletionResultType]::ParameterValue, 'Low-level Git merge driver for pendant files')
+            [CompletionResult]::new('databook-merge-driver', 'databook-merge-driver', [CompletionResultType]::ParameterValue, 'Low-level Git merge driver for declared DataBook files')
+            [CompletionResult]::new('databook-check', 'databook-check', [CompletionResultType]::ParameterValue, 'Verify an immutable DataBook merge result and its decisions')
             [CompletionResult]::new('pendant-resolve', 'pendant-resolve', [CompletionResultType]::ParameterValue, 'Record a resolution choice for one pendant merge conflict')
             [CompletionResult]::new('pendant-check', 'pendant-check', [CompletionResultType]::ParameterValue, 'Check a pendant merge result in CI without a merge driver')
             [CompletionResult]::new('diff-textconv', 'diff-textconv', [CompletionResultType]::ParameterValue, 'Render a pack with labels for git diff textconv')
@@ -648,6 +650,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
             [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'Shapes used for validation or packaging')
             [CompletionResult]::new('--queries', '--queries', [CompletionResultType]::ParameterName, 'Stored queries to include')
+            [CompletionResult]::new('--competency', '--competency', [CompletionResultType]::ParameterName, 'Verbatim competency.toml to compile and seal with the share')
             [CompletionResult]::new('--alignments', '--alignments', [CompletionResultType]::ParameterName, 'Reviewed SSSOM/RDF alignment file to carry')
             [CompletionResult]::new('--parent-share', '--parent-share', [CompletionResultType]::ParameterName, 'Parent share for a delta export')
             [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'Starting share or transaction for incremental output')
@@ -910,6 +913,18 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             break
         }
         'qp;merge-driver' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;databook-merge-driver' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;databook-check' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

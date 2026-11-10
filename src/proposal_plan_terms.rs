@@ -35,6 +35,12 @@ pub struct Terms {
 }
 
 impl Terms {
+    /// Reasons this fragment cannot be planned exactly by either planner.
+    #[cfg(feature = "shacl")]
+    pub(crate) fn incomplete_reasons(&self) -> &[String] {
+        &self.undetermined
+    }
+
     pub(super) fn all(&self) -> BTreeSet<&str> {
         self.classes
             .iter()
