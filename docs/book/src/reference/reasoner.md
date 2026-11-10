@@ -19,11 +19,6 @@ derivations and withdrawals stay in that companion. A multi-graph batch
 notifies each graph separately. A change in one project cannot update the
 same rule's derivations in another project or in ROOT.
 
-An engine write to a companion inferred graph belongs to its original premise
-graph's closure. It re-evaluates rules over that premise and the same companion,
-including changes introduced or withdrawn by OWL. It does not create a second
-inferred plane or reinterpret ordinary companion derivations as promoted facts.
-
 This applies only when the reactive reasoner is enabled and its rules are
 loaded. Explicit `evaluate_in_graph` remains available for a reconciliation
 or backfill; it is not a substitute for current reactive evaluation.
