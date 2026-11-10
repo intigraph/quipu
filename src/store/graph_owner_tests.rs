@@ -1483,3 +1483,6 @@ fn composed_cut_recheck_refuses_deadline_expiring_during_identity_sql() {
         owner.read(Store::store_id).unwrap();
     }
 }
+
+#[path = "graph_owner_legacy_tests.rs"]
+mod legacy_participant;

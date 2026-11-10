@@ -40,7 +40,11 @@ impl Owner {
         let first = owners
             .first()
             .ok_or_else(|| refused("empty strict owner selection"))?;
-        if owners.len() > first.catalog.budget().max_owners {
+        let routed_count = owners
+            .iter()
+            .filter(|owner| owner.route.graph != crate::schema::ROOT_GRAPH_IRI)
+            .count();
+        if routed_count > first.catalog.budget().max_owners {
             return Err(refused("strict owner selection exceeds reserved fan-out"));
         }
         if owners

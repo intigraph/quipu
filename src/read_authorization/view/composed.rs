@@ -69,9 +69,13 @@ impl AuthorizedRead {
             {
                 return Err(denied());
             }
-            let graph = source
-                .committed_graph_id(&read.route.graph)?
-                .ok_or_else(denied)?;
+            let graph = if read.route.graph == crate::schema::ROOT_GRAPH_IRI {
+                0
+            } else {
+                source
+                    .committed_graph_id(&read.route.graph)?
+                    .ok_or_else(denied)?
+            };
             if source.graph_class(graph)?.as_deref() != Some("committed") {
                 return Err(denied());
             }
@@ -86,7 +90,11 @@ impl AuthorizedRead {
         for (read, graph) in reads.iter().zip(graphs) {
             let text = bounded_graph(read.store, graph, &mut facts, &mut bytes, deadline)?;
             check()?;
-            let destination = store.graph_create(&read.route.graph)?;
+            let destination = if read.route.graph == crate::schema::ROOT_GRAPH_IRI {
+                0
+            } else {
+                store.graph_create(&read.route.graph)?
+            };
             crate::rdf::ingest_assigned_rdf(
                 &mut store,
                 text.as_bytes(),

@@ -86,6 +86,27 @@ unavailable graph or attachment-limit violation refuses the complete read. A
 scalar transaction ID spanning files refuses; never reinterpret it as a global
 head. Search, counts and feeds must obey the same visibility and graph grants.
 
+The private native prototype can pin ROOT separately with
+`Catalog::with_legacy_participant`. Its exact store identity, epoch, policy,
+generation and opaque placement remain distinct from routed graph entries.
+`Owner::prepare_with_memory` can then consume that configured legacy writer and
+open its reserved readers. A strict selection may include this participant in
+addition to the routed-owner bound. The shared allocation must reserve its writer,
+ownership-fence reader and application readers before scratch admission succeeds.
+ROOT remains absent from `Catalog::routes` and is never a routed write target.
+Queries retain the existing ROOT syntax: `FROM <urn:quipu:graph:root>` selects
+ROOT as the default graph, and `FROM NAMED <graph>` selects a routed join input.
+`GRAPH <urn:quipu:graph:root>` remains invalid.
+
+Composed authorization must explicitly include ROOT to select it. The scratch
+copy maps only physical graph zero to ROOT; other named graphs in the legacy
+file are excluded. The legacy participant uses the same nonwaiting commit fence,
+retained SQLite snapshot, identity checks and deadline as routed participants.
+This primitive does not integrate the production legacy mutation entrypoints:
+all of those must use this same fence before a server may advertise composed
+strict reads. Evaluator/RSS reservation and durable startup/bypass qualification
+also remain separate requirements.
+
 ## Qualification sequence
 
 1. Complete the producer/consumer matrix and namespace integration. Land the

@@ -153,6 +153,7 @@ impl Owner {
     ) -> Result<Self> {
         let route = catalog
             .routes()
+            .chain(catalog.legacy_participant())
             .find(|route| route.graph == graph)
             .cloned()
             .ok_or_else(|| refused("unregistered graph owner"))?;
@@ -168,9 +169,13 @@ impl Owner {
             return Err(refused("owner file does not match catalog placement"));
         }
         Self::check_identity(&route, &store)?;
-        let graph_id = store
-            .lookup(graph)?
-            .ok_or_else(|| refused("graph must already exist in owner"))?;
+        let graph_id = if graph == crate::schema::ROOT_GRAPH_IRI {
+            0
+        } else {
+            store
+                .lookup(graph)?
+                .ok_or_else(|| refused("graph must already exist in owner"))?
+        };
         if store.graph_class(graph_id)?.as_deref() != Some("committed") {
             return Err(refused("owner graph must be committed"));
         }

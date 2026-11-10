@@ -47,6 +47,8 @@ pub struct Budget {
 #[derive(Debug)]
 pub struct Catalog {
     revision: u64,
+    legacy_store_id: String,
+    legacy_participant: Option<Route>,
     routes: BTreeMap<String, Route>,
     budget: Budget,
 }
@@ -97,6 +99,11 @@ impl Catalog {
     ) -> Result<crate::memory_budget::MemoryAllocation> {
         if legacy_connections == 0 {
             return Err(refuse("legacy connection reservation is required"));
+        }
+        if self.legacy_participant.is_some()
+            && legacy_connections < self.budget.readers_per_owner as u64 + 2
+        {
+            return Err(refuse("legacy participant connections are not reserved"));
         }
         let routed = self
             .budget
@@ -178,9 +185,41 @@ impl Catalog {
         }
         Ok(Self {
             revision,
+            legacy_store_id: legacy_store_id.to_owned(),
+            legacy_participant: None,
             routes: by_graph,
             budget,
         })
+    }
+
+    /// Pin the existing legacy file as an explicit ROOT strict-cut participant.
+    /// This is not a write route or an implicit dataset grant. The initializer
+    /// must move its configured legacy writer into the same fenced Owner; a
+    /// second writer handle is refused by native placement admission.
+    pub fn with_legacy_participant(mut self, route: Route) -> Result<Self> {
+        if self.legacy_participant.is_some()
+            || route.graph != crate::schema::ROOT_GRAPH_IRI
+            || route.store_id != self.legacy_store_id
+            || route.generation == 0
+            || !nonempty(&route.log_epoch)
+            || !nonempty(&route.policy)
+            || route.file_id.is_empty()
+            || route.file_id.len() > 64
+            || !route
+                .file_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            || self.routes.values().any(|r| r.file_id == route.file_id)
+        {
+            return Err(refuse("invalid legacy participant pin"));
+        }
+        self.legacy_participant = Some(route);
+        Ok(self)
+    }
+
+    /// Exact optional legacy pin; excluded from routed writes and owner counts.
+    pub fn legacy_participant(&self) -> Option<&Route> {
+        self.legacy_participant.as_ref()
     }
 
     /// Revision pinned by every admitted request.

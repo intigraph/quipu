@@ -73,7 +73,12 @@ impl ComposedReadPermit {
 
     pub(super) fn matches(&self, read: &crate::store::graph_owner::CapturedRead<'_>) -> bool {
         self.0.catalog.revision() == read.catalog_revision
-            && self.0.catalog.routes().any(|route| route == read.route)
+            && self
+                .0
+                .catalog
+                .routes()
+                .chain(self.0.catalog.legacy_participant())
+                .any(|route| route == read.route)
     }
 }
 
