@@ -133,3 +133,7 @@ wasm/explorer/pkg-node/
 # The Python bindings build into CARGO_TARGET_DIR or their own target.
 /bindings/python/target/
 /bindings/python/dist/
+
+# Small replayable completion-contract recording.
+!docs/demos/knot-completion/output.log
+!docs/demos/knot-completion/timing.log

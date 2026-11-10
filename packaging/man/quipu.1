@@ -153,6 +153,9 @@ Read whole transaction change pages from the change feed
 quipu\-follow(1)
 Keep this database a read\-only follower of a primary server
 .TP
+quipu\-asof\-rdf(1)
+Convert one retained as\-of share into bounded coherent RDF chunks offline
+.TP
 quipu\-acquire(1)
 Measure the bounded scope of a direct\-main graph acquisition
 .TP
@@ -162,8 +165,17 @@ Move stored vectors between backends (lancedb feature)
 quipu\-git\-merge(1)
 Merge pendants from Git snapshots and stop before committing
 .TP
+quipu\-git\-mergetool(1)
+Interactively resolve a pendant or declared DataBook using the standard merge layout
+.TP
 quipu\-merge\-driver(1)
 Low\-level Git merge driver for pendant files
+.TP
+quipu\-databook\-merge\-driver(1)
+Low\-level Git merge driver for declared DataBook files
+.TP
+quipu\-databook\-check(1)
+Verify an immutable DataBook merge result and its decisions
 .TP
 quipu\-pendant\-resolve(1)
 Record a resolution choice for one pendant merge conflict

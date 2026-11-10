@@ -101,3 +101,75 @@ justifies = ["urn:PersonShape"]
     }
     assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
 }
+
+#[test]
+fn share_and_import_cli_carry_contract_and_refuse_resealed_command_changes() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("contract.toml"),
+        r#"schema = "quipu-competency/1"
+[[question]]
+id = "present"
+ask = "Is someone present?"
+query = "ASK { ?p a <urn:Person> }"
+justifies = ["urn:PersonShape"]
+[[command]]
+id = "record"
+does = "Record a person"
+inputs = { person = "iri" }
+template = '<{person}> a <urn:Person> .'
+satisfies = ["urn:PersonShape"]
+write_class = "record-person"
+key = ["person"]
+example = { person = "urn:alice" }
+"#,
+    )
+    .unwrap();
+    let shared = run(
+        root.path(),
+        &[
+            "share",
+            "--output",
+            "pendant",
+            "--db",
+            "source.db",
+            "--no-shapes",
+            "--destination",
+            "internal",
+            "--competency",
+            "contract.toml",
+        ],
+    );
+    assert!(shared.status.success(), "{shared:?}");
+    let pendant = root.path().join("pendant");
+    assert_eq!(
+        std::fs::read_to_string(pendant.join("competency.toml")).unwrap(),
+        std::fs::read_to_string(root.path().join("contract.toml")).unwrap()
+    );
+    assert!(pendant.join("commands.ttl").is_file());
+    let imported = run(root.path(), &["import", "pendant", "--db", "receiver.db"]);
+    assert!(imported.status.success(), "{imported:?}");
+    assert!(String::from_utf8_lossy(&imported.stdout).contains("staged"));
+    let commands = std::fs::read_to_string(pendant.join("commands.ttl"))
+        .unwrap()
+        .replace("record-person", "forged-class");
+    std::fs::write(pendant.join("commands.ttl"), &commands).unwrap();
+    let manifest_path = pendant.join("manifest.json");
+    let mut manifest: quipu::share::ShareManifest =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    let hash = |bytes: &[u8]| {
+        format!(
+            "sha256:{}",
+            hex::encode(ring::digest::digest(&ring::digest::SHA256, bytes).as_ref())
+        )
+    };
+    manifest.commands_hash = Some(hash(commands.as_bytes()));
+    let mut identity = serde_json::to_value(&manifest).unwrap();
+    identity.as_object_mut().unwrap().remove("share_id");
+    identity.as_object_mut().unwrap().remove("attestation");
+    manifest.share_id = hash(&serde_json::to_vec(&identity).unwrap());
+    std::fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let refused = run(root.path(), &["import", "pendant", "--db", "refused.db"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("recompilation differs"));
+}

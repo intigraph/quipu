@@ -270,7 +270,8 @@ impl TransactObserver for ReactiveReasoner {
 
         // Re-derive affected rules and commit per-rule with proper
         // `reasoner:<rule-id>` provenance, matching the full-evaluate path.
-        let report = evaluate_affected(store, &index.ruleset, &affected, delta.graph)?;
+        let graph = premise_graph_for_delta(store, delta.graph)?;
+        let report = evaluate_affected(store, &index.ruleset, &affected, graph)?;
 
         // Update stats.
         if let Ok(mut stats) = self.stats.write() {
@@ -281,6 +282,32 @@ impl TransactObserver for ReactiveReasoner {
 
         Ok(())
     }
+}
+
+/// An engine write to a companion changes the same logical closure as a write
+/// to its premise graph. Treating the companion as a fresh premise would create
+/// an inferred-of-inferred plane and mistake ordinary rule output for promoted
+/// facts during demotion reconciliation.
+fn premise_graph_for_delta(store: &Store, graph: i64) -> crate::error::Result<i64> {
+    use crate::store::inferred::{INFERRED_SUFFIX, is_inferred_graph_iri};
+
+    if graph == crate::schema::ROOT_GRAPH {
+        return Ok(graph);
+    }
+    let iri = store.resolve(graph)?;
+    if !is_inferred_graph_iri(&iri) {
+        return Ok(graph);
+    }
+    let premise = iri
+        .strip_suffix(INFERRED_SUFFIX)
+        .or_else(|| iri.strip_suffix("-inferred"))
+        .ok_or_else(|| crate::Error::Store("inferred graph has no premise suffix".into()))?;
+    if premise == crate::schema::ROOT_GRAPH_IRI {
+        return Ok(crate::schema::ROOT_GRAPH);
+    }
+    store
+        .lookup(premise)?
+        .ok_or_else(|| crate::Error::Store("inferred graph has no existing premise graph".into()))
 }
 
 /// Result of a reactive evaluation pass.

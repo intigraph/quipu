@@ -121,7 +121,8 @@ fn emit_writes_nothing_and_binds_the_conflict_to_its_inputs() {
     let (local, incoming) = scenario(root.path());
     let before = fact_count(&local);
     let file = emit(&local, &incoming).unwrap();
-    assert_eq!(file.schema, DECISIONS_SCHEMA_V1);
+    // New whole-root files use v3; legacy-file application is covered separately.
+    assert_eq!(file.schema, DECISIONS_SCHEMA_WHOLE);
     assert!(file.rows.iter().all(|r| r.local_slot_hash.is_none()));
     assert_eq!(fact_count(&local), before);
     assert_eq!(file.rows.len(), 1);
@@ -861,14 +862,20 @@ fn inline_slot_scope_requires_explicit_boolean_opt_in() {
     let emit_inline = |input: &serde_json::Value| {
         crate::mcp::merge_decisions::tool_merge_decisions(&local, input)
     };
-    assert_eq!(emit_inline(&input).unwrap()["schema"], DECISIONS_SCHEMA_V1);
+    assert_eq!(
+        emit_inline(&input).unwrap()["schema"],
+        DECISIONS_SCHEMA_WHOLE
+    );
     input["slot_scoped"] = serde_json::json!(true);
     assert_eq!(
         emit_inline(&input).unwrap(),
         serde_json::to_value(emit_scoped(&local, &incoming).unwrap()).unwrap()
     );
     input["slot_scoped"] = serde_json::json!(false);
-    assert_eq!(emit_inline(&input).unwrap()["schema"], DECISIONS_SCHEMA_V1);
+    assert_eq!(
+        emit_inline(&input).unwrap()["schema"],
+        DECISIONS_SCHEMA_WHOLE
+    );
     input["slot_scoped"] = serde_json::json!("true");
     assert!(emit_inline(&input).is_err());
 }

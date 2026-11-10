@@ -248,3 +248,71 @@ agents a clear remediation path instead of a dead-end error.
   anonymous decision. A flag given with no usable value also refuses; it never falls
   back to the environment. A capability-based
   authorization system (`quipu.schema.approve`) is a future concern.
+
+## Data-merge risk plans
+
+The data merge planner uses the schema proposal planner's risk vocabulary and
+0/1/2 verdicts: pass, fail, and not determined. The Rust API is
+`quipu::merge_plan::plan`; its before/after inputs are N-Triples. Planning uses
+private in-memory graphs and does not transact against the supplied store.
+`merge_plan::verify` re-reads ROOT and recomputes the evidence. A sender's score
+or verdict is never sufficient authority to write.
+
+Data merge enforcement is an **explicit, inactive-by-default deployment stage**.
+No policy is installed by source publication. The receiver process can admit a
+policy through `QUIPU_MERGE_RISK_POLICY`, a JSON object containing:
+
+- `threshold`: an integer from 0 through 100; pass means at or below it;
+- `protected_classes`: absolute class IRIs, including the deployment's governance
+  and credential classes and any other classes requiring a person;
+- `protected_terms`: absolute policy, schema and credential term IRIs;
+- `recall_queries`: the receiver's exhaustive catalog of concrete, deterministic
+  SPARQL recall probes, keyed by name. `null` means coverage is not determined;
+  an empty object explicitly admits that there are no registered recall probes.
+
+The incoming share, profile, choices and reviewer name cannot select this policy.
+A present but malformed policy refuses the operation. Empty protected-class
+coverage also cannot pass. Activation and qualification against a deployment's
+actual vocabulary and consumers remain separate from source acceptance.
+
+When configured, all three store persistence paths—legacy share merge, legacy
+fork promotion, and profiled partial/resumed merges—recompute the plan from the
+actual ordered operations before receive or decision writes. Receipt-only
+operations participate in protection checks. Fork promotion reserves its writer
+before reading the merge sides. Existing authentication, graph authority, SHACL,
+provenance, stale-input and transaction checks remain in force.
+
+Protected-class checks use both states and subclass closure, so removing a type
+cannot remove protection. High-risk or incomplete plans return the changed slots
+as a decision report and write nothing. The conservative fallback holds the whole
+merge; it does not apply a subset whose interaction has not been proved safe.
+There is no reviewer-string or risk-reason override for automatic application.
+
+The qualified query surface is ROOT-only SELECT/ASK over bounded basic patterns,
+joins, unions, minus, projection, distinct, and existence filters. Complete answer
+bags preserve multiplicity. Variable-predicate and negative queries are evaluated,
+not selected by text references to changed terms. Parameterized stored queries,
+named datasets, remote services, functions, ordering, result slicing, OWL context,
+and other unsupported algebra make the verdict not determined before evaluation.
+A registered named graph or snapshot also leaves dependency coverage undetermined;
+the report lists this context separately from intended write destinations.
+Retained partial-merge ledger post-state coverage is not yet qualified and holds
+those operations. No snapshot is modified.
+
+The planner compares SHACL issue keys before and after, reusing the schema plan's
+identity rule, and reports pre-existing debt separately from newly failing focus
+nodes and issues. Missing required SHACL support, unknown target forms and scan
+bounds cannot become zero-count successes. Reverse reference closure supplies the
+ROOT dependent cone. The report binds receiver identity/head, graph hashes, active
+shapes, query catalog and policy; persistence reports additionally bind actual
+operations and receipt destinations.
+
+Profiled plan previews include `risk_plan` and label its ROOT-only preview scope;
+the writer recomputes its operation and ledger context. Git pendant merges remain
+store-free and do not acquire deployment blast-radius authority from this API.
+These limits are part of the contract, not evidence that unmeasured consumers are
+unaffected.
+
+The data-merge planner and deployment-policy adapters are native-only, alongside
+the existing native share/session adapters. The Wasm library retains its existing
+merge surface; it does not provide this receiver-policy enforcement.

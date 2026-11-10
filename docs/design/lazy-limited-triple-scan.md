@@ -11,7 +11,8 @@ not consume the limit. Graph predicates and canonical subject, predicate and
 reference-object resolution remain on the existing path. No SQL LIMIT is added.
 
 Eligibility requires an explicit Slice with a length, a Project/Reduced chain
-ending in one BGP triple with three independent variables, an empty seed, and
+ending in one BGP triple with independent variable endpoints and either a
+fixed predicate or an independent predicate variable, an empty seed, and
 current-time evaluation without inference or pushed string filters. Repeated
 variables, joins, FILTER, DISTINCT, ORDER BY, GRAPH operators and temporal
 queries retain their existing SQL. A service response ceiling alone does not
@@ -37,3 +38,12 @@ incident's cause. The query's parser, policy, admission, store acquisition and
 unrelated concurrent work can have other costs. Runtime acceptance requires the
 normal reviewed deployment and separately authorized measurements. Rollback is
 a normal revert of the introducing merge.
+
+A fixed `rdf:type` predicate with a variable object uses the same lazy leaf
+path. A fixed class object retains the separate subclass expansion evaluator.
+The typed canary regression uses 10,000 explicit type facts and counts native
+SQLite instructions before the first result. It must return a real subject
+without grouping the entire type relation. Full-result controls retain explicit
+type semantics, class expansion, physical duplicate and numeric identity
+deduplication, and default-graph unions. This is a bounded work control, not a
+production latency claim.

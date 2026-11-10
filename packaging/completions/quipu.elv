@@ -66,10 +66,14 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand compose 'Compose verified packs into a named inspection dataset'
             cand changes 'Read whole transaction change pages from the change feed'
             cand follow 'Keep this database a read-only follower of a primary server'
+            cand asof-rdf 'Convert one retained as-of share into bounded coherent RDF chunks offline'
             cand acquire 'Measure the bounded scope of a direct-main graph acquisition'
             cand migrate-vectors 'Move stored vectors between backends (lancedb feature)'
+            cand git-mergetool 'Interactively resolve a pendant or declared DataBook using the standard merge layout'
             cand git-merge 'Merge pendants from Git snapshots and stop before committing'
             cand merge-driver 'Low-level Git merge driver for pendant files'
+            cand databook-merge-driver 'Low-level Git merge driver for declared DataBook files'
+            cand databook-check 'Verify an immutable DataBook merge result and its decisions'
             cand pendant-resolve 'Record a resolution choice for one pendant merge conflict'
             cand pendant-check 'Check a pendant merge result in CI without a merge driver'
             cand diff-textconv 'Render a pack with labels for git diff textconv'
@@ -384,6 +388,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --group-id 'Select facts belonging to this group'
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --format 'Output or input format for this operation'
+            cand --read-only 'Export a cold local snapshot without writes; refuses sidecars and attachments'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -579,6 +584,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --shapes 'Shapes used for validation or packaging'
             cand --queries 'Stored queries to include'
+            cand --competency 'Verbatim competency.toml to compile and seal with the share'
             cand --alignments 'Reviewed SSSOM/RDF alignment file to carry'
             cand --parent-share 'Parent share for a delta export'
             cand --since 'Starting share or transaction for incremental output'
@@ -756,6 +762,14 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'quipu;asof-rdf'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --binding 'Private JSON cut/profile binding and finite resource limits'
+            cand --frames 'Private retained event/data JSONL file, with exact transport data strings'
+            cand --scratch 'Empty canonical private directory matching SQLITE_TMPDIR'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'quipu;acquire'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
@@ -780,6 +794,12 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'quipu;git-mergetool'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --by 'Identity recording a resolution'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'quipu;git-merge'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
@@ -801,6 +821,16 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --help 'Print help'
         }
         &'quipu;merge-driver'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;databook-merge-driver'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;databook-check'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'

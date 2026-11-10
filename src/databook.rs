@@ -229,7 +229,7 @@ fn is_delimiter(line: &str) -> bool {
 }
 
 /// Find the frontmatter: `(yaml, first body line, form)`.
-fn frontmatter(lines: &[&str]) -> Result<(String, usize, FrontmatterForm)> {
+pub(crate) fn frontmatter(lines: &[&str]) -> Result<(String, usize, FrontmatterForm)> {
     let first = lines.iter().position(|l| !l.trim().is_empty());
     if let Some(start) = first.filter(|&i| is_delimiter(lines[i])) {
         let end = (start + 1..lines.len())
@@ -263,7 +263,7 @@ fn frontmatter(lines: &[&str]) -> Result<(String, usize, FrontmatterForm)> {
 }
 
 /// `<!-- prefix:key: value -->` as `(stored key, value)`; `databook:` is bare.
-fn annotation(line: &str) -> Option<(String, String)> {
+pub(crate) fn annotation(line: &str) -> Option<(String, String)> {
     let inner = line
         .trim()
         .strip_prefix("<!--")?
@@ -288,7 +288,7 @@ fn annotation(line: &str) -> Option<(String, String)> {
 }
 
 /// `<!-- key=value key=value -->` directives.
-fn directive(line: &str) -> Option<Vec<(String, String)>> {
+pub(crate) fn directive(line: &str) -> Option<Vec<(String, String)>> {
     let inner = line
         .trim()
         .strip_prefix("<!--")?
@@ -305,7 +305,7 @@ fn directive(line: &str) -> Option<Vec<(String, String)>> {
 }
 
 /// An opening fence: `(backtick count, label)`. Unlabelled fences have `""`.
-fn fence_open(line: &str) -> Option<(usize, &str)> {
+pub(crate) fn fence_open(line: &str) -> Option<(usize, &str)> {
     let ticks = line.len() - line.trim_start_matches('`').len();
     if ticks < 3 {
         return None;
@@ -314,7 +314,7 @@ fn fence_open(line: &str) -> Option<(usize, &str)> {
     (!label.contains('`')).then_some((ticks, label))
 }
 
-fn fence_close(line: &str, ticks: usize) -> bool {
+pub(crate) fn fence_close(line: &str, ticks: usize) -> bool {
     let run = line.len() - line.trim_start_matches('`').len();
     run >= ticks && line[run..].trim().is_empty()
 }

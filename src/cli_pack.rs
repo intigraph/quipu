@@ -41,7 +41,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
             eprintln!(
                 "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
-             [--queries <name>]... [--no-queries] [--alignments <file>] [--parent-share <sha256:id>] \
+             [--queries <name>]... [--no-queries] [--competency <competency.toml>] [--alignments <file>] [--parent-share <sha256:id>] \
              [--since <parent-reference>] [--turtle] [--destination internal]"
             );
             std::process::exit(1);
@@ -89,7 +89,14 @@ pub fn cmd_share(args: &[String], db_path: &str) {
             std::process::exit(1)
         })
     });
+    let competency_toml = flag_value(args, "--competency").map(|path| {
+        std::fs::read_to_string(path).unwrap_or_else(|error| {
+            eprintln!("share competency: {error}");
+            std::process::exit(1)
+        })
+    });
     let opts = quipu::share::ShareOptions {
+        competency_toml,
         alignments_turtle,
         scope,
         shapes,
@@ -459,8 +466,17 @@ fn attest_options(args: &[String]) -> Option<quipu::share::AttestOptions> {
             std::process::exit(2);
         }
     };
-    let key_path = flag_value(args, "--attest-key")
-        .map_or_else(quipu::signing::default_key_path, std::path::PathBuf::from);
+    let key_path = match flag_value(args, "--attest-key") {
+        Some(path) => std::path::PathBuf::from(path),
+        None => quipu::signing::default_key_path().unwrap_or_else(|error| {
+            eprintln!("cannot select signing key: {error}");
+            std::process::exit(2);
+        }),
+    };
+    quipu::signing::protect_repository_key(&key_path).unwrap_or_else(|error| {
+        eprintln!("cannot protect signing key: {error}");
+        std::process::exit(2);
+    });
     let issued: u64 = match flag_value(args, "--attest-issued-at") {
         Some(v) => v.parse().unwrap_or_else(|_| {
             eprintln!("--attest-issued-at must be seconds since the epoch");

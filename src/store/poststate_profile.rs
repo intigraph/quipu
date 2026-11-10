@@ -20,6 +20,30 @@ pub struct PoststateProfile {
     pub plan: Duration,
     /// Gathering touched-focus context and validating it.
     pub check: Duration,
+    /// Subphases nested within `check`; summed over graph batches, including errors.
+    pub check_graph: Duration,
+    pub check_ownership: Duration,
+    pub check_entities: Duration,
+    /// Bounded reads for touched entities, nested within `check_entities`.
+    pub check_entity_bounded: Duration,
+    /// Incoming targets for entity and literal focuses, nested within `check_entities`.
+    pub check_entity_object_targets: Duration,
+    /// Optional ROOT type references, nested within `check_entities`.
+    pub check_entity_reference_types: Duration,
+    /// Type hierarchy closure, nested within `check_entities` (not the value phase).
+    pub check_entity_subclasses: Duration,
+    pub check_values: Duration,
+    pub check_encode: Duration,
+    pub check_validate: Duration,
+    pub check_debt: Duration,
+    /// Whole-new-graph checking, separate from incremental subphases.
+    pub check_new_graph: Duration,
+    /// Sum of distinct touched/reference subjects per incremental graph batch.
+    pub check_subjects: u64,
+    /// Context entries handed to the encoder (not distinct facts across batches).
+    pub check_facts: u64,
+    /// Optional value-context budget fallbacks; admission behavior is unchanged.
+    pub check_value_fallbacks: u64,
     /// Conditional (SET) admission: vocabulary and type context.
     pub conditional_prepare: Duration,
     /// Conditional admission: validation against the reject shapes.

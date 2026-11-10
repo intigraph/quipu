@@ -378,6 +378,15 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
     // check to COMMIT, which both permits the rewrite and turns the constraint
     // into a genuine post-condition on the finished file.
     tx.execute_batch("PRAGMA defer_foreign_keys = ON;")?;
+    // This is an owned copy with a rewritten term identity. Do not carry
+    // machine authority across it or let graph triggers race the id rewrite.
+    // The next writer open reinstalls triggers and mints fresh instance pins.
+    tx.execute_batch(
+        "DELETE FROM writer_grants; DELETE FROM writer_graph_instances;
+        DELETE FROM client_changeset_grants; DELETE FROM client_changeset_receipts;
+        DROP TRIGGER writer_graph_insert; DROP TRIGGER writer_graph_delete;
+        DROP TRIGGER writer_graph_update;",
+    )?;
 
     let mut columns = Vec::new();
     for col in &classified {

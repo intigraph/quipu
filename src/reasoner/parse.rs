@@ -19,7 +19,7 @@ use super::{
     RULE_BODY, RULE_DEFAULT_PREFIX, RULE_HEAD, RULE_ID, RULE_PREFIX, RULE_SET_TYPE, RULE_TYPE,
     ReasonerError, Result,
 };
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 
 /// A parsed ruleset ready for stratification and evaluation.
 #[derive(Debug, Clone)]
@@ -58,8 +58,10 @@ impl RuleSet {
 ///
 /// 1. A per-rule `rule:prefix` property, if present.
 /// 2. A `rule:defaultPrefix` attached to any `rule:RuleSet` subject.
-/// 3. The `fallback_prefix` argument (typically
-///    [`DEFAULT_BASE_NS`](crate::namespace::DEFAULT_BASE_NS)).
+/// 3. The caller-supplied `fallback_prefix` (normally the configured store base).
+///
+/// Without a non-empty prefix, only fully qualified predicates and IRI terms
+/// are accepted. The parser never selects a namespace for its caller.
 pub fn parse_rules(turtle: &str, fallback_prefix: Option<&str>) -> Result<RuleSet> {
     // Collect all triples into a subject-indexed property map so we can
     // assemble each rule without assuming a specific triple order.
@@ -88,7 +90,7 @@ pub fn parse_rules(turtle: &str, fallback_prefix: Option<&str>) -> Result<RuleSe
     }
     let default_prefix = ruleset_default
         .or_else(|| fallback_prefix.map(str::to_string))
-        .unwrap_or_else(|| DEFAULT_BASE_NS.to_string());
+        .unwrap_or_default();
 
     // Second pass: materialise rule resources.
     let mut rules = Vec::new();
@@ -256,7 +258,7 @@ pub(crate) fn parse_atom(src: &str, prefix: &str) -> std::result::Result<Atom, S
         args.push(parse_term(token.trim(), prefix)?);
     }
     Ok(Atom {
-        predicate: resolve_iri(name, prefix),
+        predicate: resolve_iri(name, prefix)?,
         args,
     })
 }
@@ -278,18 +280,23 @@ pub(crate) fn parse_term(token: &str, prefix: &str) -> std::result::Result<Term,
     if token.starts_with('"') && token.ends_with('"') && token.len() >= 2 {
         return Ok(Term::Str(token[1..token.len() - 1].to_string()));
     }
-    // Bare identifier → treat as an IRI under the default prefix.
+    // Bare identifiers need an explicitly selected namespace, like predicates.
+    if prefix.is_empty() {
+        return Err("unqualified IRI term requires an explicit prefix".into());
+    }
     Ok(Term::Iri(format!("{prefix}{token}")))
 }
 
 /// Expand a bare predicate name against a prefix, or leave an explicit IRI
 /// alone.
-fn resolve_iri(name: &str, prefix: &str) -> String {
+fn resolve_iri(name: &str, prefix: &str) -> std::result::Result<String, String> {
     let name = name.trim();
     if name.starts_with('<') && name.ends_with('>') && name.len() >= 2 {
-        name[1..name.len() - 1].to_string()
+        Ok(name[1..name.len() - 1].to_string())
+    } else if prefix.is_empty() {
+        Err("unqualified predicate requires an explicit prefix".into())
     } else {
-        format!("{prefix}{name}")
+        Ok(format!("{prefix}{name}"))
     }
 }
 

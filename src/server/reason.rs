@@ -28,11 +28,9 @@ pub(crate) async fn shapes(
     blocking(move || {
         let (out, work) = {
             let mut st = s.lock();
-            // `&st`, not `&mut st`: `tool_shapes` writes through `&self`
-            // (interior mutability over the SQLite connection) — see the
-            // ro_handler! warning in tools.rs about what `&Store` does NOT
-            // prove. The write-endpoint classification lives in http_auth.
-            let out = quipu::tool_shapes(&st, &i)?;
+            // Registry changes and dependent mapping flags settle through the
+            // mutable writer, before any post-commit observer runs.
+            let out = quipu::tool_shapes(&mut st, &i)?;
             (out, st.take_deferred_embed())
         };
         if let Some(work) = work {
@@ -45,9 +43,12 @@ pub(crate) async fn shapes(
         // inertness this route exists to end.
         #[cfg(feature = "reactive-reasoner")]
         if let Some(reasoner) = &s.reasoner {
-            let combined = { s.lock().get_combined_shapes() };
+            let (combined, prefix) = {
+                let store = s.lock();
+                (store.get_combined_shapes(), store.base_ns().to_string())
+            };
             match combined {
-                Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, None) {
+                Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, Some(&prefix)) {
                     Ok(ruleset) => {
                         let n = ruleset.len();
                         reasoner.reload(ruleset);
@@ -58,9 +59,7 @@ pub(crate) async fn shapes(
                     }
                 },
                 Ok(None) => {
-                    reasoner.reload(quipu::reasoner::RuleSet::empty(
-                        quipu::namespace::DEFAULT_BASE_NS,
-                    ));
+                    reasoner.reload(quipu::reasoner::RuleSet::empty(&prefix));
                     eprintln!("reactive reasoner reloaded — no shapes stored, ruleset now empty");
                 }
                 Err(e) => {
@@ -154,7 +153,10 @@ pub(crate) async fn reason(
                 )
             })?,
         };
-        let prefix = i.get("prefix").and_then(JsonValue::as_str);
+        let prefix = i
+            .get("prefix")
+            .and_then(JsonValue::as_str)
+            .or(Some(st.base_ns()));
         let ruleset = quipu::reasoner::parse_rules(&ttl, prefix)
             .map_err(|e| quipu::Error::InvalidValue(format!("rules failed to parse: {e}")))?;
         if ruleset.is_empty() {

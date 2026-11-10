@@ -36,6 +36,10 @@ use crate::types::{Fact, Op, Value};
 pub use super::forks_merge::ForkResolutions;
 use super::{Datum, Store};
 
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "forks_sessions.rs"]
+mod sessions;
+
 /// IRI prefix fork graphs are minted under: `urn:quipu:fork:<name>`.
 pub const FORK_IRI_PREFIX: &str = "urn:quipu:fork:";
 
@@ -412,6 +416,23 @@ impl Store {
         decided: Option<(&ForkResolutions, &str, &str)>,
         dry_run: bool,
     ) -> Result<ForkPromotion> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if crate::merge_plan_gate::policy()?.is_some() && !dry_run {
+            return crate::share_merge::core::atomic(self, |store| {
+                store.promote_fork_planned(name, timestamp, actor, decided, dry_run)
+            });
+        }
+        self.promote_fork_planned(name, timestamp, actor, decided, dry_run)
+    }
+
+    fn promote_fork_planned(
+        &mut self,
+        name: &str,
+        timestamp: &str,
+        actor: Option<&str>,
+        decided: Option<(&ForkResolutions, &str, &str)>,
+        dry_run: bool,
+    ) -> Result<ForkPromotion> {
         let f = self.require_open_fork(name, "promote")?;
         let fork_g = f.g;
         let (base, ours, theirs) = self.fork_sides(&f)?;
@@ -465,6 +486,8 @@ impl Store {
         }
 
         if dry_run {
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::merge_plan_gate::datums(self, &[&diff.receive, &diff.decide], None)?;
             return Ok(ForkPromotion::Promoted {
                 tx: 0,
                 asserted: diff.added.len(),
@@ -480,6 +503,8 @@ impl Store {
         self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_fork_promote")?;
         let result = (|| -> Result<i64> {
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::merge_plan_gate::datums(self, &[&diff.receive, &diff.decide], None)?;
             // Spec R3 (ruling B): receive, then decide, in this savepoint. Each
             // step passes the ordinary write gate; closes carry their own
             // valid time (the fork's, clamped), so nothing is re-timed after.

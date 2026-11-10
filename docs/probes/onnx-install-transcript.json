@@ -1,0 +1,49 @@
+{
+  "kind": "retained actual CLI output; fixture paths redacted",
+  "baseline_revision": "4391747653c30a45991e6e19e901b6fd78cf5f8a",
+  "baseline_target": "isolated default cargo install",
+  "baseline": {
+    "binary_sha256": "178930a1f6c32fac2b11fd14c6e30917bb9489fff760240c31d98c892e1648d2",
+    "runtime_override_present": false,
+    "results": [
+      {
+        "command": "knot",
+        "exit": 1,
+        "stdout": "",
+        "stderr": "embedding configuration error: configured embedding model requires the onnx build feature; no index was created\n"
+      },
+      {
+        "command": "search",
+        "exit": 1,
+        "stdout": "",
+        "stderr": "embedding configuration error: configured embedding model requires the onnx build feature; no index was created\n"
+      }
+    ]
+  },
+  "candidate_revision": "60356ba51484894b11bcc6f4f5a00a59cb328738",
+  "candidate_target": "local default-feature debug binary, isolated HOME/store, existing model",
+  "candidate": {
+    "binary_sha256": "9ad23a42ac9d1d93d10993d47e0e6a63642683560203bb0b7be39aa6fda44f9f",
+    "runtime_override_present": false,
+    "results": [
+      {
+        "command": "knot",
+        "exit": 0,
+        "stdout": "knotted 2 facts from <fixture>/facts.ttl (tx 1)\n",
+        "stderr": "embedding provider ready (dim=384, auto_embed=true)\n"
+      },
+      {
+        "command": "search",
+        "exit": 0,
+        "stdout": "{\n  \"context\": {\n    \"admitted_count\": 0,\n    \"candidate_count\": 2,\n    \"contract\": \"quipu-context/v1\",\n    \"minimum_term_coverage\": 0.5,\n    \"outcome\": \"NO CONTEXT\",\n    \"reason\": \"no_result_above_floor\",\n    \"required_identifiers\": [],\n    \"similarity_floor\": 0.52,\n    \"subject_term\": \"sleeping\",\n    \"top_term_coverage\": 0.0\n  },\n  \"context_results\": [],\n  \"count\": 2,\n  \"insufficient_context\": true,\n  \"ranking\": \"semantic\",\n  \"results\": [\n    {\n      \"entity\": \"urn:fixture:cat\",\n      \"ranking_reason\": \"semantic\",\n      \"score\": 0.4882221856259808,\n      \"similarity\": 0.4882221856259808,\n      \"source\": \"knowledge\",\n      \"text\": \"A cat rests on the sunny windowsill\",\n      \"valid_from\": \"2026-11-05T23:24:51Z\",\n      \"valid_to\": null\n    },\n    {\n      \"entity\": \"urn:fixture:train\",\n      \"ranking_reason\": \"semantic\",\n      \"score\": 0.07647065764037866,\n      \"similarity\": 0.07647065764037866,\n      \"source\": \"knowledge\",\n      \"text\": \"The diesel train arrives at the station\",\n      \"valid_from\": \"2026-11-05T23:24:51Z\",\n      \"valid_to\": null\n    }\n  ],\n  \"scoped\": false,\n  \"search_scope\": {\n    \"default\": \"all\",\n    \"default_source\": \"store_default\",\n    \"excluded_graphs\": [],\n    \"graphs\": [\n      \"urn:quipu:graph:root\"\n    ],\n    \"index_completeness\": \"not_certified\",\n    \"named_vectors_enabled\": false,\n    \"remote_endpoints\": \"not_searched\",\n    \"selection\": \"default\"\n  }\n}\n",
+        "stderr": "embedding provider ready (dim=384, auto_embed=true)\n"
+      },
+      {
+        "command": "doctor",
+        "exit": 0,
+        "stdout": "{\"configured_mode\":\"semantic\",\"keyword_index\":{\"complete\":true,\"cursor\":0,\"documents\":2,\"highwater\":0},\"keyword_ready\":true,\"keyword_remedy\":null,\"onnx_compiled\":true,\"onnx_runtime\":{\"available\":true,\"linkage\":\"bundled-dynamic-cpu\",\"path\":\"<fixture>/home/example/.cache/quipu/runtime/1.23.2/13ab8084954fa4a47c777880180b90810d6020f021441395712b48a75b74c68b/libonnxruntime.so.1.23.2\",\"state\":\"initialized\"},\"semantic_provider_ready\":true,\"semantic_ready\":true,\"semantic_remedy\":null,\"vector_rows\":2}\n",
+        "stderr": "embedding provider ready (dim=384, auto_embed=true)\n"
+      }
+    ]
+  }
+}

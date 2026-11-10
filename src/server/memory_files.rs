@@ -7,6 +7,32 @@ use axum::{Extension, Json, extract::State};
 use quipu::{config::MemoryFilesConfig, crew_credentials::CrewPrincipal, memory_files as memory};
 use serde_json::{Value, json};
 
+/// A restricted credential is pinned to one configured memory repository.
+pub(crate) async fn scope_guard(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if let Some(scope) = req
+        .extensions()
+        .get::<quipu::crew_credentials::MemoryScope>()
+    {
+        let matches = req
+            .extensions()
+            .get::<MemoryFilesConfig>()
+            .is_some_and(|config| {
+                config.enabled
+                    && config.graph == scope.graph
+                    && config.deployment == scope.deployment
+                    && config.project == scope.project
+            });
+        if !matches {
+            return axum::http::StatusCode::FORBIDDEN.into_response();
+        }
+    }
+    next.run(req).await
+}
+
 fn graph(store: &quipu::Store, config: &MemoryFilesConfig) -> quipu::Result<i64> {
     store
         .registered_graph_id(&config.graph)?

@@ -62,6 +62,15 @@ deploy-server:
     bash scripts/build-deploy-server.sh
 
 # Run tests
+shadow-census mode="test" *args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{mode}}" in
+        test) python3 -W error::ResourceWarning scripts/test_merge_shadow_census.py ;;
+        inspect) python3 scripts/merge-shadow-census.py {{args}} ;;
+        *) echo "usage: just shadow-census [test|inspect <snapshot arguments>]" >&2; exit 2 ;;
+    esac
+
 test *args="":
     cargo test {{args}}
 
@@ -123,8 +132,8 @@ wasm cmd="check" n="1000":
 # === Fixtures ===
 
 # Generate test-fixtures/test-store.db from static assets
-seed:
-    cargo run --bin seed-fixtures --features dev-tools
+seed *args="":
+    cargo run --bin seed-fixtures --features dev-tools -- {{args}}
 
 # Serve the test fixture database on localhost:3030
 serve-fixtures:
@@ -191,6 +200,8 @@ demo name="explorer":
     set -euo pipefail
     case {{quote(name)}} in
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
+        strict-new) cargo run --quiet --locked --no-default-features --example episode_strict_new ;;
+        merge-risk-plan) cargo run --quiet --locked --offline --no-default-features --example merge_risk_plan ;;
         key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
         ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;
         transition-trust-root) cargo run --quiet --locked --offline --no-default-features --example transition_trust_root ;;
@@ -337,6 +348,10 @@ docs cmd="build":
     esac
 
 # === Public benchmarks ===
+
+# Linux library-consumer identity control; synthetic in-memory stores only.
+validator-observation command="embedding" *args="":
+    @if [ "{{command}}" = "embedding" ]; then python3 scripts/test-validator-observation-embedding.py {{args}}; else echo 'Use: just validator-observation embedding' >&2; exit 2; fi
 
 # Regenerate the public conformance page and shields badge endpoints from the
 # committed ledgers under benchmark/public/results/.

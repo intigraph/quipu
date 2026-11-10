@@ -6,7 +6,7 @@ use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 use std::collections::{HashMap, HashSet};
 
-use super::{Episode, node_iri};
+use super::{Episode, address::resolved_node_iri};
 
 pub(super) fn current_content_hash(
     store: &Store,
@@ -71,7 +71,7 @@ pub(super) fn is_unchanged(
     let expected: HashSet<String> = episode
         .nodes
         .iter()
-        .map(|n| node_iri(&n.name, base_ns))
+        .map(|n| resolved_node_iri(n, base_ns))
         .collect();
     if expected.is_empty() {
         return Ok(true);
@@ -152,7 +152,7 @@ pub(super) fn reconcile_node_descriptions(
         let Some(new_text) = node.description.as_deref() else {
             continue;
         };
-        let Some(entity) = store.lookup(&node_iri(&node.name, base_ns))? else {
+        let Some(entity) = store.lookup(&resolved_node_iri(node, base_ns))? else {
             continue;
         };
         if !reconciled.insert((entity, new_text)) {

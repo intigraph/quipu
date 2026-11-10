@@ -4,7 +4,7 @@
 .SH NAME
 quipu\-export \- Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query
 .SH SYNOPSIS
-\fBquipu export\fR [\fB\-\-db\fR] [\fB\-\-graph\fR] [\fB\-\-group\-id\fR] [\fB\-\-construct\fR] [\fB\-\-format\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBquipu export\fR [\fB\-\-db\fR] [\fB\-\-graph\fR] [\fB\-\-group\-id\fR] [\fB\-\-construct\fR] [\fB\-\-format\fR] [\fB\-\-read\-only\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
 Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query
 .SH OPTIONS
@@ -23,6 +23,9 @@ SPARQL CONSTRUCT query selecting the share
 .TP
 \fB\-\-format\fR \fI<VALUE>\fR
 Output or input format for this operation
+.TP
+\fB\-\-read\-only\fR
+Export a cold local snapshot without writes; refuses sidecars and attachments
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

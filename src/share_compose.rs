@@ -140,7 +140,7 @@ fn validate(shapes: &str, data: &str, emit_authorized: bool) -> Result<serde_jso
         )?;
         let blocks = feedback.blocking;
         let mut report = feedback.report()?;
-        let authority = Store::open_in_memory()?;
+        let mut authority = Store::open_in_memory()?;
         authority.load_shapes("composition-authority", shapes, "1970-01-01T00:00:00Z")?;
         let vocabulary = crate::vocabulary::sanctioned(&authority)?;
         let off_vocabulary = crate::vocabulary::ungoverned_types_in_turtle(data, &vocabulary);
@@ -247,6 +247,7 @@ pub(crate) fn compose_scoped(
     let mut attestations = Vec::new();
     for request in requests {
         crate::share_import::verify_share(request)?;
+        crate::competency::carriage::refuse_unsupported(&request.manifest, "share composition")?;
         crate::namespace_publication::receive(store, request)?;
         if authority.is_none() && request.manifest.shapes_hash != chosen.manifest.shapes_hash {
             return Err(Error::InvalidValue(format!(

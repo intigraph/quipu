@@ -1,0 +1,7 @@
+{"version": 2, "width": 100, "height": 24, "title": "Reader startup: occupied port before and after"}
+[0.041534, "o", "BEFORE: one foreign listener occupies the configured reader port\r\n"]
+[0.501386, "o", "cannot start read process pool: Address already in use (os error 98)\r\nObserved: primary unavailable (expected baseline failure)\r\n"]
+[0.501392, "o", "AFTER: same occupied-reader fixture\r\n"]
+[1.419026, "o", "PASS occupied: primary write/auth, pool health/read admission, no retry\r\n"]
+[1.42698, "o", "CONTROL: unoccupied reader port\r\n"]
+[2.236124, "o", "PASS free: primary write/auth, pool health/read admission, no retry\r\n"]
