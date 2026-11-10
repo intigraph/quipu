@@ -255,6 +255,10 @@ _arguments "${_arguments_options[@]}" : \
 '*--hubs=[Number of hubs in the report]:VALUE:_default' \
 '*--surprises=[Number of surprising relationships in the report]:VALUE:_default' \
 '*--questions=[Number of suggested questions in the report]:VALUE:_default' \
+'*--prometheus=[Prometheus base URL for a public SLO report (no credentials in URL)]:VALUE:_default' \
+'*--days=[Public SLO report window in complete UTC days (1-90; default 30)]:VALUE:_default' \
+'*--end=[Public SLO report end at a past RFC3339 UTC midnight]:VALUE:_default' \
+'--public[Read public operational SLO history without opening the graph]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -2259,7 +2263,7 @@ _qp_commands() {
 'impact:Walk what depends on an entity, optionally after a speculative removal' \
 'explain:Trace a derived fact back to its premises' \
 'project:Project the graph and run a graph algorithm such as PageRank' \
-'report:Report hubs, surprising links and open questions in the graph' \
+'report:Report graph hubs and questions, or public operational SLO history' \
 'reason:Run Datalog rules to a fixpoint and persist the derivations' \
 'demotions:Read preserved unsupported demotions without materializing a closure' \
 'episode:Ingest a structured episode of nodes and edges from JSON' \

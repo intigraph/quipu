@@ -50,7 +50,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("impact", "<entity-IRI>", 1, 1, "hops predicate", "remove"),
     spec!("explain", "<subject> <predicate> <object>", 3, 3, "depth", ""),
     spec!("project", "", 0, 0, "algorithm type predicate graph limit damping max-iters tolerance from to seed", ""),
-    spec!("report", "", 0, 0, "type predicate hubs surprises questions", ""),
+    spec!("report", "", 0, 0, "type predicate hubs surprises questions prometheus days end", "public"),
     spec!("reason", "", 0, 0, "rules", "reactive"),
     spec!("demotions", "", 0, 0, "graph", ""),
     spec!("episode", "<file.json>", 1, 1, "base-ns timestamp", ""),

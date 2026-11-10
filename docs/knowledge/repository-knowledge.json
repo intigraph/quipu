@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "c8ec69d05a96136ce72d8170272918890d39179239ba669e5c0223912b6e18cb",
+      "source_sha256": "8138c0ffb4ed98724343858dbf30aacdfd25d8cc2a3c6614c5a653bb40c52f65",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "59095169e61b8e7ad3fb8e076a7c665cf79863dbce70cf6f892e197e671ed8e4",
+      "source_sha256": "92fdac2c675009583ae6c87da24ea0e89b32d9ae176c66b8ac037d1d70ec7260",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"

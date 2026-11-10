@@ -256,7 +256,7 @@ qp project
 
 ## `qp report`
 
-Report hubs, surprising links and open questions in the graph.
+Report graph hubs and questions, or public operational SLO history.
 
 ```text
 qp report
@@ -271,6 +271,14 @@ qp report
 - `--surprises <VALUE>`: Number of surprising relationships in the report.
 
 - `--questions <VALUE>`: Number of suggested questions in the report.
+
+- `--prometheus <VALUE>`: Prometheus base URL for a public SLO report (no credentials in URL).
+
+- `--days <VALUE>`: Public SLO report window in complete UTC days (1-90; default 30).
+
+- `--end <VALUE>`: Public SLO report end at a past RFC3339 UTC midnight.
+
+- `--public`: Read public operational SLO history without opening the graph.
 
 ## `qp reason`
 
