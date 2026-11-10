@@ -50,7 +50,7 @@ pub(crate) trait Objects {
 }
 
 /// Canonical key name. Fixed width keeps listings unambiguous.
-pub(crate) fn name(key: Key) -> String {
+pub(super) fn name(key: Key) -> String {
     match key {
         Key::Active(g) => format!("active/{g:02}"),
         Key::Reserved(g, a) => format!("reserved/{g:02}/{a:02}"),
@@ -59,7 +59,7 @@ pub(crate) fn name(key: Key) -> String {
 }
 
 /// Strict inverse of [`name`]. Anything else is not a witness key.
-pub(crate) fn parse(name: &str) -> Option<Key> {
+pub(super) fn parse(name: &str) -> Option<Key> {
     fn num(s: &str) -> Option<u64> {
         if s.len() != 2 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return None;

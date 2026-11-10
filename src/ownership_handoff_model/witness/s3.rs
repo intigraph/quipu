@@ -253,7 +253,7 @@ fn bounded(response: ureq::Response, max: u64) -> Option<Vec<u8>> {
     (bytes.len() as u64 <= max).then_some(bytes)
 }
 
-/// Strict scan of a ListObjectsV2 body. Only canonical ASCII names under the
+/// Strict scan of a `ListObjectsV2` body. Only canonical ASCII names under the
 /// lineage prefix are representable; a truncated listing, an escaped or
 /// unexpected character, or a key outside the prefix is UNKNOWN.
 fn list_keys(body: &str, prefix: &str) -> Option<Vec<String>> {
@@ -279,10 +279,10 @@ fn list_keys(body: &str, prefix: &str) -> Option<Vec<String>> {
         }
         names.push(key.strip_prefix(prefix)?.to_owned());
     }
-    if let Some(count) = between(body, "<KeyCount>", "</KeyCount>") {
-        if count.parse::<usize>().ok()? != names.len() {
-            return None;
-        }
+    if let Some(count) = between(body, "<KeyCount>", "</KeyCount>")
+        && count.parse::<usize>().ok()? != names.len()
+    {
+        return None;
     }
     Some(names)
 }
@@ -299,7 +299,7 @@ fn unix_now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// SigV4 date stamps.
+/// `SigV4` date stamps.
 pub(crate) struct Stamp {
     pub(crate) short: String,
     pub(crate) long: String,
@@ -329,8 +329,9 @@ fn civil(days: i64) -> (i64, u32, u32) {
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    // Day is 1..=31 and month 1..=12 by construction; refuse rather than wrap.
+    let d = u32::try_from(doy - (153 * mp + 2) / 5 + 1).unwrap_or(0);
+    let m = u32::try_from(if mp < 10 { mp + 3 } else { mp - 9 }).unwrap_or(0);
     let y = yoe + era * 400 + i64::from(m <= 2);
     (y, m, d)
 }
@@ -348,7 +349,7 @@ fn canonical_query(query: &[(&str, String)]) -> String {
         .join("&")
 }
 
-/// RFC 3986 unreserved characters pass; everything else is %XX (SigV4).
+/// RFC 3986 unreserved characters pass; everything else is `%XX` (`SigV4`).
 fn uri_encode(s: &str) -> String {
     let mut out = String::new();
     for b in s.bytes() {

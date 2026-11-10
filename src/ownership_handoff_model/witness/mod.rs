@@ -49,15 +49,15 @@ pub(crate) trait AuthorityWitness {
 /// Private in-memory backend state. Keys are typed because the in-memory
 /// store can only ever hold canonical witness keys.
 #[derive(Default)]
-pub(super) struct Memory {
-    pub(super) entries: BTreeMap<Key, Vec<u8>>,
-    pub(super) faults: VecDeque<Fault>,
-    pub(super) read_budget: usize,
+struct Memory {
+    entries: BTreeMap<Key, Vec<u8>>,
+    faults: VecDeque<Fault>,
+    read_budget: usize,
 }
 
 /// The W1 deterministic backend. Lock contention or poisoning is UNKNOWN.
 #[derive(Clone, Default)]
-pub(crate) struct MemoryObjects(pub(super) Arc<Mutex<Memory>>);
+pub(crate) struct MemoryObjects(Arc<Mutex<Memory>>);
 
 impl Objects for MemoryObjects {
     fn get(&self, key: &str) -> Reply<Option<Object>> {
@@ -115,7 +115,7 @@ fn version(bytes: &[u8]) -> String {
 #[derive(Clone)]
 pub(crate) struct ObjectWitness<B> {
     store_id: String,
-    pub(super) backend: B,
+    backend: B,
 }
 
 pub(crate) type InMemoryWitness = ObjectWitness<MemoryObjects>;
