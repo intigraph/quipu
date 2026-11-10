@@ -30,20 +30,16 @@ fn share_request(tag: &str) -> (tempfile::TempDir, crate::share_import::ShareImp
     )
     .unwrap();
     let read = |name: &str| std::fs::read_to_string(output.join(name)).unwrap();
-    let request = crate::share_import::ShareImportRequest {
-        manifest: serde_json::from_str(&read("manifest.json")).unwrap(),
-        export_ntriples: read("export.nt"),
-        shapes_turtle: read("shapes.ttl"),
-        queries_turtle: None,
-        alignments_turtle: None,
-        query_namespace: None,
-        replace_queries: false,
-        source: "https://example.org/fixture/share".into(),
-        actor: Some("fixture".into()),
-        accept_exact: false,
-        attestation: None,
-        destination: Default::default(),
-    };
+    // Use the wire defaults for optional carriage fields so this fixture also
+    // compiles when a base merge extends ShareImportRequest.
+    let request = serde_json::from_value(serde_json::json!({
+        "manifest": serde_json::from_str::<serde_json::Value>(&read("manifest.json")).unwrap(),
+        "export_ntriples": read("export.nt"),
+        "shapes_turtle": read("shapes.ttl"),
+        "source": "https://example.org/fixture/share",
+        "actor": "fixture",
+    }))
+    .unwrap();
     (dir, request)
 }
 
