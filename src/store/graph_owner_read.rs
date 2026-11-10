@@ -21,7 +21,9 @@ impl Owner {
     /// Capture a strict cut of an already authorized, bounded owner selection.
     /// Refuses immediately if any selected fence/reader is occupied; no queue,
     /// writer fallback, partial answer or weaker vector cut. The caller owns
-    /// dataset authorization and evaluation budgets. There is no server route.
+    /// dataset authorization and evaluation budgets. A late callback result is
+    /// refused; this synchronous API cannot preempt callback execution. There
+    /// is no server route.
     pub fn read_strict<T>(
         owners: &[&Self],
         deadline: Instant,
@@ -104,9 +106,11 @@ impl Owner {
         // never a current read or a vector-cut fallback after contention.
         drop(writers);
         let result = query(&captured)?;
+        check_deadline()?;
         for snapshot in snapshots {
             snapshot.commit()?;
         }
+        check_deadline()?;
         Ok(result)
     }
 }

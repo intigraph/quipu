@@ -865,6 +865,34 @@ fn strict_cut_callback_and_late_identity_failures_release_every_transaction() {
 }
 
 #[test]
+fn strict_cut_refuses_late_success_and_releases_all_snapshots() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    let deadline = strict_deadline();
+    let mut invoked = false;
+    let result = Owner::read_strict(&[&a, &b], deadline, |_| {
+        invoked = true;
+        while let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now()) {
+            std::thread::sleep(remaining);
+        }
+        Ok("late answer")
+    });
+    assert!(
+        invoked,
+        "callback must be admitted before testing late success"
+    );
+    assert!(
+        result.is_err(),
+        "a result past its deadline must not escape"
+    );
+    for owner in [&a, &b] {
+        assert!(owner.readers[0].lock().conn.is_autocommit());
+        assert!(owner.writer.try_lock().is_some());
+    }
+    Owner::read_strict(&[&a, &b], strict_deadline(), |_| Ok(())).unwrap();
+}
+
+#[test]
 fn strict_cut_pins_post_open_dictionary_growth_and_canonical_reference_values() {
     let temp = tempfile::tempdir().unwrap();
     let (a, b) = strict_fixture(temp.path());
