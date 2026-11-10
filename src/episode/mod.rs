@@ -17,6 +17,8 @@ use crate::resolution::{self, Contention, EntityCandidate};
 use crate::shacl;
 use crate::{namespace, store::Store};
 
+pub(crate) mod address;
+use address::validate_node_name;
 mod commit;
 mod descriptions;
 mod edge_predicate;
@@ -35,6 +37,11 @@ mod validation;
 mod write;
 
 pub use commit::ingest_episode_resolved;
+
+/// Wire capability required before a client sends explicit node/class addresses.
+pub const EXPLICIT_ADDRESS_CONTRACT: &str = "quipu.episode-addresses/v1";
+/// Request-local strict new-entity validation, without a global policy flip.
+pub const STRICT_NEW_CONTRACT: &str = "quipu.episode-strict-new/v1";
 
 /// Options controlling entity resolution during episode ingest.
 #[derive(Debug, Clone)]
@@ -196,6 +203,10 @@ pub struct Episode {
 #[derive(Debug, Deserialize)]
 pub struct Node {
     pub name: String,
+    /// Optional exact subject address. Absent preserves legacy name addressing.
+    /// This does not select a type namespace, infer identity or declare an alias.
+    #[serde(default)]
+    pub iri: Option<String>,
     #[serde(rename = "type", default)]
     pub node_type: Option<String>,
     #[serde(default)]
@@ -259,6 +270,7 @@ pub fn ingest_episode_outcome(
     // Refuse before hashing, resolution, Turtle generation, or a transaction:
     // the author is still present and can express one unambiguous node entry.
     validation::reject_duplicate_node_names(&episode.nodes)?;
+    address::validate_nodes(&episode.nodes, base_ns)?;
 
     // Idempotency key (hq-fhc). The episode activity IRI is derived purely from
     // the episode name, so re-ingesting the same name targets the same node. We
@@ -430,13 +442,17 @@ fn episode_content_hash(episode: &Episode) -> String {
                 .map(|m| m.iter().map(|(k, v)| format!("{k}={v}")).collect())
                 .unwrap_or_default();
             props.sort();
-            format!(
+            let mut part = format!(
                 "node:{}|{}|{}|{}",
                 n.name,
                 n.node_type.as_deref().unwrap_or(""),
                 n.description.as_deref().unwrap_or(""),
                 props.join(",")
-            )
+            );
+            if let Some(iri) = &n.iri {
+                part.push_str(&format!("|iri={iri}"));
+            }
+            part
         })
         .collect();
     nodes.sort();
@@ -563,11 +579,10 @@ fn episode_to_turtle(
 
     // Nodes.
     for node in &episode.nodes {
-        let local = node_local_name(&node.name);
-        ttl.push_str(&node_term(&local, base_ns));
+        ttl.push_str(&address::term(node, base_ns));
 
         if let Some(ntype) = &node.node_type {
-            if ntype.starts_with(QUECHUA_TYPE_PREFIX) {
+            if ntype.starts_with(QUECHUA_TYPE_PREFIX) || address::absolute_syntax(ntype) {
                 ttl.push_str(&format!(" a <{}>", node_type_iri(ntype, base_ns)));
             } else {
                 let type_local = sanitize_iri_local(ntype);
@@ -637,20 +652,29 @@ fn episode_to_turtle(
         ttl.push_str(" .\n\n");
     }
 
-    // Edges.
+    // Edges retain name references; their terms use each node's admitted IRI.
+    let addressed: std::collections::HashMap<_, _> = episode
+        .nodes
+        .iter()
+        .map(|node| (node.name.as_str(), node))
+        .collect();
     for edge in &episode.edges {
         let src = node_local_name(&edge.source);
         let tgt = node_local_name(&edge.target);
+        let endpoint = |name: &str, local: &str| {
+            addressed.get(name).map_or_else(
+                || node_term(local, base_ns),
+                |node| address::term(node, base_ns),
+            )
+        };
+        let src_term = endpoint(&edge.source, &src);
+        let tgt_term = endpoint(&edge.target, &tgt);
         // Validated in ingest_episode_with_resolution before we get here; the
         // fallback keeps this function infallible and can only be reached by a
         // caller that generates Turtle without that gate.
         let rel = resolve_edge_predicate(&edge.relation)
             .unwrap_or_else(|_| format!("aegis:{}", sanitize_iri_local(&edge.relation)));
-        ttl.push_str(&format!(
-            "{} {rel} {} .\n",
-            node_term(&src, base_ns),
-            node_term(&tgt, base_ns)
-        ));
+        ttl.push_str(&format!("{src_term} {rel} {tgt_term} .\n"));
 
         // Optional confidence qualifier (hq-cug6). The bare triple above is always
         // asserted (back-compat); when a confidence is supplied we additionally
@@ -660,14 +684,21 @@ fn episode_to_turtle(
         if let Some(conf) = &edge.confidence
             && let Some(literal) = confidence_literal(conf)
         {
-            let stmt_hash = format!(
-                "{:016x}",
-                hash::fnv1a_64(format!("{src}|{rel}|{tgt}").as_bytes())
-            );
+            let explicit = [&edge.source, &edge.target].iter().any(|name| {
+                addressed
+                    .get(name.as_str())
+                    .is_some_and(|node| node.iri.is_some())
+            });
+            let identity = if explicit {
+                format!("{src_term}|{rel}|{tgt_term}")
+            } else {
+                format!("{src}|{rel}|{tgt}")
+            };
+            let stmt_hash = format!("{:016x}", hash::fnv1a_64(identity.as_bytes()));
             ttl.push_str(&format!("aegis:stmt_{stmt_hash} a rdf:Statement ;\n"));
-            ttl.push_str(&format!("    rdf:subject {} ;\n", node_term(&src, base_ns)));
+            ttl.push_str(&format!("    rdf:subject {src_term} ;\n"));
             ttl.push_str(&format!("    rdf:predicate {rel} ;\n"));
-            ttl.push_str(&format!("    rdf:object {} ;\n", node_term(&tgt, base_ns)));
+            ttl.push_str(&format!("    rdf:object {tgt_term} ;\n"));
             ttl.push_str(&format!("    quipu:confidence {literal} .\n"));
         }
     }
@@ -719,34 +750,6 @@ fn node_term(local: &str, base_ns: &str) -> String {
     }
 }
 
-/// Slash-bearing names are deliberate canonical paths, not labels to sanitize.
-/// Keep the accepted grammar narrow so permitting `/` cannot introduce schemes,
-/// traversal, query/fragment syntax, whitespace, or Turtle escapes.
-fn validate_node_name(name: &str) -> Result<()> {
-    if !name.contains('/') {
-        return Ok(());
-    }
-    let valid = !name.starts_with('/')
-        && !name.ends_with('/')
-        && name.split('/').all(|segment| {
-            !segment.is_empty()
-                && segment != "."
-                && segment != ".."
-                && segment
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
-        });
-    if valid {
-        Ok(())
-    } else {
-        Err(crate::error::Error::InvalidValue(format!(
-            "node name '{name}' is not a safe relative IRI path — slash paths must use \
-             non-empty segments containing only ASCII letters, digits, '-', '_' or '.', \
-             and may not contain '.' or '..' segments"
-        )))
-    }
-}
-
 /// Escape special characters for Turtle string literals.
 fn escape_turtle(s: &str) -> String {
     s.replace('\\', "\\\\")
@@ -756,6 +759,8 @@ fn escape_turtle(s: &str) -> String {
         .replace('\t', "\\t")
 }
 
+#[cfg(test)]
+mod explicit_address_tests;
 #[cfg(test)]
 mod graph_idempotency_tests;
 #[cfg(test)]

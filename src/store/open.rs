@@ -333,6 +333,8 @@ impl Store {
         Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
         Self::migrate_writer_scope(&conn)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        Self::migrate_client_changesets(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
         // the space-collision check needs the local store's own space — which

@@ -46,6 +46,8 @@ pub mod stratify;
 mod evaluate_tests;
 #[cfg(test)]
 mod parse_tests;
+#[cfg(test)]
+mod prefix_tests;
 #[cfg(all(test, feature = "reactive-reasoner"))]
 mod reactive_tests;
 #[cfg(test)]

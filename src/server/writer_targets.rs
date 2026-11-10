@@ -77,6 +77,11 @@ pub(crate) fn tool(
         return call(store, input);
     }
     let op = quipu::writer_scope::WriteOperation::for_route(endpoint).ok_or_else(denied)?;
+    if op == quipu::writer_scope::WriteOperation::EntityRefMint
+        && input.get("action").and_then(serde_json::Value::as_str) != Some("mint")
+    {
+        return Err(denied());
+    }
     store.with_writer_scope(op, &json(input), |store| call(store, input))
 }
 

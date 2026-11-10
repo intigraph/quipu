@@ -106,7 +106,7 @@ const SIMPLE_TTL: &str = r#"
 
 #[test]
 fn parse_rules_extracts_all_rule_resources() {
-    let rs = parse_rules(SIMPLE_TTL, None).unwrap();
+    let rs = parse_rules(SIMPLE_TTL, Some(PREFIX)).unwrap();
     assert_eq!(rs.rules.len(), 2);
     let ids: Vec<&str> = rs.rules.iter().map(|r| r.id.as_str()).collect();
     assert!(ids.contains(&"R1"));
@@ -114,17 +114,11 @@ fn parse_rules_extracts_all_rule_resources() {
 }
 
 #[test]
-fn parse_rules_expands_default_prefix() {
-    let rs = parse_rules(SIMPLE_TTL, None).unwrap();
+fn parse_rules_expands_caller_selected_prefix() {
+    let rs = parse_rules(SIMPLE_TTL, Some(PREFIX)).unwrap();
     let r1 = rs.rules.iter().find(|r| r.id == "R1").unwrap();
-    assert_eq!(
-        r1.head.predicate,
-        "http://aegis.gastown.local/ontology/affects"
-    );
-    assert_eq!(
-        r1.body[0].atom().predicate,
-        "http://aegis.gastown.local/ontology/installedIn"
-    );
+    assert_eq!(r1.head.predicate, "http://ex/affects");
+    assert_eq!(r1.body[0].atom().predicate, "http://ex/installedIn");
 }
 
 #[test]
@@ -169,7 +163,7 @@ ex:r1 a rule:Rule ;
     rule:id "R1" ;
     rule:body "p(?x)" .
 "#;
-    let err = parse_rules(ttl, None).unwrap_err();
+    let err = parse_rules(ttl, Some(PREFIX)).unwrap_err();
     match err {
         ReasonerError::MissingProperty { property, .. } => {
             assert_eq!(property, "rule:head");
@@ -189,7 +183,7 @@ ex:r1 a rule:Rule ;
     rule:head "h(?x, ?y)" ;
     rule:body "p(?x)" .
 "#;
-    let err = parse_rules(ttl, None).unwrap_err();
+    let err = parse_rules(ttl, Some(PREFIX)).unwrap_err();
     match err {
         ReasonerError::UnboundHeadVariable { variable, .. } => {
             assert_eq!(variable, "y");
@@ -211,7 +205,7 @@ ex:r1 a rule:Rule ;
     rule:head "h(?x, ?y)" ;
     rule:body "p(?x), not q(?y)" .
 "#;
-    let err = parse_rules(ttl, None).unwrap_err();
+    let err = parse_rules(ttl, Some(PREFIX)).unwrap_err();
     assert!(matches!(err, ReasonerError::UnboundHeadVariable { .. }));
 }
 

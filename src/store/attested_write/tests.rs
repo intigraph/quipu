@@ -11,7 +11,7 @@ const STATUS: &str = "https://example.org/status";
 pub(super) const SLOT: &str = "https://example.org/answer/1";
 pub(super) const SAID: &str = "https://example.org/said";
 
-fn signer(auth: &Authenticator) -> Signer {
+pub(super) fn signer(auth: &Authenticator) -> Signer {
     Signer {
         id: ID.into(),
         scheme: auth.scheme().tag().into(),

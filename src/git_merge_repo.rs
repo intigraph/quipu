@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
-fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
+pub(crate) fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     let o = Command::new("git")
         .arg("-C")
         .arg(repo)
@@ -18,7 +18,7 @@ fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     }
     Ok(o.stdout)
 }
-fn text(repo: &Path, args: &[&str]) -> Result<String> {
+pub(crate) fn text(repo: &Path, args: &[&str]) -> Result<String> {
     String::from_utf8(git(repo, args)?).map_err(io)
 }
 fn commit(repo: &Path, r: &str) -> Result<String> {
@@ -34,7 +34,7 @@ fn commit(repo: &Path, r: &str) -> Result<String> {
     .trim()
     .into())
 }
-fn file(repo: &Path, r: &str, path: &str) -> Result<Option<String>> {
+pub(crate) fn file(repo: &Path, r: &str, path: &str) -> Result<Option<String>> {
     let entry = text(repo, &["ls-tree", r, "--", path])?;
     if entry.is_empty() {
         return Ok(None);
@@ -104,7 +104,7 @@ fn safe_dir(repo: &Path, dir: &str) -> Result<PathBuf> {
     }
     Ok(out)
 }
-fn refs(repo: &Path, base: &str, ours: &str, theirs: &str) -> Result<[String; 3]> {
+pub(crate) fn refs(repo: &Path, base: &str, ours: &str, theirs: &str) -> Result<[String; 3]> {
     if !text(repo, &["rev-parse", "--show-prefix"])?
         .trim()
         .is_empty()
@@ -124,7 +124,7 @@ fn refs(repo: &Path, base: &str, ours: &str, theirs: &str) -> Result<[String; 3]
     }
     Ok(r)
 }
-fn from_env(repo: &Path) -> Result<[String; 3]> {
+pub(crate) fn from_env(repo: &Path) -> Result<[String; 3]> {
     let get = |k| {
         std::env::var(k).map_err(|_| {
             invalid("use quipu git-merge REF; standalone drivers require explicit snapshot context")
@@ -232,6 +232,7 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
     let theirs = commit(repo, incoming)?;
     let base = text(repo, &["merge-base", "--all", &ours, &theirs])?;
     let r = refs(repo, base.trim(), &ours, &theirs)?;
+    let books = crate::git_merge::databook::prepare(repo, &r)?;
     // Compute every overlapping pendant before Git mutates anything. Shapes conflicts
     // and incompatible envelopes fail here, irrespective of Git's per-file order.
     let mut plans = Vec::new();
@@ -254,12 +255,15 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
         .to_string_lossy()
         .replace('\'', "'\\''");
     let command = format!("'{exe}' merge-driver %O %A %B %P");
+    let book_command = format!("'{exe}' databook-merge-driver %O %A %B %P");
     let status = Command::new("git")
         .arg("-C")
         .arg(repo)
         .args([
             "-c",
             &format!("merge.quipu.driver={command}"),
+            "-c",
+            &format!("merge.quipu-databook.driver={book_command}"),
             "merge",
             "--no-ff",
             "--no-commit",
@@ -271,7 +275,9 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
         .env("QUIPU_QPACK_THEIRS", &theirs)
         .status()
         .map_err(|e| spawn_git(&e))?;
-    if !plans.is_empty() && !commit(repo, "MERGE_HEAD").is_ok_and(|head| head == theirs) {
+    if (!plans.is_empty() || !books.is_empty())
+        && !commit(repo, "MERGE_HEAD").is_ok_and(|head| head == theirs)
+    {
         return Err(invalid(
             "Git did not enter the expected merge; no pendant outputs rewritten",
         ));
@@ -287,6 +293,12 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
         }
         write(&safe_dir(repo, &dir)?, &merged)?;
     }
+    for (path, mut plan) in books {
+        if !crate::git_merge::databook::finish(repo, &path, &mut plan)? {
+            ready = false;
+            pending.push(path);
+        }
+    }
     Ok((ready, pending))
 }
 
@@ -299,6 +311,20 @@ pub fn merge_refs(repo: &Path) -> Result<[String; 3]> {
     })?;
     let base = text(repo, &["merge-base", "--all", &ours, &theirs])?;
     refs(repo, base.trim(), &ours, &theirs)
+}
+
+/// Rebuild and validate an existing pendant decision file against the active
+/// merge before a mergetool reports success. Never trust a displayed row count.
+pub fn reconcile(repo: &Path, dir: &str) -> Result<bool> {
+    let r = merge_refs(repo)?;
+    let output = safe_dir(repo, dir)?;
+    let decisions: Decisions =
+        serde_json::from_slice(&std::fs::read(output.join("decisions.json")).map_err(io)?)
+            .map_err(io)?;
+    let mut merged = build(repo, &r, dir)?;
+    let ready = merged.apply(Some(&decisions))?;
+    write(&output, &merged)?;
+    Ok(ready)
 }
 
 /// Recompute the plan from Git, validate a selected decision, and rehash the pack.

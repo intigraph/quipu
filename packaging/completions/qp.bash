@@ -46,6 +46,12 @@ _qp() {
             qp,databook)
                 cmd="qp__subcmd__databook"
                 ;;
+            qp,databook-check)
+                cmd="qp__subcmd__databook__subcmd__check"
+                ;;
+            qp,databook-merge-driver)
+                cmd="qp__subcmd__databook__subcmd__merge__subcmd__driver"
+                ;;
             qp,db)
                 cmd="qp__subcmd__db"
                 ;;
@@ -87,6 +93,9 @@ _qp() {
                 ;;
             qp,git-merge)
                 cmd="qp__subcmd__git__subcmd__merge"
+                ;;
+            qp,git-mergetool)
+                cmd="qp__subcmd__git__subcmd__mergetool"
                 ;;
             qp,graph)
                 cmd="qp__subcmd__graph"
@@ -563,7 +572,7 @@ _qp() {
 
     case "${cmd}" in
         qp)
-            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-mergetool git-merge merge-driver databook-merge-driver databook-check pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1350,6 +1359,42 @@ _qp() {
             ;;
         qp__subcmd__databook)
             opts="-h --db --help export import"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__databook__subcmd__check)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__databook__subcmd__merge__subcmd__driver)
+            opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2240,6 +2285,28 @@ _qp() {
                     return 0
                     ;;
                 --format)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__git__subcmd__mergetool)
+            opts="-h --db --by --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --by)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -4583,7 +4650,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__share)
-            opts="-h --db --output --graph --group-id --construct --shapes --queries --alignments --parent-share --since --destination --pack-dir --actor --attest-key --attest-issued-at --attest-ttl --attest-agent --attest-session --attest-introducer --attest-nonce --pointers --no-shapes --no-queries --turtle --attest --project --help diff"
+            opts="-h --db --output --graph --group-id --construct --shapes --queries --competency --alignments --parent-share --since --destination --pack-dir --actor --attest-key --attest-issued-at --attest-ttl --attest-agent --attest-session --attest-introducer --attest-nonce --pointers --no-shapes --no-queries --turtle --attest --project --help diff"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -4614,6 +4681,10 @@ _qp() {
                     return 0
                     ;;
                 --queries)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --competency)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

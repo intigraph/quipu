@@ -95,7 +95,22 @@ pub(crate) fn presented(store: &Store, file: &File, td: &str) -> Result<Json> {
         &file.authored_at,
         td,
     )?;
-    Ok(json!({"decisions":file,"merge_id":id(file)?,"report":summary(&plan),"writes":false}))
+    let risk = match crate::merge_plan_gate::policy()? {
+        Some(policy) => serde_json::to_value(crate::merge_plan::plan(
+            store,
+            &plan.request.ours,
+            &crate::merge_session::render(&plan.prospective),
+            &policy,
+        )?)
+        .map_err(|e| Error::Serialization(e.to_string()))?,
+        None => {
+            json!({"active":false,"verdict":"undetermined","reason":"receiver policy not configured"})
+        }
+    };
+    Ok(
+        json!({"decisions":file,"merge_id":id(file)?,"report":summary(&plan),
+        "risk_plan":risk,"risk_scope":"ROOT preview; writer rechecks actual operations and receipt destinations", "writes":false}),
+    )
 }
 
 /// Normal pre-commit checks re-run at apply. A dry-run is a plan preview;

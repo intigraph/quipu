@@ -51,6 +51,7 @@ pub(super) fn defs() -> Vec<Value> {
                     "alignments_turtle": {
                         "type": "string"
                     },
+                    "competency_toml": {"type": "string"},
                     "parent_share": {
                         "type": "string"
                     },
@@ -88,6 +89,8 @@ pub(super) fn defs() -> Vec<Value> {
                     "alignments_turtle": {
                         "type": "string"
                     },
+                    "competency_toml": {"type": "string"},
+                    "commands_turtle": {"type": "string"},
                     "query_namespace": {
                         "type": "string"
                     },
