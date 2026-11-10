@@ -960,3 +960,83 @@ fn strict_cut_pins_post_open_dictionary_growth_and_canonical_reference_values() 
     })
     .unwrap();
 }
+
+#[test]
+fn owner_memory_plan_reaches_writer_fence_and_every_reader() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a, ar) = fixture(temp.path(), "a");
+    let (b, br) = fixture(temp.path(), "b");
+    let catalog = catalog(vec![ar.clone(), br.clone()]);
+    let allocation = catalog.memory_allocation(512, 1, 1).unwrap();
+    assert_eq!(allocation.connections, 8);
+    let a = Owner::prepare_with_memory(
+        catalog.clone(),
+        temp.path(),
+        &ar.graph,
+        a,
+        "policy-v1",
+        allocation,
+    )
+    .unwrap();
+    let b = Owner::prepare_with_memory(catalog, temp.path(), &br.graph, b, "policy-v1", allocation)
+        .unwrap();
+    let expected = (-(allocation.cache_kib as i64), allocation.mmap_bytes as i64);
+    for owner in [&a, &b] {
+        let writer = owner.writer.lock();
+        let settings = |store: &Store| {
+            (
+                store
+                    .conn
+                    .query_row("PRAGMA cache_size", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                store
+                    .conn
+                    .query_row("PRAGMA mmap_size", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+            )
+        };
+        assert_eq!(settings(&writer), expected);
+        assert_eq!(
+            writer.ownership_fence.as_ref().unwrap().memory_settings(),
+            expected
+        );
+        for reader in &owner.readers {
+            let reader = reader.lock();
+            assert_eq!(settings(&reader), expected);
+            assert_eq!(
+                reader
+                    .conn
+                    .query_row("PRAGMA query_only", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+        }
+    }
+    // Allocation must not weaken ownership callbacks or change graph visibility.
+    for owner in [&a, &b] {
+        owner
+            .knot(&request(owner), &input(owner, "budgeted"))
+            .unwrap();
+        assert_eq!(values(owner)["rows"][0]["value"], "budgeted");
+    }
+}
+
+#[test]
+fn budgeted_owner_refuses_missing_fence_reader() {
+    let temp = tempfile::tempdir().unwrap();
+    let (mut store, route) = fixture(temp.path(), "a");
+    let catalog = catalog(vec![route.clone()]);
+    let allocation = catalog.memory_allocation(320, 1, 1).unwrap();
+    store.ownership_fence = None;
+    assert!(
+        Owner::prepare_with_memory(
+            catalog,
+            temp.path(),
+            &route.graph,
+            store,
+            "policy-v1",
+            allocation,
+        )
+        .is_err()
+    );
+}

@@ -42,6 +42,35 @@ pub(super) struct CommitFence {
 }
 
 impl CommitFence {
+    // Initialization only, outside SQLite commit callbacks. Never wait for a
+    // check latch while sizing a connection; unavailable state refuses setup.
+    pub(super) fn apply_memory_allocation(
+        &self,
+        allocation: crate::memory_budget::MemoryAllocation,
+    ) -> Result<()> {
+        let reader = self.reader.try_lock().map_err(|_| {
+            crate::Error::PolicyDenied("ownership reader unavailable for memory allocation".into())
+        })?;
+        let reader = reader.as_ref().ok_or_else(|| {
+            crate::Error::PolicyDenied("ownership reader missing for memory allocation".into())
+        })?;
+        allocation.apply_connection(reader)
+    }
+
+    #[cfg(test)]
+    pub(super) fn memory_settings(&self) -> (i64, i64) {
+        let reader = self.reader.lock().unwrap();
+        let reader = reader.as_ref().unwrap();
+        (
+            reader
+                .query_row("PRAGMA cache_size", [], |r| r.get(0))
+                .unwrap(),
+            reader
+                .query_row("PRAGMA mmap_size", [], |r| r.get(0))
+                .unwrap(),
+        )
+    }
+
     /// In-memory/browser stores still pass the enrolled startup gate, but
     /// have no native placement or independent disk reader.
     pub(super) fn new(conn: &Connection) -> Option<Arc<Self>> {

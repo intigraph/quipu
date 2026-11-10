@@ -115,8 +115,41 @@ impl Owner {
         catalog: Arc<Catalog>,
         root: &Path,
         graph: &str,
+        store: Store,
+        installed_policy: &str,
+    ) -> Result<Self> {
+        Self::prepare_inner(catalog, root, graph, store, installed_policy, None)
+    }
+
+    /// Prepare with a share of the caller's one aggregate memory plan. Applies
+    /// SQLite ceilings to writer, ownership-fence reader and every read-pool
+    /// connection before returning the owner. Does not reserve evaluator heaps
+    /// or replace service admission/cgroup enforcement.
+    pub fn prepare_with_memory(
+        catalog: Arc<Catalog>,
+        root: &Path,
+        graph: &str,
+        store: Store,
+        installed_policy: &str,
+        allocation: crate::memory_budget::MemoryAllocation,
+    ) -> Result<Self> {
+        Self::prepare_inner(
+            catalog,
+            root,
+            graph,
+            store,
+            installed_policy,
+            Some(allocation),
+        )
+    }
+
+    fn prepare_inner(
+        catalog: Arc<Catalog>,
+        root: &Path,
+        graph: &str,
         mut store: Store,
         installed_policy: &str,
+        allocation: Option<crate::memory_budget::MemoryAllocation>,
     ) -> Result<Self> {
         let route = catalog
             .routes()
@@ -150,10 +183,21 @@ impl Owner {
             .path
             .to_str()
             .ok_or_else(|| refused("native store path must be UTF-8"))?;
+        if let Some(allocation) = allocation {
+            store.apply_memory_allocation(allocation)?;
+            store
+                .ownership_fence
+                .as_ref()
+                .ok_or_else(|| refused("ownership reader missing from memory plan"))?
+                .apply_memory_allocation(allocation)?;
+        }
         let mut readers = Vec::with_capacity(budget.readers_per_owner);
         for _ in 0..budget.readers_per_owner {
             let mut reader = Store::open_read_only(path)?;
             reader.adopt_read_config_from(&store);
+            if let Some(allocation) = allocation {
+                reader.apply_memory_allocation(allocation)?;
+            }
             Self::check_identity(&route, &reader)?;
             readers.push(FairMutex::new(reader));
         }

@@ -21,6 +21,16 @@ pub struct MemoryAllocation {
 }
 
 impl MemoryAllocation {
+    pub(crate) fn apply_connection(&self, conn: &rusqlite::Connection) -> Result<()> {
+        let cache = i64::try_from(self.cache_kib)
+            .map_err(|_| Error::InvalidValue("cache allocation overflow".into()))?;
+        let mmap = i64::try_from(self.mmap_bytes)
+            .map_err(|_| Error::InvalidValue("mmap allocation overflow".into()))?;
+        conn.pragma_update(None, "cache_size", -cache)?;
+        conn.pragma_update(None, "mmap_size", mmap)?;
+        Ok(())
+    }
+
     /// Validate before opening a database or spawning any process.
     pub fn for_server(config: &ServerConfig) -> Result<Option<Self>> {
         let Some(mib) = config.memory_budget_mib else {
