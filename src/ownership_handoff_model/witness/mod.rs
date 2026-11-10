@@ -5,8 +5,10 @@
 use super::{Abandonment, Authority, Certificate, Journal, Request, WitnessHead};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
+pub(crate) mod objects;
 mod records;
 mod walk;
+use objects::{Created, Object, Objects};
 use records::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -40,16 +42,79 @@ pub(crate) trait AuthorityWitness {
     fn activate(&self, authority: &Authority) -> Reply<()>;
 }
 
+/// Private in-memory backend state. Keys are typed because the in-memory
+/// store can only ever hold canonical witness keys.
 #[derive(Default)]
-struct Memory {
-    store_id: String,
-    entries: BTreeMap<Key, Vec<u8>>,
-    faults: VecDeque<Fault>,
-    read_budget: usize,
+pub(super) struct Memory {
+    pub(super) entries: BTreeMap<Key, Vec<u8>>,
+    pub(super) faults: VecDeque<Fault>,
+    pub(super) read_budget: usize,
 }
 
+/// The W1 deterministic backend. Lock contention or poisoning is UNKNOWN.
+#[derive(Clone, Default)]
+pub(crate) struct MemoryObjects(pub(super) Arc<Mutex<Memory>>);
+
+impl Objects for MemoryObjects {
+    fn get(&self, key: &str) -> Reply<Option<Object>> {
+        let Ok(memory) = self.0.try_lock() else {
+            return Reply::Unknown;
+        };
+        let Some(key) = objects::parse(key) else {
+            return Reply::Unknown;
+        };
+        Reply::Ok(memory.entries.get(&key).map(|bytes| Object {
+            version: version(bytes),
+            bytes: bytes.clone(),
+        }))
+    }
+    fn create(&self, key: &str, bytes: &[u8]) -> Reply<Created> {
+        let Ok(mut memory) = self.0.try_lock() else {
+            return Reply::Unknown;
+        };
+        let Some(key) = objects::parse(key) else {
+            return Reply::Unknown;
+        };
+        if memory.entries.contains_key(&key) {
+            return Reply::Ok(Created::Exists);
+        }
+        memory.entries.insert(key, bytes.to_vec());
+        Reply::Ok(Created::New)
+    }
+    fn list(&self, limit: usize) -> Reply<Vec<String>> {
+        let Ok(memory) = self.0.try_lock() else {
+            return Reply::Unknown;
+        };
+        if memory.entries.len() > limit {
+            return Reply::Unknown;
+        }
+        Reply::Ok(memory.entries.keys().map(|k| objects::name(*k)).collect())
+    }
+    fn fault(&self) -> Option<Fault> {
+        self.0
+            .try_lock()
+            .ok()
+            .and_then(|mut m| m.faults.pop_front())
+    }
+    fn read_budget(&self) -> usize {
+        self.0.try_lock().map_or(0, |m| m.read_budget)
+    }
+}
+
+fn version(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(bytes))
+}
+
+/// The witness logic over any create-only backend. Atomicity comes from the
+/// deterministic create-only key, never from a backend-wide lock.
 #[derive(Clone)]
-pub(crate) struct InMemoryWitness(Arc<Mutex<Memory>>);
+pub(crate) struct ObjectWitness<B> {
+    store_id: String,
+    pub(super) backend: B,
+}
+
+pub(crate) type InMemoryWitness = ObjectWitness<MemoryObjects>;
 
 impl InMemoryWitness {
     /// Seeds an assumed enrolled genesis in a private model only. This is NOT
@@ -61,76 +126,105 @@ impl InMemoryWitness {
         let Ok(bytes) = Entry::Active(genesis.clone()).bytes() else {
             return Reply::Conflict;
         };
-        Reply::Ok(Self(Arc::new(Mutex::new(Memory {
+        Reply::Ok(Self {
             store_id: genesis.store_id,
-            entries: BTreeMap::from([(Key::Active(0), bytes)]),
-            read_budget: MAX_READS,
-            ..Memory::default()
-        }))))
-    }
-    pub(crate) fn inject(&self, fault: Fault) -> Reply<()> {
-        self.call(false, |memory| {
-            if memory.faults.len() >= MAX_RECORDS {
-                return Reply::Unknown;
-            }
-            memory.faults.push_back(fault);
-            Reply::Ok(())
+            backend: MemoryObjects(Arc::new(Mutex::new(Memory {
+                entries: BTreeMap::from([(Key::Active(0), bytes)]),
+                read_budget: MAX_READS,
+                ..Memory::default()
+            }))),
         })
     }
-    fn call<T>(&self, consume: bool, f: impl FnOnce(&mut Memory) -> Reply<T>) -> Reply<T> {
-        // Nonblocking admission: lock contention/poisoning is UNKNOWN.
-        let Ok(mut memory) = self.0.try_lock() else {
+    pub(crate) fn inject(&self, fault: Fault) -> Reply<()> {
+        let Ok(mut memory) = self.backend.0.try_lock() else {
             return Reply::Unknown;
         };
-        let fault = if consume {
-            memory.faults.pop_front()
-        } else {
-            None
-        };
+        if memory.faults.len() >= MAX_RECORDS {
+            return Reply::Unknown;
+        }
+        memory.faults.push_back(fault);
+        Reply::Ok(())
+    }
+}
+
+impl<B: Objects> ObjectWitness<B> {
+    /// Attach the witness logic to an existing lineage in `backend`. Nothing
+    /// is written; an unreadable or foreign lineage reads as UNKNOWN later.
+    pub(crate) fn attach(store_id: String, backend: B) -> Self {
+        Self { store_id, backend }
+    }
+    fn call<T>(&self, f: impl FnOnce(&Self) -> Reply<T>) -> Reply<T> {
+        let fault = self.backend.fault();
         match fault {
             Some(Fault::Unknown | Fault::Slow) => Reply::Unknown,
             Some(Fault::Conflict) => Reply::Conflict,
-            _ => match f(&mut memory) {
+            _ => match f(self) {
                 Reply::Ok(_) if matches!(fault, Some(Fault::LostReply)) => Reply::Unknown,
                 other => other,
             },
         }
     }
-}
-
-impl Memory {
-    fn create(
-        &mut self,
-        key: Key,
-        entry: &Entry,
-        check: impl FnOnce(&Self) -> Reply<()>,
-    ) -> Reply<()> {
+    /// Same body: already done. Different valid body: conflict. Anything
+    /// unreadable: UNKNOWN.
+    fn readback(&self, key: Key, bytes: &[u8]) -> Reply<()> {
+        match self.backend.get(&objects::name(key)) {
+            Reply::Ok(Some(old)) => match Entry::decode(&old.bytes) {
+                Ok(_) if old.bytes == bytes => Reply::Ok(()),
+                Ok(_) => Reply::Conflict,
+                Err(()) => Reply::Unknown,
+            },
+            _ => Reply::Unknown,
+        }
+    }
+    fn create(&self, key: Key, entry: &Entry, check: impl FnOnce(&Self) -> Reply<()>) -> Reply<()> {
         let Ok(bytes) = entry.bytes() else {
             return Reply::Conflict;
         };
-        if let Some(old) = self.entries.get(&key) {
-            return match Entry::decode(old) {
-                Ok(_) if old == &bytes => Reply::Ok(()),
-                Ok(_) => Reply::Conflict,
-                Err(()) => Reply::Unknown,
-            };
+        match self.backend.get(&objects::name(key)) {
+            Reply::Ok(Some(_)) => return self.readback(key, &bytes),
+            Reply::Ok(None) => {}
+            _ => return Reply::Unknown,
         }
-        if self.entries.len() >= MAX_RECORDS {
-            return Reply::Unknown;
+        match self.backend.list(MAX_RECORDS) {
+            Reply::Ok(keys) if keys.len() < MAX_RECORDS => {}
+            _ => return Reply::Unknown,
         }
         match check(self) {
-            Reply::Ok(()) => {
-                self.entries.insert(key, bytes);
-                Reply::Ok(())
-            }
-            other => other,
+            Reply::Ok(()) => {}
+            other => return other,
         }
+        match self.backend.create(&objects::name(key), &bytes) {
+            Reply::Ok(Created::New) => Reply::Ok(()),
+            // Another writer won this exact key between check and create.
+            Reply::Ok(Created::Exists) => self.readback(key, &bytes),
+            _ => Reply::Unknown,
+        }
+    }
+    /// Every reserved request in the lineage, for operation uniqueness.
+    fn reserved_requests(&self) -> Result<Vec<Request>, ()> {
+        let Reply::Ok(keys) = self.backend.list(MAX_RECORDS) else {
+            return Err(());
+        };
+        let mut out = Vec::new();
+        for name in keys {
+            if !matches!(objects::parse(&name), Some(Key::Reserved(..))) {
+                continue;
+            }
+            match self.backend.get(&name) {
+                Reply::Ok(Some(old)) => match Entry::decode(&old.bytes) {
+                    Ok(Entry::Reserved(request)) => out.push(request),
+                    _ => return Err(()),
+                },
+                _ => return Err(()),
+            }
+        }
+        Ok(out)
     }
 }
 
-impl AuthorityWitness for InMemoryWitness {
+impl<B: Objects> AuthorityWitness for ObjectWitness<B> {
     fn head(&self, store_id: &str, anchor: u64) -> Reply<WitnessHead> {
-        self.call(true, |memory| {
+        self.call(|memory| {
             if store_id != memory.store_id {
                 return Reply::Conflict;
             }
@@ -141,7 +235,7 @@ impl AuthorityWitness for InMemoryWitness {
         })
     }
     fn reserve(&self, attempt: u64, request: &Request) -> Reply<()> {
-        self.call(true, |memory| {
+        self.call(|memory| {
             if attempt > MAX_ATTEMPT || request.source.generation >= MAX_GENERATION {
                 return Reply::Conflict;
             }
@@ -160,15 +254,14 @@ impl AuthorityWitness for InMemoryWitness {
                     {
                         return Reply::Conflict;
                     }
-                    for (key, bytes) in &m.entries {
-                        if matches!(key, Key::Reserved(..)) {
-                            let Ok(Entry::Reserved(old)) = Entry::decode(bytes) else {
-                                return Reply::Unknown;
-                            };
-                            if old.operation == request.operation {
-                                return Reply::Conflict;
-                            }
-                        }
+                    let Ok(reserved) = m.reserved_requests() else {
+                        return Reply::Unknown;
+                    };
+                    if reserved
+                        .iter()
+                        .any(|old| old.operation == request.operation)
+                    {
+                        return Reply::Conflict;
                     }
                     Reply::Ok(())
                 },
@@ -176,7 +269,7 @@ impl AuthorityWitness for InMemoryWitness {
         })
     }
     fn retire(&self, attempt: u64, certificate: &Certificate) -> Reply<()> {
-        self.call(true, |memory| {
+        self.call(|memory| {
             if attempt > MAX_ATTEMPT {
                 return Reply::Conflict;
             }
@@ -208,7 +301,7 @@ impl AuthorityWitness for InMemoryWitness {
         source: &Journal,
         sealed: bool,
     ) -> Reply<()> {
-        self.call(true, |memory| {
+        self.call(|memory| {
             if attempt > MAX_ATTEMPT {
                 return Reply::Conflict;
             }
@@ -244,7 +337,7 @@ impl AuthorityWitness for InMemoryWitness {
         })
     }
     fn activate(&self, authority: &Authority) -> Reply<()> {
-        self.call(true, |memory| {
+        self.call(|memory| {
             if authority.generation == 0 || authority.generation > MAX_GENERATION {
                 return Reply::Conflict;
             }

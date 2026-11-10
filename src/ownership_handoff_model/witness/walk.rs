@@ -6,7 +6,7 @@ pub(super) struct Walk {
     pub(super) next_attempt: u64,
 }
 
-impl Memory {
+impl<B: Objects> ObjectWitness<B> {
     fn read(
         &self,
         key: Key,
@@ -14,17 +14,20 @@ impl Memory {
         reads: &mut usize,
     ) -> Result<Option<Entry>, ()> {
         *reads += 1;
-        if *reads > self.read_budget || *reads > MAX_READS {
+        if *reads > self.backend.read_budget() || *reads > MAX_READS {
             return Err(());
         }
         seen.insert(key);
-        self.entries.get(&key).map(|b| Entry::decode(b)).transpose()
+        match self.backend.get(&objects::name(key)) {
+            Reply::Ok(found) => found.map(|o| Entry::decode(&o.bytes)).transpose(),
+            _ => Err(()),
+        }
     }
 
     /// Anchor is selected by the modeled caller's journal role. Never infer it
     /// from a copied database. This adapter performs no authenticated I/O.
     pub(super) fn walk(&self, anchor: u64) -> Result<Walk, ()> {
-        if anchor > MAX_GENERATION || self.entries.len() > MAX_RECORDS {
+        if anchor > MAX_GENERATION {
             return Err(());
         }
         let mut seen = BTreeSet::new();
@@ -120,12 +123,16 @@ impl Memory {
         };
         // Full bounded map inspection makes hidden/skipped keys UNKNOWN too,
         // beyond the explicitly fetched one-past-head controls above.
-        if self
-            .entries
-            .keys()
-            .any(|key| key.generation() >= anchor && !seen.contains(key))
-        {
+        // Listed AFTER the reads, so a key created during the walk is seen.
+        // An unparseable name under the lineage is UNKNOWN, never ignored.
+        let Reply::Ok(names) = self.backend.list(MAX_RECORDS) else {
             return Err(());
+        };
+        for name in names {
+            let key = objects::parse(&name).ok_or(())?;
+            if key.generation() >= anchor && !seen.contains(&key) {
+                return Err(());
+            }
         }
         Ok(Walk {
             head,

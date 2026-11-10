@@ -159,7 +159,7 @@ fn unknown_slow_and_lost_reply_are_distinct_from_conflict() {
     assert_eq!(w.reserve(0, &c.request), Reply::Ok(()));
     let other = certificate(initial(), "C", "op2");
     assert_eq!(w.reserve(0, &other.request), Reply::Conflict);
-    let lock = w.0.lock().unwrap();
+    let lock = w.backend.0.lock().unwrap();
     assert_eq!(w.head(&initial().store_id, 0), Reply::Unknown);
     drop(lock);
 }
@@ -209,7 +209,7 @@ fn stale_skipped_and_malformed_inputs_never_create_records() {
         Reply::Conflict
     );
     assert_eq!(w.head("wrong-store", 0), Reply::Conflict);
-    assert_eq!(w.0.lock().unwrap().entries.len(), 1);
+    assert_eq!(w.backend.0.lock().unwrap().entries.len(), 1);
 }
 
 #[test]
@@ -225,7 +225,7 @@ fn tampered_missing_and_unexpected_keys_are_unknown_with_positive_control() {
             })
         );
         {
-            let mut m = w.0.lock().unwrap();
+            let mut m = w.backend.0.lock().unwrap();
             match variant {
                 0 => {
                     m.entries.insert(
