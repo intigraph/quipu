@@ -79,6 +79,8 @@ with tempfile.TemporaryDirectory(prefix="public-slo-", dir=Path.home()) as tempo
             assert not done.stderr
             assert state["requests"] - before == 8
             report = json.loads(done.stdout)
+            if "--demo" in sys.argv[2:] and not reports:
+                print(json.dumps(report["days"][0], indent=2), flush=True)
             assert len(report["days"]) == 2
             row = report["days"][0]
             assert row["date"] == "1970-01-02"
