@@ -164,8 +164,10 @@ fn run(request: &Request) -> Res<serde_json::Value> {
         report.insert(
             "kind".into(),
             json!(match kind(record) {
+                ConflictKind::Convergent => "convergent",
                 ConflictKind::MaxCountExceeded => "maxcount-exceeded",
                 ConflictKind::DeleteReplace => "delete-replace",
+                ConflictKind::ListDivergent => "list-divergent",
             }),
         );
         if native["outcome"] == "promoted" {
