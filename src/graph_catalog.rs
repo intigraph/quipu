@@ -85,6 +85,33 @@ fn nonempty(value: &str) -> bool {
 }
 
 impl Catalog {
+    /// Size one aggregate service budget before opening any owner or scratch
+    /// connection. Legacy and maximum concurrent scratch connections are explicit;
+    /// routed owners include the writer, ownership-fence reader and read pool.
+    /// This does not grant allocation or request admission by itself.
+    pub fn memory_allocation(
+        &self,
+        mib: u64,
+        legacy_connections: u64,
+        scratch_connections: u64,
+    ) -> Result<crate::memory_budget::MemoryAllocation> {
+        if legacy_connections == 0 {
+            return Err(refuse("legacy connection reservation is required"));
+        }
+        let routed = self
+            .budget
+            .readers_per_owner
+            .checked_add(2)
+            .and_then(|per_owner| self.routes.len().checked_mul(per_owner))
+            .and_then(|n| u64::try_from(n).ok())
+            .ok_or_else(|| refuse("routed connection count overflow"))?;
+        let total = legacy_connections
+            .checked_add(routed)
+            .and_then(|n| n.checked_add(scratch_connections))
+            .ok_or_else(|| refuse("aggregate connection count overflow"))?;
+        crate::memory_budget::MemoryAllocation::for_connections(mib, total)
+    }
+
     /// Validate the whole candidate before it can be pinned by any request.
     /// Duplicate physical inodes and filesystem placement are additionally
     /// checked by the native owner; distinct opaque IDs alone cannot prove that.

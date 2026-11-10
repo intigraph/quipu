@@ -193,3 +193,21 @@ fn mixed_file_batch_is_refused_even_when_the_first_selection_is_valid() {
         WriteTarget::Legacy
     );
 }
+
+#[test]
+fn owner_memory_plan_counts_legacy_fences_readers_and_concurrent_scratch() {
+    let catalog = catalog(vec![route("a"), route("b")]).unwrap();
+    // Five legacy connections, two owners of three, three concurrent scratch.
+    let plan = catalog.memory_allocation(896, 5, 3).unwrap();
+    assert_eq!(plan.connections, 14);
+    assert_eq!(plan.total_bytes, 896 * 1_048_576);
+    assert!((plan.cache_kib * 1024 + plan.mmap_bytes) * plan.connections <= plan.total_bytes / 2);
+    assert!(catalog.memory_allocation(895, 5, 3).is_err());
+    assert!(catalog.memory_allocation(896, 0, 3).is_err());
+    assert!(catalog.memory_allocation(896, u64::MAX, 3).is_err());
+    assert!(catalog.memory_allocation(896, 5, u64::MAX).is_err());
+    // Extra scratch connections consume the same budget, not a fresh one.
+    assert!(catalog.memory_allocation(896, 5, 4).is_err());
+    let empty = self::catalog(vec![]).unwrap();
+    assert_eq!(empty.memory_allocation(64, 1, 0).unwrap().connections, 1);
+}
