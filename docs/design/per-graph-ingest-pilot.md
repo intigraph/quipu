@@ -130,6 +130,19 @@ of a hard evaluator RSS bound. Parser, resident-model, join, format-conversion a
 runtime peaks still require workload measurements and the aggregate process/cgroup
 boundary. The in-process prototype must not be advertised as an RSS-isolated server.
 
+The private native owner adapter reuses the handoff implementation's
+[`ownership_operation`](ownership-commit-scope.md) for both its ordinary knot
+pipeline and its later deferred-embedding write. Inference holds no lineage
+latch; the second write reacquires and rechecks the same authority. A retirement
+between those phases refuses the vector write while preserving the earlier
+committed facts and existing post-commit error semantics. It does not retry facts
+or pretend that a late embedding failure rolled them back.
+
+This integration adds no startup admission or generation-pin setter. Private
+controls use the handoff implementation's existing test-only pin. The actual
+protected startup adapter, external admission and producer routing remain separate
+requirements; a simulated ACTIVE journal cannot enable a production owner.
+
 ## Qualification sequence
 
 1. Complete the producer/consumer matrix and namespace integration. Land the

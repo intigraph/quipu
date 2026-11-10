@@ -77,15 +77,17 @@ fn pending() -> Journal {
 }
 
 fn write(store: &mut Store, n: i64) -> crate::Result<i64> {
-    let d = Datum {
-        entity: store.intern("urn:pin:e")?,
-        attribute: store.intern("urn:pin:n")?,
-        value: Value::Int(n),
-        valid_from: "2026-11-01".into(),
-        valid_to: None,
-        op: Op::Assert,
-    };
-    store.transact(&[d], "2026-11-01T00:00:00Z", None, None)
+    store.ownership_transaction(|store| {
+        let d = Datum {
+            entity: store.intern("urn:pin:e")?,
+            attribute: store.intern("urn:pin:n")?,
+            value: Value::Int(n),
+            valid_from: "2026-11-01".into(),
+            valid_to: None,
+            op: Op::Assert,
+        };
+        store.transact(&[d], "2026-11-01T00:00:00Z", None, None)
+    })
 }
 
 fn count(store: &Store, table: &str) -> i64 {
@@ -115,8 +117,12 @@ fn a_pinned_handle_writes_only_while_its_journal_is_active() {
 
     write(&mut store, 1).unwrap();
     store
-        .conn
-        .execute_batch("CREATE TABLE direct_probe(x); INSERT INTO direct_probe VALUES (1);")
+        .ownership_transaction(|store| {
+            store.conn.execute_batch(
+                "CREATE TABLE direct_probe(x); INSERT INTO direct_probe VALUES (1);",
+            )?;
+            Ok(())
+        })
         .unwrap();
     let facts = count(&store, "transactions");
 

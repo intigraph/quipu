@@ -7,8 +7,10 @@
 //!
 //! This primitive does NOT publish a server route. Its advisory file lease
 //! excludes cooperating writable Store handles, not arbitrary SQLite clients.
-//! Durable bypass fencing, aggregate memory allocation and composed-read parity
-//! remain mandatory before a server may advertise a routed graph.
+//! Facts and deferred-embedding writes reuse Store's ownership operation seam;
+//! inference runs outside that lineage latch. This adapter cannot pin a writer
+//! or admit enrolled startup. Durable bypass fencing, aggregate memory allocation
+//! and composed-read parity remain mandatory before a server advertises a route.
 
 use std::{
     os::unix::fs::MetadataExt,
@@ -252,7 +254,7 @@ impl Owner {
             let mut store = self.writer.lock();
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
-            let result = crate::tool_knot(&mut store, input)?;
+            let result = store.ownership_operation(|store| crate::tool_knot(store, input))?;
             (
                 result,
                 store.take_deferred_embed(),
@@ -270,10 +272,10 @@ impl Owner {
                 // Owner admission remains reserved; inference holds no writer.
                 embeddings.extend(provider.embed_batch(chunk)?);
             }
-            let store = self.writer.lock();
+            let mut store = self.writer.lock();
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
-            store.apply_deferred_embed(&work, &embeddings)?;
+            store.ownership_operation(|store| store.apply_deferred_embed(&work, &embeddings))?;
         }
         Ok(result)
     }

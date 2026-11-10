@@ -10,10 +10,10 @@
 //! including after a local database rollback or callback replacement. There is
 //! no authenticated startup adapter or protected-journal enrollment API yet.
 //!
-//! The check latch is NOT a retirement latch held through physical commit.
-//! Admitting enrolled writes requires the reviewed per-lineage shared/exclusive
-//! scope and protected-journal adapter; this increment admits none. SQLite's
-//! pre-commit callback cannot by itself prove that a latch spans COMMIT.
+//! The check latch is NOT a retirement latch. The source-only explicit
+//! `ownership_scope` holds a separate shared lineage latch across actual SQL
+//! completion, with an exclusive journal-transition counterpart. A pinned
+//! write outside that scope refuses. Enrollment/startup still admits none.
 //!
 //! Generation pin (P1, aegis-s24.8): a handle may carry the protected-journal
 //! path and the exact authority tuple it was admitted under. Every check then
@@ -22,6 +22,8 @@
 //! revokes the pin for good, so restoring older journal bytes cannot revive
 //! the handle. No public path sets a pin yet: enrolled startup still refuses.
 use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::AtomicU8;
 use std::sync::{
     Arc, Mutex, OnceLock,
     atomic::{AtomicBool, Ordering},
@@ -39,6 +41,13 @@ pub(super) struct CommitFence {
     // The first journal refusal, kept because a refused COMMIT surfaces only
     // as SQLite's generic constraint error.
     reason: OnceLock<String>,
+    // 0 = no permit, 1 = private body (no outer commit), 2 = outer SQL seam.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) commit_scope: AtomicU8,
+    #[cfg(test)]
+    pub(super) before_commit: Mutex<Option<Box<dyn Fn() + Send>>>,
+    #[cfg(test)]
+    pub(super) after_sql: Mutex<Option<Box<dyn Fn() + Send>>>,
 }
 
 impl CommitFence {
@@ -98,6 +107,12 @@ impl CommitFence {
             revoked: AtomicBool::new(false),
             journal: OnceLock::new(),
             reason: OnceLock::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            commit_scope: AtomicU8::new(0),
+            #[cfg(test)]
+            before_commit: Mutex::new(None),
+            #[cfg(test)]
+            after_sql: Mutex::new(None),
         }))
     }
 
@@ -129,6 +144,11 @@ impl CommitFence {
         self.reason.get().map(String::as_str)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn journal_path(&self) -> Option<&std::path::Path> {
+        self.journal.get().map(|(path, _)| path.as_path())
+    }
+
     #[cfg(target_arch = "wasm32")]
     pub(super) fn check_journal(&self) -> Result<()> {
         Ok(())
@@ -158,7 +178,21 @@ impl CommitFence {
         let Some(reader) = reader.as_ref() else {
             return true;
         };
-        super::ownership::state_on(reader, Some(self)).is_err() || self.revoked()
+        if super::ownership::state_on(reader, Some(self)).is_err() || self.revoked() {
+            return true;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let phase = self.commit_scope.load(Ordering::Acquire);
+            if phase == 1 || (self.journal.get().is_some() && phase != 2) {
+                return true;
+            }
+        }
+        #[cfg(test)]
+        if let Some(pause) = self.before_commit.lock().unwrap().as_ref() {
+            pause();
+        }
+        false
     }
 
     #[cfg(test)]

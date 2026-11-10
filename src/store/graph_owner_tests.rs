@@ -1540,3 +1540,6 @@ fn composition_reservation() -> crate::read_authorization::ComposedReadReservati
 
 #[path = "graph_owner_resource_tests.rs"]
 mod resource_reservation;
+
+#[path = "graph_owner_scope_tests.rs"]
+mod commit_scope;

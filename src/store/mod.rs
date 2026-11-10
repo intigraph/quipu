@@ -20,6 +20,10 @@ mod decision_nonces;
 pub mod graph_owner;
 mod ownership;
 mod ownership_fence;
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_latch;
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_scope;
 #[cfg(unix)]
 mod writer_lease;
 // Dormant enrollment inventory: native identity fields, no startup wiring.
