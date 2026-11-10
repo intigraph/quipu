@@ -1,0 +1,11 @@
+Script started on 2026-11-10 02:40:04-05:00 [COMMAND="python3 docs/demos/shacl-local-poststate/demo.py" <not executed on terminal>]
+before native adapter sha256=cffa3be533f63c03f940a09140fed5dbc605b733789dcb785dcad1bb2cc254bd
+  invalid late value: batch=False, split accepted=2/7, rejected=5/7
+  valid late value: batch=True, split accepted=7/7, rejected=0/7
+  equality completion: batch=True, split accepted=7/7, rejected=0/7
+after native adapter sha256=e54d391f224bc2138d51b0f022f28ad0caaeaf355c5f34545352820cb307a712
+  invalid late value: batch=False, split accepted=0/7, rejected=7/7
+  valid late value: batch=True, split accepted=7/7, rejected=0/7
+  equality completion: batch=True, split accepted=7/7, rejected=0/7
+
+Script done on 2026-11-10 02:40:05-05:00 [COMMAND_EXIT_CODE="0"]

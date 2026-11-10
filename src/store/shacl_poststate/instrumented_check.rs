@@ -200,6 +200,8 @@ impl Store {
                     let focus = issue.focus_node.trim_matches(['<', '>']);
                     let mine = if VALUE_SETS.contains(&component) {
                         owned.owns(component, focus, issue.path.as_deref())
+                    } else if plan.admits_local(component, issue.source_shape.as_deref()) {
+                        complete_values && owned.owns(component, focus, issue.path.as_deref())
                     } else {
                         complete_values
                             && COMPONENTS.contains(&component)

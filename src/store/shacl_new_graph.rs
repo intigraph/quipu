@@ -110,9 +110,8 @@ impl Store {
             .iter()
             .map(|entity| self.resolve(*entity))
             .collect::<Result<_>>()?;
-        let object_targets = crate::shacl::cached_validator(shapes)?
-            .cardinality_plan()?
-            .object_target_predicates;
+        let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
+        let object_targets = &plan.object_target_predicates;
         for fact in &facts {
             if object_targets.contains(&self.resolve(fact.attribute)?) {
                 match fact.value {
@@ -225,7 +224,11 @@ impl Store {
                     .component
                     .trim_matches(['<', '>'])
                     .strip_prefix("http://www.w3.org/ns/shacl#")
-                    .is_some_and(|c| VALUE_SETS.contains(&c) || COMPONENTS.contains(&c))
+                    .is_some_and(|c| {
+                        VALUE_SETS.contains(&c)
+                            || COMPONENTS.contains(&c)
+                            || plan.admits_local(c, issue.source_shape.as_deref())
+                    })
                     && issue.severity.eq_ignore_ascii_case("violation")
             })
             .collect();

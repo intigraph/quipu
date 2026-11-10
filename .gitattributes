@@ -44,3 +44,6 @@ docs/demos/readonly-export/output.log whitespace=blank-at-eol,blank-at-eof,space
 docs/demos/knot-completion/output.log -text whitespace=cr-at-eol
 docs/demos/asof-rdf/output.log -text whitespace=cr-at-eol
 docs/demos/client-resolver-observation/output.log -text whitespace=cr-at-eol
+# Preserve the paired native SHACL terminal recording.
+docs/demos/shacl-local-poststate/output.log -text whitespace=cr-at-eol
+docs/demos/shacl-local-poststate/timing.log -text whitespace=cr-at-eol

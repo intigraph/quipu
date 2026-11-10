@@ -14,6 +14,7 @@ pub(crate) struct CardinalityPlan {
     pub(crate) has_value_set_constraint: bool,
     pub(crate) has_value_constraint: bool,
     pub(crate) has_class_constraint: bool,
+    pub(crate) local_components: BTreeSet<(String, String)>,
     pub(crate) incoming_predicates: BTreeSet<String>,
     pub(crate) object_target_predicates: BTreeSet<String>,
     pub(crate) subject_target_predicates: BTreeSet<String>,
@@ -35,6 +36,7 @@ impl Validator {
             has_value_set_constraint: false,
             has_value_constraint: false,
             has_class_constraint: false,
+            local_components: BTreeSet::new(),
             incoming_predicates: BTreeSet::new(),
             object_target_predicates: BTreeSet::new(),
             subject_target_predicates: BTreeSet::new(),
@@ -66,6 +68,18 @@ impl Validator {
                 }
             }
             pending.extend(shape.property_shapes().iter().copied());
+            let local = super::write_local::components(&schema, shape);
+            if !local.is_empty() {
+                plan.has_value_constraint = true;
+                if let Some(path) = shape.path() {
+                    plan_value_set_path(path, &mut plan.incoming_predicates)?;
+                }
+                plan.local_components.extend(
+                    local
+                        .into_iter()
+                        .map(|component| (super::report_term(shape.id()), component.to_owned())),
+                );
+            }
             for component in shape.components() {
                 if matches!(
                     component,
@@ -123,6 +137,17 @@ impl Validator {
             }
         }
         Ok(plan)
+    }
+}
+
+impl CardinalityPlan {
+    /// Match the compiled source as well as its component: an unrelated
+    /// absence-sensitive logical shape must retain its existing policy.
+    pub(crate) fn admits_local(&self, component: &str, source: Option<&str>) -> bool {
+        source.is_some_and(|source| {
+            self.local_components
+                .contains(&(source.to_owned(), component.to_owned()))
+        })
     }
 }
 

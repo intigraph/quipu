@@ -20,6 +20,8 @@ use shacl_engine::validator::store::ShaclDataManager;
 #[path = "shacl_targets.rs"]
 mod targets;
 
+#[path = "shacl_write_local.rs"]
+mod write_local;
 #[path = "shacl_write_paths.rs"]
 pub(crate) mod write_paths;
 pub use write_paths::refuse_unverifiable_write_paths;
