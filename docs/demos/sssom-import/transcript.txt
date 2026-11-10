@@ -1,0 +1,22 @@
+BASE (installed binary; exact source revision):
+quipu 0.17.0
+git_sha: ce86ba4cc1b5bf0bcf98a67c2de8a6e1f075946b
+git_dirty: false
+$ qp align import external.tsv --out proposals.json --db untouched.db
+unknown option for align: --out
+Use qp --help for usage.
+
+CANDIDATE (source fixture; not a deployed service):
+quipu 0.17.0
+git_sha: 5ee36a194574c9e439f16498228d01179c9a69b9
+git_dirty: false
+$ qp align import external.tsv --out proposals.json --db untouched.db
+wrote 1 pending mapping proposal(s) to proposals.json; no facts or local decisions written
+local_acceptance: pending
+source accepted field: true
+external justification: https://example.org/ExternalMatcher
+original input preserved; database absent
+
+$ qp align import external.tsv --out external.tsv
+align import: output must not replace the original mapping source
+source replacement refused; original bytes preserved
