@@ -1327,3 +1327,99 @@ fn composed_cut_admission_refuses_zero_underfunding_and_foreign_catalog() {
         "foreign-catalog refusal leaked reservation"
     );
 }
+
+#[test]
+fn composed_cut_sees_post_open_terms_without_cross_file_numeric_aliases() {
+    use crate::read_authorization::{ComposedReadAdmission, ReadOperation};
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    // Both owners and their read connections already exist. Equal numeric IDs
+    // in distinct dictionaries must never create a cross-file RDF join.
+    let left_id = a.writer.lock().intern("urn:collision:left").unwrap();
+    let right_id = b.writer.lock().intern("urn:collision:right").unwrap();
+    assert_eq!(
+        left_id, right_id,
+        "fixture must contain an actual numeric collision"
+    );
+    for i in 0..17 {
+        b.writer
+            .lock()
+            .intern(&format!("urn:late-padding:{i}"))
+            .unwrap();
+    }
+    let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
+    let policy = policy.snapshot().unwrap();
+    let admission = ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1).unwrap();
+    let joined = format!(
+        "SELECT ?value WHERE {{ GRAPH <{}> {{ <urn:start> <urn:step>+ ?x }} GRAPH <{}> {{ ?x <urn:value> ?value }} }} ORDER BY ?value",
+        a.route.graph, b.route.graph
+    );
+    // Establish and release a pre-write snapshot on the actual read pool.
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        let view = policy
+            .authorize(&identity, ReadOperation::Query, None, 2)?
+            .open_composed_cut(reads, admission.try_reserve()?, 2, strict_deadline())?;
+        let result: serde_json::Value =
+            serde_json::from_slice(&view.query(&joined, false, 2)?).unwrap();
+        assert_eq!(result["results"]["bindings"].as_array().unwrap().len(), 0);
+        Ok(())
+    })
+    .unwrap();
+    let a_text = "<urn:start> <urn:step> <urn:middle> . <urn:middle> <urn:step> <urn:fresh-shared> . <urn:false-start> <urn:step> <urn:collision:left> .";
+    let b_text = "<urn:fresh-shared> <urn:value> \"fresh-answer\" . <urn:collision:right> <urn:value> \"false-answer\" .";
+    let mut baseline = Store::open_in_memory().unwrap();
+    for (owner, text) in [(&a, a_text), (&b, b_text)] {
+        owner
+            .knot(
+                &request(owner),
+                &json!({"graph":owner.route.graph,"turtle":text}),
+            )
+            .unwrap();
+        let graph = baseline.graph_create(&owner.route.graph).unwrap();
+        crate::rdf::ingest_assigned_rdf(
+            &mut baseline,
+            text.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "1970-01-01T00:00:00Z",
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+    }
+    assert_ne!(
+        a.writer.lock().lookup("urn:fresh-shared").unwrap(),
+        b.writer.lock().lookup("urn:fresh-shared").unwrap()
+    );
+    let collision = format!(
+        "ASK {{ GRAPH <{}> {{ <urn:false-start> <urn:step> ?x }} GRAPH <{}> {{ ?x <urn:value> ?v }} }}",
+        a.route.graph, b.route.graph
+    );
+    Owner::read_strict(&[&b, &a], strict_deadline(), |reads| {
+        let view = policy
+            .authorize(&identity, ReadOperation::Query, None, 2)?
+            .open_composed_cut(reads, admission.try_reserve()?, 2, strict_deadline())?;
+        let reference = policy
+            .authorize(&identity, ReadOperation::Query, None, 2)?
+            .open(&baseline, 2)?;
+        for resident in [false, true] {
+            let bytes = view.query(&joined, resident, 2)?;
+            assert_eq!(bytes, reference.query(&joined, resident, 2)?);
+            let result: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(result["results"]["bindings"].as_array().unwrap().len(), 1);
+            assert_eq!(
+                result["results"]["bindings"][0]["value"]["value"],
+                "fresh-answer"
+            );
+            let bytes = view.query(&collision, resident, 2)?;
+            assert_eq!(bytes, reference.query(&collision, resident, 2)?);
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()["boolean"],
+                false
+            );
+        }
+        view.recheck(&policy, &identity, reads, 2)
+    })
+    .unwrap();
+}
