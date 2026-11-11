@@ -1,0 +1,9 @@
+Script started on 2026-11-09 03:30:51-05:00 [COMMAND="python3 run.py" <not executed on terminal>]
+Input: a type and its required name, split into two chunks.
+BEFORE independent per-triple write verdict: False
+AFTER independent per-triple verdict (strict gate retained): False
+AFTER stage both chunks, then commit once: {'accepted': True, 'count': 2}
+CONTROL completed document with two names accepted: False
+PASS: stage together-only data; invalid atomic documents still refuse.
+
+Script done on 2026-11-09 03:30:52-05:00 [COMMAND_EXIT_CODE="0"]
