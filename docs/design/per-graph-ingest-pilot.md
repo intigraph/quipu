@@ -61,6 +61,36 @@ attachment and worker budgets. An unavailable owner returns an explicit error;
 it cannot fall back to a writable legacy handle or borrow another owner's entire
 resource reservation. The graph catalog is not written on ordinary commits.
 
+### Legacy bypass fence
+
+`Store::fence_routed_graph` makes the legacy file itself refuse every write
+that would change a routed graph, whichever path or process issues it. It adds
+a `routed_graph_fence` row and BEFORE triggers on each graph-bearing column.
+The columns are discovered from the live schema; each needs a reviewed class:
+
+| Class | Tables | Fenced operations |
+|---|---|---|
+| Authoritative | `facts`, `graphs`, `forks`, `writer_graph_instances`, `frozen_packs`, `pendant_repo_graphs` | insert, update, delete |
+| Log, staging or cursor | `graph_events`, `graph_consumers`, `snapshot_uploads`, `denial_quarantine` | insert, update (retention may delete) |
+| Reference | `dataset_members` | none: consumer dataset configuration must name routed graphs |
+| Derived | `substring_facts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
+
+An unclassified graph-bearing column refuses installation and
+`verify_routed_fence`; so does a missing trigger. Term-id columns resolve the
+graph IRI at write time, so a graph interned after fencing is still covered.
+The retained legacy copy stays readable and cannot be deleted through the
+fence, which keeps it available for reverse reconciliation.
+
+Consequences to plan for, not hidden: legacy compaction or retention that
+deletes authoritative rows of a fenced graph aborts; a denial-quarantine row
+for a fenced graph aborts, so the router must refuse such requests before the
+legacy gate; installed triggers add a per-row predicate on legacy writes whose
+cost has not been measured yet. Tables created later, including on-demand
+derivations, are covered only after `verify_routed_fence` passes or the fence
+is re-installed. The fence is never installed in an owner file. Removing a
+fence row after the owner accepted writes still needs fenced reverse
+reconciliation.
+
 ## Composed reads are part of the first slice
 
 Ingest previously visible in ROOT must remain visible to its existing consumers

@@ -24,8 +24,11 @@ mod ownership_fence;
 mod ownership_latch;
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_scope;
+/// Legacy-file fence for graphs routed to their own owner (per-graph pilot).
+mod routed_fence;
 #[cfg(unix)]
 mod writer_lease;
+pub use routed_fence::{FenceClass, FencedColumn};
 // Dormant enrollment inventory: native identity fields, no startup wiring.
 mod ownership_admission;
 #[cfg(not(target_arch = "wasm32"))]
