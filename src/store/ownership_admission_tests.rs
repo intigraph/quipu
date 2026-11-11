@@ -83,9 +83,14 @@ fn mode(path: &Path, mode: u32) {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_setup(|db| drop(Store::open(db).unwrap()))
+    }
+
+    /// `setup` prepares the ordinary database before enrollment (D4 order).
+    fn with_setup(setup: impl FnOnce(&str)) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("store.db");
-        drop(Store::open(db.to_str().unwrap()).unwrap());
+        setup(db.to_str().unwrap());
         let protected = dir.path().join("protected");
         fs::create_dir(&protected).unwrap();
         mode(&protected, 0o700);
@@ -554,3 +559,6 @@ fn enrolled_handle_takes_the_native_writer_lease() {
     flock(&probe, FlockOperation::NonBlockingLockExclusive)
         .expect("exclusive admission after the enrolled handle drops");
 }
+
+#[path = "ownership_admission_owner_tests.rs"]
+mod graph_owner_startup;

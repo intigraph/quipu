@@ -8,9 +8,11 @@
 //! This primitive does NOT publish a server route. Its advisory file lease
 //! excludes cooperating writable Store handles, not arbitrary SQLite clients.
 //! Facts and deferred-embedding writes reuse Store's ownership operation seam;
-//! inference runs outside that lineage latch. This adapter cannot pin a writer
-//! or admit enrolled startup. Durable bypass fencing, aggregate memory allocation
-//! and composed-read parity remain mandatory before a server advertises a route.
+//! inference runs outside that lineage latch. An enrolled owner file opens only
+//! through S1 admission (`Owner::open_enrolled`), which installs the generation
+//! pin; this adapter sets no pin of its own. Durable bypass fencing, aggregate
+//! memory allocation and composed-read parity remain mandatory before a server
+//! advertises a route.
 
 use std::{
     os::unix::fs::MetadataExt,
@@ -145,6 +147,48 @@ impl Owner {
         )
     }
 
+    /// Open an enrolled owner file through S1 (`Store::open_enrolled`), then
+    /// prepare it exactly as [`Owner::prepare_with_memory`] does.
+    ///
+    /// The route and its canonical placement are checked BEFORE admission, so
+    /// a catalog that does not name this file never writes a startup receipt.
+    /// `configure` installs the same served writer configuration the trusted
+    /// initializer applies to any writer. It runs on the admitted handle before
+    /// readers adopt that configuration. An admission or configuration error
+    /// returns no owner, and dropping the handle releases its lease.
+    #[cfg(not(target_arch = "wasm32"))]
+    // Dormant like `Store::open_enrolled`: no production caller until the
+    // router integration and a witness-profile resolver exist.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn open_enrolled(
+        catalog: Arc<Catalog>,
+        root: &Path,
+        graph: &str,
+        startup: &super::ownership_admission::EnrolledStartup<'_>,
+        installed_policy: &str,
+        configure: impl FnOnce(&mut Store) -> Result<()>,
+        allocation: Option<crate::memory_budget::MemoryAllocation>,
+    ) -> Result<Self> {
+        let route = catalog
+            .routes()
+            .chain(catalog.legacy_participant())
+            .find(|route| route.graph == graph)
+            .ok_or_else(|| refused("unregistered graph owner"))?;
+        if installed_policy != route.policy {
+            return Err(refused("installed policy differs from catalog"));
+        }
+        if !root.is_absolute() || root.canonicalize().map_err(refused)? != root {
+            return Err(refused("owner file does not match catalog placement"));
+        }
+        let path = root.join(format!("{}.db", route.file_id));
+        let path = path
+            .to_str()
+            .ok_or_else(|| refused("native store path must be UTF-8"))?;
+        let mut store = Store::open_enrolled(path, startup)?;
+        configure(&mut store)?;
+        Self::prepare_inner(catalog, root, graph, store, installed_policy, allocation)
+    }
+
     fn prepare_inner(
         catalog: Arc<Catalog>,
         root: &Path,
@@ -201,6 +245,9 @@ impl Owner {
         let mut readers = Vec::with_capacity(budget.readers_per_owner);
         for _ in 0..budget.readers_per_owner {
             let mut reader = Store::open_read_only(path)?;
+            // An S1-admitted writer's readers share its admission; ordinary
+            // owners are unchanged.
+            store.share_admission_with(&mut reader)?;
             reader.adopt_read_config_from(&store);
             if let Some(allocation) = allocation {
                 reader.apply_memory_allocation(allocation)?;
