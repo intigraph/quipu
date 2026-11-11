@@ -474,6 +474,7 @@ async fn main() {
 
     let app = process_pool::protect_worker(app);
 
+    let digest_store = (!read_only && !is_relay).then(|| push_store_outer.clone());
     if let Some(replica) = config.server.replica {
         replica::start_metadata_reader(push_store_outer, replica);
     } else if let Some(relay) = relay {
@@ -489,10 +490,19 @@ async fn main() {
     // Everything committed before this line is STARTUP in quipu_write_facts_total
     // (aegis-gwkd76): the work every restart repeats.
     quipu::write_kind::set_serving();
+    let ready = move || background::start_registry_digests(digest_store);
     if scoped_enabled {
-        scoped_reads::serve_http(app, &bind_addr).await;
+        scoped_reads::serve_http(app, &bind_addr, ready).await;
     } else {
-        quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
+        quipu::mcp_transport::serve_with_ready(
+            app,
+            &args,
+            cors_origins,
+            &bind_addr,
+            &db_path,
+            ready,
+        )
+        .await;
     }
     drop(workers);
 }

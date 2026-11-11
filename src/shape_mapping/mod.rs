@@ -24,40 +24,12 @@ pub fn canonical_shape_digest(turtle: &str) -> Result<String> {
     )?))
 }
 
-/// Add content identity without rewriting old text, timestamps or transaction IDs.
-/// Legacy unparsable rows remain unpinnable (NULL), never a fabricated digest.
+mod backfill;
+pub use backfill::{RegistryDigestBackfillStatus, RegistryDigestResult, RegistryDigestWork};
+
+/// Schema-only startup: canonicalization resumes separately after readiness.
 pub(crate) fn migrate_registry_digests(conn: &rusqlite::Connection) -> Result<()> {
-    for table in ["shapes", "ontologies"] {
-        let present = conn
-            .prepare(&format!(
-                "SELECT 1 FROM pragma_table_info('{table}') WHERE name='digest'"
-            ))?
-            .exists([])?;
-        if !present {
-            conn.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN digest TEXT"))?;
-        }
-        let rows = conn
-            .prepare(&format!(
-                "SELECT name,valid_from,turtle FROM {table} WHERE digest IS NULL"
-            ))?
-            .query_map([], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                ))
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        for (name, at, turtle) in rows {
-            if let Ok(digest) = canonical_shape_digest(&turtle) {
-                conn.execute(
-                    &format!("UPDATE {table} SET digest=?3 WHERE name=?1 AND valid_from=?2 AND digest IS NULL"),
-                    rusqlite::params![name, at, digest],
-                )?;
-            }
-        }
-    }
-    Ok(())
+    backfill::migrate(conn)
 }
 
 /// Registry namespace is part of a pin: identical names in two registries differ.
@@ -275,3 +247,6 @@ impl ShapeMapping {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod backfill_tests;
