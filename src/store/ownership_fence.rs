@@ -38,6 +38,10 @@ pub(super) struct CommitFence {
     reader: Mutex<Option<Connection>>,
     revoked: AtomicBool,
     journal: OnceLock<(PathBuf, Authority)>,
+    // S1: the enrollment binding this handle was admitted under. Set only by
+    // `pin_admitted`, after the generation pin, so a check in between refuses.
+    #[cfg(not(target_arch = "wasm32"))]
+    admitted: OnceLock<super::ownership_inventory::Binding>,
     // The first journal refusal, kept because a refused COMMIT surfaces only
     // as SQLite's generic constraint error.
     reason: OnceLock<String>,
@@ -77,6 +81,8 @@ impl CommitFence {
             reader: Mutex::new(reader),
             revoked: AtomicBool::new(false),
             journal: OnceLock::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            admitted: OnceLock::new(),
             reason: OnceLock::new(),
             #[cfg(not(target_arch = "wasm32"))]
             commit_scope: AtomicU8::new(0),
@@ -123,6 +129,38 @@ impl CommitFence {
     #[cfg(target_arch = "wasm32")]
     pub(super) fn check_journal(&self) -> Result<()> {
         Ok(())
+    }
+
+    /// S1 installation, reachable only through `Admission::install`. The
+    /// generation pin is set first; the admitted binding last.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn pin_admitted(
+        &self,
+        path: PathBuf,
+        authority: Authority,
+        binding: super::ownership_inventory::Binding,
+    ) -> Result<()> {
+        let denied = |why: &str| {
+            crate::error::Error::PolicyDenied(format!(
+                "store handoff: admission install refused: {why}"
+            ))
+        };
+        if self.revoked() {
+            return Err(denied("handle already revoked"));
+        }
+        self.journal
+            .set((path, authority))
+            .map_err(|_| denied("handle already pinned"))?;
+        self.admitted
+            .set(binding)
+            .map_err(|_| denied("handle already admitted"))?;
+        Ok(())
+    }
+
+    /// The S1 binding this handle was admitted under, if any.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn admitted(&self) -> Option<&super::ownership_inventory::Binding> {
+        self.admitted.get()
     }
 
     /// Test fixtures only: there is no enrollment or admission path that
