@@ -40,7 +40,7 @@ impl Router {
     pub fn admit(catalog: Arc<Catalog>, legacy: &Store, owners: Vec<Owner>) -> Result<Self> {
         let mut by_graph = BTreeMap::new();
         for owner in owners {
-            let route = owner.route().clone();
+            let route = owner.catalog_route().clone();
             if catalog.routes().find(|r| r.graph == route.graph) != Some(&route) {
                 return Err(refused("owner route is not this catalog's route"));
             }

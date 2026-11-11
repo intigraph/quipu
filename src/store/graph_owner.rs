@@ -281,7 +281,7 @@ impl Owner {
     }
 
     /// The immutable catalog route this owner serves.
-    pub fn route(&self) -> &Route {
+    pub fn catalog_route(&self) -> &Route {
         &self.route
     }
 
