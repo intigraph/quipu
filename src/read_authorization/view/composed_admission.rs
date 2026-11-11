@@ -82,13 +82,24 @@ impl std::ops::Deref for ComposedQueryOutput {
 
 impl Shared {
     fn reserve(self: &Arc<Self>, bytes: u64) -> Result<HeapLease> {
-        self.heap_reserved
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
-                active
-                    .checked_add(bytes)
-                    .filter(|n| *n <= self.heap_capacity)
-            })
-            .map_err(|_| denied())?;
+        // A plain CAS loop: current stable deprecates `fetch_update` (renamed
+        // `try_update`), which older toolchains do not have.
+        let mut active = self.heap_reserved.load(Ordering::Acquire);
+        loop {
+            let next = active
+                .checked_add(bytes)
+                .filter(|n| *n <= self.heap_capacity)
+                .ok_or_else(denied)?;
+            match self.heap_reserved.compare_exchange_weak(
+                active,
+                next,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => break,
+                Err(current) => active = current,
+            }
+        }
         Ok(HeapLease(self.clone(), bytes))
     }
 }
@@ -152,12 +163,20 @@ impl ComposedReadAdmission {
     /// queueing on a writer or borrowing another owner's request reservation.
     pub fn try_reserve(&self) -> Result<ComposedReadPermit> {
         let view = self.0.reserve(self.0.reservation.view_bytes)?;
-        self.0
-            .active
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                (n < self.0.limit).then(|| n + 1)
-            })
-            .map_err(|_| denied())?;
+        let mut n = self.0.active.load(Ordering::Acquire);
+        loop {
+            if n >= self.0.limit {
+                return Err(denied());
+            }
+            match self
+                .0
+                .active
+                .compare_exchange_weak(n, n + 1, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => break,
+                Err(current) => n = current,
+            }
+        }
         Ok(ComposedReadPermit {
             shared: self.0.clone(),
             _view: view,

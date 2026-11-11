@@ -294,12 +294,20 @@ impl Owner {
     }
 
     fn admit(&self) -> Result<Admission<'_>> {
-        self.admitted
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                (n < self.capacity).then(|| n + 1)
-            })
-            .map_err(|_| refused("writer mailbox full; nothing queued"))?;
-        Ok(Admission(&self.admitted))
+        // A plain CAS loop: current stable deprecates `fetch_update`.
+        let mut n = self.admitted.load(Ordering::Acquire);
+        loop {
+            if n >= self.capacity {
+                return Err(refused("writer mailbox full; nothing queued"));
+            }
+            match self
+                .admitted
+                .compare_exchange_weak(n, n + 1, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => return Ok(Admission(&self.admitted)),
+                Err(current) => n = current,
+            }
+        }
     }
 
     /// Execute the ordinary guarded knot pipeline in this owner only.
