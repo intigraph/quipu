@@ -385,6 +385,13 @@ fn stats_aggregate(store: &quipu::Store) -> quipu::Result<JsonValue> {
     let (facts, entities, predicates) = store.current_triple_counts()?;
     Ok(json!({
         "facts": facts,
+        "root_live_triples": facts,
+        "counts_scope": {
+            "graph": "ROOT",
+            "population": "live_assertions",
+            "unit": "distinct_subject_predicate_term_key",
+            "facts_alias_for": "root_live_triples"
+        },
         "entities": entities,
         "predicates": predicates
     }))
@@ -436,8 +443,8 @@ pub(crate) async fn stats(
         let mut value = (*value).clone();
         value["store_id"] = json!(store_id);
         value["write_refusals"] = quipu::metrics::metrics().write_refusal_stats();
-        // The counts describe this transaction; `counts_stale` is true only when
-        // a concurrent recompute was running and an older aggregate was returned.
+        // Older aggregates can be returned during concurrent recomputation or
+        // the minimum recompute interval; their original generation survives.
         value["counts_as_of_tx"] = json!(counts_tx);
         value["counts_stale"] = json!(counts_tx != generation);
         Ok(axum::Json(value))

@@ -119,6 +119,31 @@ fn record(path: &Path) -> Result<Binding> {
 /// The ownership check on any connection to the store: the writer's own, or
 /// the separate read-only connection the commit fence uses (see
 /// `ownership_fence`), which may query while the writer holds its lock.
+/// S1: an enrolled marker is admissible only on a handle that holds a
+/// generation pin AND an admitted binding equal to the marker read on this
+/// connection now. Any absent, changed or unreadable marker is not admitted.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn admitted_marker(
+    conn: &rusqlite::Connection,
+    pin: Option<&CommitFence>,
+) -> Result<bool> {
+    let Some(binding) = pin.and_then(CommitFence::admitted) else {
+        return Ok(false);
+    };
+    if pin.and_then(CommitFence::journal_path).is_none() {
+        return Ok(false);
+    }
+    Ok(matches!(
+        super::ownership_admission::read_marker(conn)?,
+        super::ownership_admission::MarkerRead::Known(ref now) if now == binding
+    ))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn admitted_marker(_: &rusqlite::Connection, _: Option<&CommitFence>) -> Result<bool> {
+    Ok(false)
+}
+
 pub(super) fn state_on(
     conn: &rusqlite::Connection,
     pin: Option<&CommitFence>,
@@ -129,7 +154,7 @@ pub(super) fn state_on(
     if let Some(pin) = pin {
         pin.check_journal()?;
     }
-    if super::ownership_startup::enrolled(conn)? {
+    if super::ownership_startup::enrolled(conn)? && !admitted_marker(conn, pin)? {
         if let Some(pin) = pin {
             pin.revoke();
         }

@@ -27,6 +27,7 @@ mod ownership_scope;
 #[cfg(unix)]
 mod writer_lease;
 // Dormant enrollment inventory: native identity fields, no startup wiring.
+mod ownership_admission;
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_inventory;
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.

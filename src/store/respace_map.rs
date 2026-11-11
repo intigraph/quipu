@@ -249,10 +249,12 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("shapes", "valid_to", TermIdKind::None),
     ("shapes", "tx", TermIdKind::None),
     ("shapes", "digest", TermIdKind::None),
+    ("shapes", "digest_backfill_error", TermIdKind::None),
     ("ontologies", "valid_from", TermIdKind::None),
     ("ontologies", "valid_to", TermIdKind::None),
     ("ontologies", "tx", TermIdKind::None),
     ("ontologies", "digest", TermIdKind::None),
+    ("ontologies", "digest_backfill_error", TermIdKind::None),
     // -- Store::migrate_query_registry (quipu #79) --
     ("queries", "name", TermIdKind::None),
     ("queries", "description", TermIdKind::None),

@@ -4,11 +4,14 @@
 The synthetic arm can measure what the alternatives cost. It cannot be evidence
 that our operator is correct, because its oracle and its operator share a
 definition. This arm removes one half of that circularity and not the other. The
-corpus is \emph{recorded} production divergence rather than generated, and the
-operator under test is the shipped \texttt{share\_merge} driven through real
-bundles, so no harness could have manufactured the divergence, and a
-disagreement between operator and expectation is a finding rather than a harness
-bug. The judgement, however, is still derived from the shapes. A
+incidents are \emph{recorded} production divergence rather than generated: which
+names were later declared one entity, and which subjects carried doubled values
+and how many. The operator under test is the shipped \texttt{share\_merge} driven
+through real bundles, so a disagreement between operator and expectation is a
+finding rather than a harness bug. The triples that carry each incident into a
+merge are constructed by the replay harness from those identities and
+multiplicities, with placeholder values; this arm replays recorded incidents, not
+recorded edit histories. The judgement, however, is still derived from the shapes. A
 \texttt{comment-double} decision counts as correct only because the description
 predicate carries \texttt{sh:maxCount 1}, and \emph{SHACL violations} is scored
 against the same shapes in every arm. The one result in this arm that does not
@@ -55,14 +58,16 @@ scenario & decisions & historical & outcome \\
 \end{tabular}
 \caption{Recorded divergence replayed against the shipped operator. $12$ pairs
 ($6$ id-form, $6$ semantic) were excluded as \emph{chained} --- sharing an
-endpoint with another pair --- because including them measures an incidental
+endpoint with a pair already kept --- because including them measures an incidental
 collision on the shared endpoint rather than alias detection.}
 \label{tab:armB}
 \end{table}
 
 \paragraph{The operator is blind to the entire alias class: $0$ of $93$.} This
-reproduces the synthetic arm's $0$ of $21$ on data nobody generated for the
-purpose, and it is the honest false-negative column. Two names for one entity is
+reproduces the synthetic arm's $0$ of $21$ on alias pairs a person actually
+repaired, and it is the honest false-negative column. The zero follows from the
+structure of the case, since two different names share no slot, so it
+demonstrates a limit rather than measures a rate. Two names for one entity is
 invisible to \emph{any} triple-level operator, shape-aware included; no schema
 fixes it, because it is a limit of the medium the operator works in.
 
