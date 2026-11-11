@@ -83,6 +83,7 @@ pub(crate) fn share_from_parts(
 ) -> Result<LoadedShare> {
     crate::share_fluent::validate(&manifest.fluent_proofs)?;
     crate::fluent::pending_config::storage::validate_requests(&manifest.observable_configs)?;
+    crate::competency::carriage::refuse_unsupported(&manifest, "share merge")?;
     let expected_share_id = sha256(&manifest_bytes(&manifest, false)?);
     if manifest.schema != "https://github.com/scbrown/quipu/share-manifest/v1"
         || manifest.files.graph != "export.nt"

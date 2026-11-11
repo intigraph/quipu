@@ -765,6 +765,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--construct=[SPARQL CONSTRUCT query selecting the share]:VALUE:_default' \
 '*--shapes=[Shapes used for validation or packaging]:VALUE:_default' \
 '*--queries=[Stored queries to include]:VALUE:_default' \
+'*--competency=[Verbatim competency.toml to compile and seal with the share]:VALUE:_default' \
 '*--alignments=[Reviewed SSSOM/RDF alignment file to carry]:VALUE:_default' \
 '*--parent-share=[Parent share for a delta export]:VALUE:_default' \
 '*--since=[Starting share or transaction for incremental output]:VALUE:_default' \

@@ -20,7 +20,9 @@
 //! Durability, not rollback protection: a whole-host rollback that restores
 //! this file too cannot be seen from its bytes; the startup witness covers that
 //! and is a later slice. There is deliberately no public enrollment path. The
-//! commit fence's generation pin calls `admits`; nothing in production sets
+//! Commit scopes hold the sibling latch shared through physical SQL completion;
+//! transitions require its exclusive token through rename and directory fsync.
+//! The commit fence's generation pin calls `admits`; nothing in production sets
 //! a pin yet, and the startup adapter is a later slice.
 #![cfg_attr(not(test), allow(dead_code))]
 
@@ -58,8 +60,11 @@ pub(super) fn read(path: &Path) -> JournalState {
     let mut bytes = Vec::new();
     // Body, trailer marker, 64 hex digits and the final newline `encode` writes.
     let limit = (MAX_RECORD_BYTES + TRAILER.len() + 64 + 1) as u64;
-    match File::open(path) {
+    match super::ownership_latch::no_follow(OpenOptions::new().read(true)).open(path) {
         Ok(file) => {
+            if let Err(e) = super::ownership_latch::regular(&file) {
+                return unknown(e.to_string());
+            }
             if let Err(e) = file.take(limit + 1).read_to_end(&mut bytes) {
                 return unknown(format!("unreadable: {e}"));
             }
@@ -140,16 +145,21 @@ fn directory(path: &Path) -> &Path {
 fn stage(path: &Path, journal: &Journal) -> Result<PathBuf> {
     let bytes = encode(journal)?;
     let staged = sibling(path, ".staged")?;
-    let mut file = owner_only(OpenOptions::new().write(true).create(true).truncate(true))
-        .open(&staged)
-        .map_err(|e| io(&e))?;
+    let mut file = super::ownership_latch::no_follow(owner_only(
+        OpenOptions::new().write(true).create(true).truncate(false),
+    ))
+    .open(&staged)
+    .map_err(|e| io(&e))?;
+    super::ownership_latch::regular(&file)?;
+    file.set_len(0).map_err(|e| io(&e))?;
     file.write_all(&bytes).map_err(|e| io(&e))?;
     file.sync_all().map_err(|e| io(&e))?;
     Ok(staged)
 }
 
-/// Atomically replace the journal with `journal`.
-pub(super) fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
+/// Replace only the exact path covered by the exclusive transition token.
+fn replace(token: &super::ownership_latch::Transition, journal: &Journal) -> Result<()> {
+    let path = token.path();
     let staged = stage(path, journal)?;
     std::fs::rename(&staged, path).map_err(|e| io(&e))?;
     File::open(directory(path))
@@ -157,14 +167,10 @@ pub(super) fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
         .map_err(|e| io(&e))
 }
 
-/// The sibling lock that serializes every journal change on this host.
-fn lock(path: &Path) -> Result<File> {
-    let lock = owner_only(OpenOptions::new().write(true).create(true).truncate(false))
-        .open(sibling(path, ".lock")?)
-        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
-    lock.lock()
-        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
-    Ok(lock)
+/// Fixture corruption/initial-state helper, never a production transition API.
+#[cfg(test)]
+pub(super) fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
+    replace(&super::ownership_latch::exclusive(path)?, journal)
 }
 
 /// Whether `next` may follow `current` in this owner's local journal.
@@ -200,15 +206,15 @@ fn legal(current: &Journal, next: &Journal) -> std::result::Result<(), &'static 
 /// Advance the journal from `expected` to `next` under an exclusive lock,
 /// refusing if the stored role is anything other than `expected`.
 pub(super) fn advance(path: &Path, expected: &Journal, next: &Journal) -> Result<()> {
-    let lock = lock(path)?;
+    let token = super::ownership_latch::exclusive(path)?;
     let result = match read(path) {
         JournalState::Known(current) if *current == *expected => legal(&current, next)
             .map_err(refused)
-            .and_then(|()| write_atomic(path, next)),
+            .and_then(|()| replace(&token, next)),
         JournalState::Known(_) => Err(refused("stored role is not the expected one")),
         JournalState::Unknown(why) => Err(refused(format!("current role is UNKNOWN: {why}"))),
     };
-    drop(lock);
+    drop(token);
     result
 }
 
@@ -243,7 +249,7 @@ pub(super) fn create(path: &Path, initial: &Journal) -> Result<()> {
     if !matches!(initial, Journal::Active { .. }) {
         return Err(refused("a new journal starts Active"));
     }
-    let lock = lock(path)?;
+    let token = super::ownership_latch::exclusive(path)?;
     match std::fs::symlink_metadata(path) {
         Ok(_) => return Err(refused("a journal already exists")),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -262,7 +268,7 @@ pub(super) fn create(path: &Path, initial: &Journal) -> Result<()> {
     let synced = File::open(directory(path))
         .and_then(|d| d.sync_all())
         .map_err(|e| io(&e));
-    drop(lock);
+    drop(token);
     synced
 }
 

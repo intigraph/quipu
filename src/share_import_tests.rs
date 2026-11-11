@@ -21,6 +21,8 @@ mod tests {
             manifest: serde_json::from_str(&read("manifest.json")).unwrap(),
             export_ntriples: read("export.nt"),
             shapes_turtle: read("shapes.ttl"),
+            competency_toml: None,
+            commands_turtle: None,
             alignments_turtle: None,
             queries_turtle: None,
             query_namespace: None,

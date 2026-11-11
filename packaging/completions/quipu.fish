@@ -401,6 +401,7 @@ complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_s
 complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_subcommand_from diff" -l construct -d 'SPARQL CONSTRUCT query selecting the share' -r
 complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_subcommand_from diff" -l shapes -d 'Shapes used for validation or packaging' -r
 complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_subcommand_from diff" -l queries -d 'Stored queries to include' -r
+complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_subcommand_from diff" -l competency -d 'Verbatim competency.toml to compile and seal with the share' -r
 complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_subcommand_from diff" -l alignments -d 'Reviewed SSSOM/RDF alignment file to carry' -r
 complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_subcommand_from diff" -l parent-share -d 'Parent share for a delta export' -r
 complete -c quipu -n "__fish_quipu_using_subcommand share; and not __fish_seen_subcommand_from diff" -l since -d 'Starting share or transaction for incremental output' -r

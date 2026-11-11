@@ -93,6 +93,8 @@ pub struct ShareOptions {
     pub fluent_proofs: Vec<String>,
     /// Explicit pending observable requests; no approval or registration travels.
     pub observable_configs: Vec<String>,
+    /// Verbatim offline competency contract, compiled and sealed with the share.
+    pub competency_toml: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
@@ -133,6 +135,7 @@ impl Default for ShareOptions {
             alignments_turtle: None,
             fluent_proofs: Vec::new(),
             observable_configs: Vec::new(),
+            competency_toml: None,
             parent_share: None,
             turtle_view: false,
             pack_dir: Some(PENDANT_PACK_DIR.into()),
@@ -165,6 +168,9 @@ pub struct SharePayloadRequest {
     /// Optional exact alignment evidence, sealed and outward-scrubbed.
     #[serde(default)]
     pub alignments_turtle: Option<String>,
+    /// Verbatim offline competency contract, compiled and sealed with the share.
+    #[serde(default)]
+    pub competency_toml: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also include a human-readable `export.ttl` derived view.
@@ -186,6 +192,7 @@ impl SharePayloadRequest {
             // No new HTTP producer/admission surface in this source-only adapter.
             fluent_proofs: Vec::new(),
             observable_configs: Vec::new(),
+            competency_toml: self.competency_toml.clone(),
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
             // Not settable over HTTP: pack_dir is a property of the producing
@@ -261,6 +268,12 @@ pub struct ShareFiles {
     /// Fixed optional ancillary member name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alignments: Option<String>,
+    /// Fixed optional competency authoring member.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub competency: Option<String>,
+    /// Fixed optional compiled command member.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<String>,
 }
 
 mod pointers;
@@ -311,6 +324,12 @@ pub struct ShareManifest {
     /// Exact ancillary bytes, included in `share_id`; absent preserves legacy identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alignments_hash: Option<String>,
+    /// Exact source bytes; absent retains legacy identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub competency_hash: Option<String>,
+    /// Compiled commands; data only, never executed on import.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands_hash: Option<String>,
     /// Export scope.
     pub scope: ShareScope,
     /// Prior share in this lineage.
@@ -515,7 +534,8 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
     )?)?;
     let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
     let queries = crate::share_queries::select(store, &opts.scope, opts.queries.as_deref())?;
-    let queries = (!queries.is_empty()).then(|| crate::share_queries::to_turtle(&queries));
+    let (competency, queries) =
+        crate::competency::carriage::compile_optional(opts.competency_toml.as_deref(), &queries)?;
     let turtle = if opts.turtle_view {
         Some(export_scope(
             store,
@@ -554,6 +574,8 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         canonicalization: Some("RDFC-1.0".into()),
         shapes_hash: sha256(&shapes),
         queries_hash: queries.as_ref().map(|q| sha256(q.as_bytes())),
+        competency_hash: competency.as_ref().map(|m| sha256(m.authoring.as_bytes())),
+        commands_hash: competency.as_ref().map(|m| sha256(m.commands.as_bytes())),
         alignments_hash: opts
             .alignments_turtle
             .as_ref()
@@ -569,6 +591,10 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             version: env!("CARGO_PKG_VERSION").into(),
         },
         files: ShareFiles {
+            competency: competency.as_ref().map(|_| crate::competency::FILE.into()),
+            commands: competency
+                .as_ref()
+                .map(|_| crate::competency::carriage::COMMANDS_FILE.into()),
             alignments: opts
                 .alignments_turtle
                 .as_ref()
@@ -620,6 +646,13 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         files.insert(
             crate::share_alignments::ALIGNMENTS_FILE.into(),
             text.clone(),
+        );
+    }
+    if let Some(members) = competency {
+        files.insert(crate::competency::FILE.into(), members.authoring);
+        files.insert(
+            crate::competency::carriage::COMMANDS_FILE.into(),
+            members.commands,
         );
     }
     if let Some(queries) = queries {

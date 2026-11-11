@@ -25,6 +25,18 @@ All notable changes to this project will be documented in this file.
 - *(export)* Stage coherent RDF chunks from retained cuts (#1068)([8d46bc1](https://github.com/scbrown/quipu/commit/8d46bc13c6850897b99229c78eb6258804fe41ed))
 - *(shapes)* Add version-pinned master mapping lifecycle (#1060)([f387c3c](https://github.com/scbrown/quipu/commit/f387c3c7766a22df8279891311c1990a2e31ecf1))
 - *(command)* Admit bounded command disk impact summaries (#1066)([017f527](https://github.com/scbrown/quipu/commit/017f5273a529992d7082f0f564609ac609d75609))
+- *(server)* Preserve heavy read cap with reader processes (#1093)([1792a7a](https://github.com/scbrown/quipu/commit/1792a7a6771583876522cff6fa0dfa0f31e7b6ce))
+- *(auth)* Enforce exact graph scope for machine HTTP writers (#1097)([adb765e](https://github.com/scbrown/quipu/commit/adb765e368ac8daee9f9332182c612c823c3c545))
+- Model a bounded in-memory ownership witness (#1105)([9144f0c](https://github.com/scbrown/quipu/commit/9144f0c6b1acb975742765ab334b5fbc51781657))
+- *(validation)* Observe actual validator execution under reserved writes (#1108)([1fb136c](https://github.com/scbrown/quipu/commit/1fb136c86e3d7ea445441d1beacbaac113335cf3))
+- *(merge)* Stage bounded default-off shadow observations (#1111)([168e0df](https://github.com/scbrown/quipu/commit/168e0df2117ed4287b240314f94fb09f2a8d3cb3))
+- *(auth)* Add narrowly scoped entity reference mint grants (#1118)([2a06990](https://github.com/scbrown/quipu/commit/2a0699048aaa2181c728d0691251ea06d871cbcb))
+- *(merge)* Add interactive pendant Git mergetool (#1115)([5a0007d](https://github.com/scbrown/quipu/commit/5a0007d12b4a6415adfd1429e807036d14dce2d7))
+- *(episode)* Preserve explicit entity and class addresses (#1114)([a955e12](https://github.com/scbrown/quipu/commit/a955e126ab4d93bb86c38817d65d6a53175aa308))
+- *(client)* Bind signed resolver evidence to actual validator observations (#1117)([69b299e](https://github.com/scbrown/quipu/commit/69b299eb9d468e57f4e18cf24734b46921db357c))
+- *(merge)* Plan risk before native automatic persistence (#1122)([70e7b23](https://github.com/scbrown/quipu/commit/70e7b2348748b5ed11c84e27535f8655de8021af))
+- *(merge)* Merge declared DataBooks on the shared Git core (#1119)([576537d](https://github.com/scbrown/quipu/commit/576537d8a887b899b77b84075d900fc12610fda1))
+- *(client)* Admit ROOT changesets under exact local grants (#1132)([effd3c4](https://github.com/scbrown/quipu/commit/effd3c419a43f988aba77ed3c37e0ad7795f7c56))
 
 
 
@@ -44,17 +56,41 @@ All notable changes to this project will be documented in this file.
 - *(server)* Expose bounded knot write completion receipts (#1050)([7a2789f](https://github.com/scbrown/quipu/commit/7a2789fac06b9dc3a1968ce7a85b900cc2c9b5e4))
 - *(search)* Return lexical results on fresh stores (#1069)([6280e2b](https://github.com/scbrown/quipu/commit/6280e2bc593b28c0bc34750d0471b05dc2272080))
 - *(sparql)* Retain active graph bindings across subqueries (#1079)([08fe4f2](https://github.com/scbrown/quipu/commit/08fe4f200b50e2cab6a256d4c8165812797524dc))
+- *(cli)* Export cold snapshots read-only (#1029)([fd00093](https://github.com/scbrown/quipu/commit/fd000930627a043be6c8669fe103a019a959efc8))
+- *(server)* Preserve admitted signed identity across reader workers (#1103)([6f0202e](https://github.com/scbrown/quipu/commit/6f0202eb57162b1db7e34161fff77155371bf682))
+- *(merge)* Unify profiled planning and pending resume across adapters (#1082)([61eba8b](https://github.com/scbrown/quipu/commit/61eba8bf8b17e2d80463ec769f4cc83346d89c91))
+- *(onnx)* Verify consumed default model buffers before initialization (#1109)([c545419](https://github.com/scbrown/quipu/commit/c545419fb77b87c699b63958cf87ec71a5802ebc))
+- *(resolution)* Require adjudication for typed strict-mode matches (#1107)([f49d388](https://github.com/scbrown/quipu/commit/f49d388851d536ec4f2688f7f100688c3c4a5eb5))
+- *(merge)* Bind pending merge guards to explicit slot scopes (#1112)([c2e3a34](https://github.com/scbrown/quipu/commit/c2e3a34979ba4d34144363e01b2350ab623231af))
+- Isolate OWL private page work and attribute writer stages (#1095)([f2aa506](https://github.com/scbrown/quipu/commit/f2aa50698952df037b945385b5d4d47d5856d068))
+- *(server)* Retain the primary when reader startup fails (#1124)([6411b3e](https://github.com/scbrown/quipu/commit/6411b3ed322edc9022791bdef2cee3ed1851a8dd))
+- Select configured namespaces for rules and development fixtures (#1129)([91f6d07](https://github.com/scbrown/quipu/commit/91f6d0775d24a350e63284ee71346636269ee496))
+- *(auth)* Harden scoped read authorization and route coverage (#1135)([d3cdf64](https://github.com/scbrown/quipu/commit/d3cdf6483ac25068d141ed69d42a04885f6401b6))
+- *(fluents)* Use the stable w3id vocabulary (#1139)([08cf330](https://github.com/scbrown/quipu/commit/08cf3305de893adbf04e553aabdce9878cd52095))
+- *(diagnostics)* Explain query and vocabulary refusals (#1138)([015e3df](https://github.com/scbrown/quipu/commit/015e3df6d6e6f8b4b4ac8408224af1e700f54544))
+- *(diagnostics)* Restore refusal guidance and rollback release coverage([7522fc0](https://github.com/scbrown/quipu/commit/7522fc0cece770ba315335e3cad6243f1883ec25))
 
 ### Miscellaneous
 
 - Add glama.json for the Glama MCP directory listing (#1081)([adfe890](https://github.com/scbrown/quipu/commit/adfe890556ae3d59c0fa5340a754513aac75df08))
 - *(conformance)* Re-derive ledgers at dcf112e0 (#1087)([297c89f](https://github.com/scbrown/quipu/commit/297c89fb98692e52e8558552317b8201e618caba))
+- *(conformance)* Re-derive ledgers at adb765e3 (#1101)([2fecc8e](https://github.com/scbrown/quipu/commit/2fecc8e05aa8a06f6b7156acdc7dedf1d3a1a826))
+- *(conformance)* Re-derive ledgers at 6f0202eb (#1104)([cd542bd](https://github.com/scbrown/quipu/commit/cd542bda00b4babb29bb4bcf9591b9ce8cf96756))
+- *(conformance)* Re-derive ledgers at 9144f0c6 (#1106)([5a466f9](https://github.com/scbrown/quipu/commit/5a466f961e8d57233e1d45a3be797a9924b176a8))
+- *(conformance)* Re-derive ledgers at 61eba8bf (#1110)([0d0761f](https://github.com/scbrown/quipu/commit/0d0761f849b284ae4417ebea29d50572602fab76))
+- *(conformance)* Re-derive ledgers at c2e3a349 (#1116)([ecf3925](https://github.com/scbrown/quipu/commit/ecf3925f06e865eddaf76d013b5d43371f238a5a))
+
+### Reverted
+
+- *(diagnostics)* Roll back query refusal guidance during an upstream build download outage (#1138)([3368582](https://github.com/scbrown/quipu/commit/33685822feacbd5f9ce012d469dcdd761dc796ec))
 
 ### Testing
 
 - *(reasoner)* Guard reactive event timestamps (#1037)([ecd16b2](https://github.com/scbrown/quipu/commit/ecd16b2899d5ac2c5731a16f444b13cd59b0a37f))
 - Make legacy search backfill fixture clock independent (#1064)([d52acf0](https://github.com/scbrown/quipu/commit/d52acf0315dd36141716674c218c3e6c08e13632))
 - Keep ontology fixture writable after base integration (#1089)([a140ffd](https://github.com/scbrown/quipu/commit/a140ffd755afdb1ef40bfc828b08f3ea2a379dd7))
+- *(census)* Reconcile receipt-backed fixture outbox (#1127)([9a29abe](https://github.com/scbrown/quipu/commit/9a29abe790d1388cce35857b8499530d3a86124b))
+- *(merge)* Qualify reserved writer admission boundary (#1131)([7d9969e](https://github.com/scbrown/quipu/commit/7d9969e2c5df3f30b31eb71a1f4fc21ee849a76f))
 
 ### Owl
 

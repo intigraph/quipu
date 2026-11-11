@@ -210,6 +210,7 @@ Ingest structured knowledge from an agent episode (nodes + edges)
 | `replace_snapshot` | boolean | no | Replace facts previously asserted by this episode. |
 | `shapes` | string | no | Optional SHACL validation shapes in Turtle. |
 | `source` | string | no | Who/what produced this episode |
+| `strict_new_entities` | boolean | no | Request-local strict new-entity validation. Requires an existing local committed named graph; grants no write authority. Same-IRI reuse and reasoned distinct_from remain supported. Probe quipu.episode-strict-new/v1 first. |
 
 ## `quipu_episodes_complete`
 
@@ -410,6 +411,8 @@ Stage a portable share with hash, vocabulary and attestation gates. Copy member 
 | `actor` | string | no |  |
 | `alignments_turtle` | string | no |  |
 | `attestation` | object | no |  |
+| `commands_turtle` | string | no |  |
+| `competency_toml` | string | no |  |
 | `export_ntriples` | string | yes |  |
 | `manifest` | object | yes |  |
 | `queries_turtle` | string | no |  |
@@ -432,7 +435,7 @@ Promote a staged share only when existing promotion gates permit it. Does not by
 
 ## `quipu_knot`
 
-Assert facts into the knowledge graph (with optional SHACL validation)
+Assert facts into the knowledge graph (with optional SHACL validation). When a loaded class vocabulary exists, unknown rdf:type IRIs refuse before writing. Inspect quipu_shapes with action=vocabulary; similar class names are not semantic equivalence. Propose and load a shape if no sanctioned type fits.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -702,7 +705,7 @@ Manage STORED named queries — competency questions a consumer ships with its d
 
 ## `quipu_query`
 
-Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx)
+Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx). Declare every prefixed name with an explicit PREFIX; namespaces are not assumed. For exploratory text discovery use quipu_search instead of unbound FILTER(CONTAINS(...)) scans. Search does not replace exact-ID, owner-plate, named-graph or absence checks.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -931,6 +934,7 @@ Produce a bounded portable share payload, including canonical manifest and membe
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `alignments_turtle` | string | no |  |
+| `competency_toml` | string | no |  |
 | `max_bytes` | integer | no |  |
 | `no_shapes` | boolean | no |  |
 | `parent_share` | string | no |  |

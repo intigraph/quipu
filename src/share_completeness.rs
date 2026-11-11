@@ -80,6 +80,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // Pending opaque proofs are content, never receiver-local authority.
     ("share_fluent_carriers", Disposition::Content),
     ("fluent_pending_configs", Disposition::Content),
+    // Verified authoring and compiled contract bytes are inert content, not
+    // receiver authorization; reconstruct them together without reinterpreting.
+    ("share_competency_members", Disposition::Content),
     ("datasets", Disposition::Content),
     ("dataset_members", Disposition::Content),
     // Pendant autoload repository state (aegis-koxp0u) travels with the datasets

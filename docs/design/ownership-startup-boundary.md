@@ -92,6 +92,8 @@ a refused COMMIT itself surfaces only as SQLite's generic constraint error.
 No production path sets a pin: there is no enrollment API, no provisioned
 journal location and no fresh external startup admission, so enrolled startup
 still refuses before any journal is consulted. The pin is exercised by test
-fixtures only. The per-lineage shared/exclusive latch spanning the outer COMMIT,
-the narrow transition token and the startup adapter remain later P1 slices. Do
-not enroll stores or claim at-most-one physical writer from this increment.
+fixtures only. The source-only [private P1 commit scope](ownership-commit-scope.md)
+adds the shared/exclusive lineage latch, path-bound transition token and
+explicit SQL completion seam; a pinned commit outside that seam refuses.
+Its private fixtures do not activate public writers or supply the startup
+adapter. Do not enroll stores or claim at-most-one physical writer from it.

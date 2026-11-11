@@ -1,0 +1,2 @@
+# Preserve the terminal recorder's byte counts, including CRLF output.
+output.log -text whitespace=cr-at-eol
