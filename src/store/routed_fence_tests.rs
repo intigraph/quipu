@@ -260,3 +260,121 @@ fn fence_identity_is_explicit() {
         vec![ROUTED.to_string()]
     );
 }
+
+fn snapshot(store: &mut Store, key: &str, triples: &str) -> Result<serde_json::Value> {
+    crate::tool_knot(
+        store,
+        &json!({
+            "turtle": triples,
+            "replace_snapshot": true,
+            "snapshot": key,
+            "source": "fence-test",
+        }),
+    )
+}
+
+fn root_values(store: &Store, subject: &str) -> i64 {
+    let out = crate::tool_query(
+        store,
+        &json!({"query": format!("SELECT ?o WHERE {{ <{subject}> <urn:fence:p> ?o }}")}),
+    )
+    .unwrap();
+    out["count"].as_i64().unwrap()
+}
+
+#[test]
+fn producer_cutover_retracts_root_copies_and_fences_the_old_root_path() {
+    let (_dir, _path, mut store) = legacy();
+    snapshot(
+        &mut store,
+        "code:repo",
+        "<urn:fence:file> <urn:fence:p> \"a\" . <urn:fence:file> <urn:fence:p> \"b\" .",
+    )
+    .unwrap();
+    snapshot(&mut store, "docs", "<urn:fence:doc> <urn:fence:p> \"d\" .").unwrap();
+    assert_eq!(root_values(&store, "urn:fence:file"), 2);
+    let rows = count(&store, "SELECT count(*) FROM facts");
+
+    store.fence_routed_graph(ROUTED, 7, 4).unwrap();
+    let retracted = store
+        .cut_over_routed_source("snapshot:code:repo", ROUTED, 7, 4, TS)
+        .unwrap();
+    assert_eq!(retracted, 2);
+    assert_eq!(
+        root_values(&store, "urn:fence:file"),
+        0,
+        "stale ROOT copies"
+    );
+    assert_eq!(
+        root_values(&store, "urn:fence:doc"),
+        1,
+        "other producer kept"
+    );
+    assert!(
+        count(&store, "SELECT count(*) FROM facts") > rows,
+        "retraction is bitemporal; history rows remain"
+    );
+
+    // The old producer, still omitting `graph`, cannot re-create ROOT copies.
+    let txs = count(&store, "SELECT count(*) FROM transactions");
+    assert_fenced(
+        snapshot(
+            &mut store,
+            "code:repo",
+            "<urn:fence:file> <urn:fence:p> \"c\" .",
+        ),
+        "old producer replace into ROOT",
+    );
+    assert_eq!(count(&store, "SELECT count(*) FROM transactions"), txs);
+    assert_eq!(root_values(&store, "urn:fence:file"), 0);
+    snapshot(&mut store, "docs", "<urn:fence:doc> <urn:fence:p> \"e\" .")
+        .expect("unmoved producer");
+
+    // Idempotent re-run; a different route for the same tag refuses.
+    assert_eq!(
+        store
+            .cut_over_routed_source("snapshot:code:repo", ROUTED, 7, 4, TS)
+            .unwrap(),
+        0
+    );
+    store.fence_routed_graph(OTHER, 7, 4).unwrap();
+    assert!(
+        store
+            .cut_over_routed_source("snapshot:code:repo", OTHER, 7, 4, TS)
+            .is_err()
+    );
+    store.verify_routed_fence().unwrap();
+    store
+        .conn
+        .execute_batch("DROP TRIGGER quipu_routed_fence_transactions_source_insert")
+        .unwrap();
+    assert!(
+        store.verify_routed_fence().is_err(),
+        "dropped source trigger"
+    );
+}
+
+#[test]
+fn producer_cutover_needs_the_graph_fence_and_a_snapshot_tag() {
+    let (_dir, _path, mut store) = legacy();
+    assert!(
+        store
+            .cut_over_routed_source("snapshot:code:repo", ROUTED, 7, 4, TS)
+            .is_err(),
+        "graph not fenced"
+    );
+    store.fence_routed_graph(ROUTED, 7, 4).unwrap();
+    for tag in ["code:repo", "snapshot:", "snapshot:  "] {
+        assert!(
+            store.cut_over_routed_source(tag, ROUTED, 7, 4, TS).is_err(),
+            "{tag:?}"
+        );
+    }
+    assert!(
+        store
+            .cut_over_routed_source("snapshot:code:repo", ROUTED, 7, 5, TS)
+            .is_err(),
+        "generation differs from the graph fence"
+    );
+    assert!(store.routed_source_fence_rows().unwrap().is_empty());
+}

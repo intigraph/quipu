@@ -56,6 +56,11 @@ const CLASSES: &[(&str, &str, FenceClass)] = &[
 const DERIVED_PREFIXES: &[(&str, &str)] = &[("qp_proj_", "g")];
 
 const FENCE_TABLE: &str = "routed_graph_fence";
+const SOURCE_FENCE_TABLE: &str = "routed_source_fence";
+const SOURCE_TRIGGERS: [&str; 2] = [
+    "quipu_routed_fence_transactions_source_insert",
+    "quipu_routed_fence_transactions_source_update",
+];
 const TRIGGER_PREFIX: &str = "quipu_routed_fence_";
 const MESSAGE: &str = "graph owner: this graph is routed to its own owner; legacy write refused";
 
@@ -140,12 +145,12 @@ impl Store {
         let mut stmt = self.conn.prepare(
             "SELECT m.name, coalesce(m.sql, ''), p.name \
              FROM main.sqlite_master m JOIN pragma_table_info(m.name) p \
-             WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND m.name <> ?1 \
+             WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND m.name NOT IN (?1, ?2) \
                AND (p.name = 'g' OR lower(p.name) LIKE '%graph%') \
              ORDER BY m.name, p.name",
         )?;
         let rows = stmt
-            .query_map([FENCE_TABLE], |r| {
+            .query_map([FENCE_TABLE, SOURCE_FENCE_TABLE], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
@@ -307,7 +312,182 @@ impl Store {
                 }
             }
         }
+        if !self.routed_source_fence_rows()?.is_empty() {
+            for name in SOURCE_TRIGGERS {
+                let present: bool = self.conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM main.sqlite_master \
+                     WHERE type = 'trigger' AND name = ?1 AND tbl_name = 'transactions')",
+                    [name],
+                    |r| r.get(0),
+                )?;
+                if !present {
+                    return Err(refused(format!(
+                        "producer source fence trigger {name} missing; re-install before routing"
+                    )));
+                }
+            }
+        }
         Ok(inventory)
+    }
+
+    /// Move one producer's ROOT facts behind the fence, atomically (cutover).
+    ///
+    /// Ingest producers write ROOT today and own their facts by the
+    /// `transactions.source` tag `snapshot:<key>`. A graph fence cannot stop
+    /// an old or misconfigured producer that keeps omitting `graph`, so the
+    /// legacy file also refuses any new transaction under a moved tag. In ONE
+    /// savepoint this retracts that tag's current ROOT facts (bitemporal: the
+    /// history stays readable) and records the tag. Otherwise ROOT consumers
+    /// would keep seeing stale copies the producer can no longer replace, or a
+    /// producer write between the two steps could re-create them.
+    ///
+    /// `graph` must already be fenced at the same revision and generation.
+    /// Re-running with identical arguments retracts nothing and succeeds.
+    /// Returns the number of retractions written.
+    pub fn cut_over_routed_source(
+        &mut self,
+        source_tag: &str,
+        graph: &str,
+        catalog_revision: u64,
+        generation: u64,
+        timestamp: &str,
+    ) -> Result<usize> {
+        if source_tag
+            .strip_prefix("snapshot:")
+            .is_none_or(|key| key.trim().is_empty())
+        {
+            return Err(refused("a producer source tag is `snapshot:<key>`"));
+        }
+        if !self.routed_graph_fence_rows()?.contains(&(
+            graph.to_string(),
+            catalog_revision,
+            generation,
+        )) {
+            return Err(refused(
+                "fence the routed graph at this revision and generation first",
+            ));
+        }
+        if let Some(row) = self
+            .routed_source_fence_rows()?
+            .into_iter()
+            .find(|row| row.0 == source_tag)
+        {
+            return if row
+                == (
+                    source_tag.to_string(),
+                    graph.to_string(),
+                    catalog_revision,
+                    generation,
+                ) {
+                Ok(0)
+            } else {
+                Err(refused(
+                    "producer source is already fenced for another route",
+                ))
+            };
+        }
+        let revision = i64::try_from(catalog_revision).map_err(refused)?;
+        let generation = i64::try_from(generation).map_err(refused)?;
+        self.ensure_ownership_writable()?;
+        self.conn.execute_batch("SAVEPOINT quipu_source_cutover")?;
+        let result =
+            self.cut_over_routed_source_inner(source_tag, graph, revision, generation, timestamp);
+        match result {
+            Ok(count) => {
+                self.conn.execute_batch("RELEASE quipu_source_cutover")?;
+                Ok(count)
+            }
+            Err(error) => {
+                crate::store::release::rollback_release(&self.conn, "quipu_source_cutover")?;
+                self.read_model.borrow_mut().clear();
+                Err(error)
+            }
+        }
+    }
+
+    fn cut_over_routed_source_inner(
+        &mut self,
+        source_tag: &str,
+        graph: &str,
+        revision: i64,
+        generation: i64,
+        timestamp: &str,
+    ) -> Result<usize> {
+        // The triggers are inert until the tag row exists, so the retraction
+        // below (written under the same tag) is still admitted.
+        self.conn.execute_batch(&format!(
+            "CREATE TABLE IF NOT EXISTS {SOURCE_FENCE_TABLE} (
+                 source           TEXT PRIMARY KEY,
+                 graph            TEXT NOT NULL,
+                 catalog_revision INTEGER NOT NULL CHECK (catalog_revision > 0),
+                 generation       INTEGER NOT NULL CHECK (generation > 0),
+                 fenced_at        TEXT NOT NULL
+             );
+             CREATE TRIGGER IF NOT EXISTS \"{insert}\" BEFORE INSERT ON transactions
+             FOR EACH ROW WHEN NEW.source IN (SELECT source FROM {SOURCE_FENCE_TABLE})
+             BEGIN SELECT RAISE(ABORT, '{MESSAGE}'); END;
+             CREATE TRIGGER IF NOT EXISTS \"{update}\" BEFORE UPDATE OF source ON transactions
+             FOR EACH ROW WHEN NEW.source IN (SELECT source FROM {SOURCE_FENCE_TABLE})
+             BEGIN SELECT RAISE(ABORT, '{MESSAGE}'); END;",
+            insert = SOURCE_TRIGGERS[0],
+            update = SOURCE_TRIGGERS[1],
+        ))?;
+        let datums = self.plan_source_retraction(source_tag, 0)?;
+        let count = datums.len();
+        if count > 0 {
+            self.transact_to_graph_scoped(
+                &datums,
+                timestamp,
+                None,
+                Some(source_tag),
+                0,
+                Some(source_tag),
+            )?;
+        }
+        self.conn.execute(
+            &format!(
+                "INSERT INTO {SOURCE_FENCE_TABLE}(source, graph, catalog_revision, generation, fenced_at) \
+                 VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ','now'))"
+            ),
+            rusqlite::params![source_tag, graph, revision, generation],
+        )?;
+        Ok(count)
+    }
+
+    /// Fenced producer source tags with their routed graph, catalog revision
+    /// and owner generation. An absent table is none.
+    pub fn routed_source_fence_rows(&self) -> Result<Vec<(String, String, u64, u64)>> {
+        let exists: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM main.sqlite_master WHERE type = 'table' AND name = ?1)",
+            [SOURCE_FENCE_TABLE],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            return Ok(Vec::new());
+        }
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT source, graph, catalog_revision, generation FROM {SOURCE_FENCE_TABLE} ORDER BY source"
+        ))?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|(source, graph, revision, generation)| {
+                Ok((
+                    source,
+                    graph,
+                    u64::try_from(revision).map_err(refused)?,
+                    u64::try_from(generation).map_err(refused)?,
+                ))
+            })
+            .collect()
     }
 
     fn fence_table_exists(&self) -> Result<bool> {

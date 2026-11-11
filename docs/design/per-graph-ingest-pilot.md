@@ -91,6 +91,22 @@ is re-installed. The fence is never installed in an owner file. Removing a
 fence row after the owner accepted writes still needs fenced reverse
 reconciliation.
 
+### Producer source cutover
+
+The observed producers write ROOT and own their facts by the transaction
+source tag `snapshot:<key>`. Moving them is therefore not only a named-graph
+fence: an old or misconfigured producer that still omits `graph` would keep
+writing ROOT copies, and existing ROOT copies would stay current for ROOT
+consumers although their producer can no longer replace them.
+`Store::cut_over_routed_source(tag, graph, revision, generation, ts)` requires
+the graph fence first. Then, in one savepoint, it retracts that tag's current
+ROOT facts (bitemporally, so history stays readable) and records the tag. A
+`transactions.source` trigger then refuses any new transaction under it. No
+producer write can land between the retraction and the fence. Identical
+re-runs retract nothing; another route for the same tag refuses.
+`verify_routed_fence` also proves the source triggers exist. Which tags move
+comes from the executing-producer inventory, never an IRI prefix.
+
 ### Write router
 
 `graph_router::Router::admit` takes the catalog, the legacy writer's store and
