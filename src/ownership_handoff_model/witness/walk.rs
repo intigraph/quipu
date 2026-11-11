@@ -4,6 +4,8 @@ use std::collections::{BTreeSet, HashSet};
 pub(super) struct Walk {
     pub(super) head: WitnessHead,
     pub(super) next_attempt: u64,
+    /// (canonical key, backend version) for every present record read.
+    pub(super) versions: Vec<(String, String)>,
 }
 
 impl<B: Objects> ObjectWitness<B> {
@@ -12,6 +14,7 @@ impl<B: Objects> ObjectWitness<B> {
         key: Key,
         seen: &mut BTreeSet<Key>,
         reads: &mut usize,
+        versions: &mut Vec<(String, String)>,
     ) -> Result<Option<Entry>, ()> {
         *reads += 1;
         if *reads > self.backend.read_budget() || *reads > MAX_READS {
@@ -19,7 +22,12 @@ impl<B: Objects> ObjectWitness<B> {
         }
         seen.insert(key);
         match self.backend.get(&objects::name(key)) {
-            Reply::Ok(found) => found.map(|o| Entry::decode(&o.bytes)).transpose(),
+            Reply::Ok(Some(o)) => {
+                let entry = Entry::decode(&o.bytes)?;
+                versions.push((objects::name(key), o.version));
+                Ok(Some(entry))
+            }
+            Reply::Ok(None) => Ok(None),
             _ => Err(()),
         }
     }
@@ -32,10 +40,15 @@ impl<B: Objects> ObjectWitness<B> {
         }
         let mut seen = BTreeSet::new();
         let mut reads = 0;
+        let mut versions = Vec::new();
         let mut operations = HashSet::new();
         let mut generation = anchor;
-        let Some(Entry::Active(mut authority)) =
-            self.read(Key::Active(generation), &mut seen, &mut reads)?
+        let Some(Entry::Active(mut authority)) = self.read(
+            Key::Active(generation),
+            &mut seen,
+            &mut reads,
+            &mut versions,
+        )?
         else {
             return Err(());
         };
@@ -47,8 +60,18 @@ impl<B: Objects> ObjectWitness<B> {
             if generation > MAX_GENERATION || attempt > MAX_ATTEMPT {
                 return Err(());
             }
-            let reserved = self.read(Key::Reserved(generation, attempt), &mut seen, &mut reads)?;
-            let outcome = self.read(Key::Outcome(generation, attempt), &mut seen, &mut reads)?;
+            let reserved = self.read(
+                Key::Reserved(generation, attempt),
+                &mut seen,
+                &mut reads,
+                &mut versions,
+            )?;
+            let outcome = self.read(
+                Key::Outcome(generation, attempt),
+                &mut seen,
+                &mut reads,
+                &mut versions,
+            )?;
             match (reserved, outcome) {
                 (None, None) => {
                     if self
@@ -56,10 +79,16 @@ impl<B: Objects> ObjectWitness<B> {
                             Key::Reserved(generation, attempt + 1),
                             &mut seen,
                             &mut reads,
+                            &mut versions,
                         )?
                         .is_some()
                         || self
-                            .read(Key::Active(generation + 1), &mut seen, &mut reads)?
+                            .read(
+                                Key::Active(generation + 1),
+                                &mut seen,
+                                &mut reads,
+                                &mut versions,
+                            )?
                             .is_some()
                     {
                         return Err(());
@@ -81,10 +110,16 @@ impl<B: Objects> ObjectWitness<B> {
                                     Key::Reserved(generation, attempt + 1),
                                     &mut seen,
                                     &mut reads,
+                                    &mut versions,
                                 )?
                                 .is_some()
                                 || self
-                                    .read(Key::Active(generation + 1), &mut seen, &mut reads)?
+                                    .read(
+                                        Key::Active(generation + 1),
+                                        &mut seen,
+                                        &mut reads,
+                                        &mut versions,
+                                    )?
                                     .is_some()
                             {
                                 return Err(());
@@ -97,12 +132,18 @@ impl<B: Objects> ObjectWitness<B> {
                                     Key::Reserved(generation, attempt + 1),
                                     &mut seen,
                                     &mut reads,
+                                    &mut versions,
                                 )?
                                 .is_some()
                             {
                                 return Err(());
                             }
-                            match self.read(Key::Active(generation + 1), &mut seen, &mut reads)? {
+                            match self.read(
+                                Key::Active(generation + 1),
+                                &mut seen,
+                                &mut reads,
+                                &mut versions,
+                            )? {
                                 None => break WitnessHead::Retired { certificate },
                                 Some(Entry::Active(next))
                                     if certificate.successor(&next.epoch).ok().as_ref()
@@ -137,6 +178,7 @@ impl<B: Objects> ObjectWitness<B> {
         Ok(Walk {
             head,
             next_attempt: attempt,
+            versions,
         })
     }
 }

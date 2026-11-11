@@ -204,6 +204,24 @@ impl<B: Objects> ObjectWitness<B> {
             _ => Reply::Unknown,
         }
     }
+    /// The head plus the backend version of every record the walk read, for
+    /// the startup receipt. Same refusals as `head`; versions are evidence,
+    /// never authority.
+    pub(crate) fn head_evidence(
+        &self,
+        store_id: &str,
+        anchor: u64,
+    ) -> Reply<(WitnessHead, Vec<(String, String)>)> {
+        self.call(|w| {
+            if store_id != w.store_id {
+                return Reply::Conflict;
+            }
+            match w.walk(anchor) {
+                Ok(walk) => Reply::Ok((walk.head, walk.versions)),
+                Err(()) => Reply::Unknown,
+            }
+        })
+    }
     /// Every reserved request in the lineage, for operation uniqueness.
     fn reserved_requests(&self) -> Result<Vec<Request>, ()> {
         let Reply::Ok(keys) = self.backend.list(MAX_RECORDS) else {

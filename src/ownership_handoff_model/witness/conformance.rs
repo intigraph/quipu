@@ -67,6 +67,30 @@ pub(super) fn run<H: Harness>(h: &H) {
         }),
         "genesis head"
     );
+    match w.head_evidence(&id, 0) {
+        Reply::Ok((head, versions)) => {
+            assert_eq!(
+                head,
+                WitnessHead::Active {
+                    authority: genesis()
+                },
+                "evidence head"
+            );
+            assert!(
+                versions
+                    .iter()
+                    .any(|(k, v)| k == "active/00" && !v.is_empty()),
+                "genesis version recorded: {versions:?}"
+            );
+            assert!(versions.iter().all(|(_, v)| !v.is_empty()), "{versions:?}");
+        }
+        other => panic!("evidence head: {other:?}"),
+    }
+    assert_eq!(
+        w.head_evidence("urn:example:other", 0),
+        Reply::Conflict,
+        "evidence foreign lineage"
+    );
     let c = certificate(genesis(), "B", "op1");
     assert_eq!(w.reserve(0, &c.request), Reply::Ok(()), "reserve");
     assert_eq!(
