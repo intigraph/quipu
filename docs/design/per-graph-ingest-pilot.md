@@ -107,6 +107,25 @@ re-runs retract nothing; another route for the same tag refuses.
 `verify_routed_fence` also proves the source triggers exist. Which tags move
 comes from the executing-producer inventory, never an IRI prefix.
 
+### Slice copy and source parity
+
+`Store::export_routed_slice(tag, graph)` returns a producer's current facts
+in canonical form (IRIs resolved, never file-local ids). It uses the same
+source-retraction plan that `cut_over_routed_source` retracts, so the copied
+set and the retracted set cannot drift. `Owner::import_slice` asserts it into
+the owner graph through the ownership seam, under the same tag and with its
+original valid time. A second import refuses. The qualified sequence is:
+take an immutable baseline, export, import, fence the graph, cut the source
+over. Then compare the canonical fact multiset and the SPARQL result rows in
+the owner against the baseline. Controls: moved facts left ROOT, an unmoved
+producer stayed in ROOT and never reached the owner, and the producer's next
+`replace_snapshot` in the owner replaces the copied facts.
+
+This is source parity only. It copies current state, not history. It does
+not yet cover consumer queries over a composed ROOT-plus-owner dataset, paging
+beyond the endpoint row cap, the production stored-query inventory, `/search`
+or code-intelligence joins. Those remain required before any cutover.
+
 ### Write router
 
 `graph_router::Router::admit` takes the catalog, the legacy writer's store and

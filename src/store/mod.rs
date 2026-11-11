@@ -32,6 +32,9 @@ mod routed_fence;
 #[cfg(unix)]
 mod writer_lease;
 pub use routed_fence::{FenceClass, FencedColumn};
+/// Canonical producer slice copy between files (per-graph pilot parity).
+mod routed_slice;
+pub use routed_slice::{SliceFact, slice_multiset};
 // Dormant enrollment inventory: native identity fields, no startup wiring.
 mod ownership_admission;
 #[cfg(not(target_arch = "wasm32"))]

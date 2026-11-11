@@ -332,6 +332,25 @@ impl Owner {
         Ok(result)
     }
 
+    /// Seed this owner's graph with a producer slice exported from another
+    /// file, under the same `snapshot:<key>` tag, through the ownership seam.
+    /// Refuses if the tag already owns current facts here.
+    pub fn import_slice(
+        &self,
+        slice: &[super::routed_slice::SliceFact],
+        source_tag: &str,
+        timestamp: &str,
+    ) -> Result<Option<i64>> {
+        let _admission = self.admit()?;
+        let mut store = self.writer.lock();
+        self.placement.verify()?;
+        Self::check_identity(&self.route, &store)?;
+        let graph = self.route.graph.clone();
+        store.ownership_operation(|store| {
+            store.import_routed_slice(slice, source_tag, &graph, timestamp)
+        })
+    }
+
     /// Read on a free dedicated read-only connection or refuse immediately.
     /// Identity checks and callback reads share one SQLite snapshot. Callbacks
     /// run inside that read transaction; nested BEGIN operations are refused.
