@@ -252,6 +252,35 @@ impl Store {
         Ok(graphs)
     }
 
+    /// Each fenced graph with the catalog revision and owner generation it
+    /// was fenced at. An absent fence table is none.
+    pub fn routed_graph_fence_rows(&self) -> Result<Vec<(String, u64, u64)>> {
+        if !self.fence_table_exists()? {
+            return Ok(Vec::new());
+        }
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT iri, catalog_revision, generation FROM {FENCE_TABLE} ORDER BY iri"
+        ))?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|(iri, revision, generation)| {
+                Ok((
+                    iri,
+                    u64::try_from(revision).map_err(refused)?,
+                    u64::try_from(generation).map_err(refused)?,
+                ))
+            })
+            .collect()
+    }
+
     /// Re-derive the inventory and prove every fenced column still has its
     /// triggers. A table created after installation (a new migration, an
     /// on-demand table) refuses until the fence is re-installed over it.

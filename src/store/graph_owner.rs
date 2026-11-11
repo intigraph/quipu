@@ -269,6 +269,11 @@ impl Owner {
         })
     }
 
+    /// The immutable catalog route this owner serves.
+    pub fn route(&self) -> &Route {
+        &self.route
+    }
+
     fn check_identity(route: &Route, store: &Store) -> Result<()> {
         store.require_ownership()?;
         if store.store_id()? != route.store_id || store.log_epoch()? != route.log_epoch {

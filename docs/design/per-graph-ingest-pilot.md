@@ -91,6 +91,19 @@ is re-installed. The fence is never installed in an owner file. Removing a
 fence row after the owner accepted writes still needs fenced reverse
 reconciliation.
 
+### Write router
+
+`graph_router::Router::admit` takes the catalog, the legacy writer's store and
+exactly one prepared owner per route. It refuses unless the legacy fence names
+exactly the catalog's routes at the catalog revision and each route's
+generation, and `verify_routed_fence` passes; until then no route is
+advertised. `Router::knot` dispatches by `Catalog::write_target`: a routed
+graph runs only in its owner, any other target runs the ordinary pipeline on
+the legacy writer, and the request and input must name the same graph. A
+caller that bypasses the router still meets the legacy file's fence.
+`Router::recheck` repeats the fence check, e.g. after legacy maintenance. The
+router is not wired into the server, CLI or startup.
+
 ## Composed reads are part of the first slice
 
 Ingest previously visible in ROOT must remain visible to its existing consumers

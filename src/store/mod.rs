@@ -18,6 +18,9 @@ mod decision_nonces;
 /// Native owner qualification primitive; not a server route activation API.
 #[cfg(unix)]
 pub mod graph_owner;
+/// Pilot write router over the catalog, legacy writer and owners.
+#[cfg(unix)]
+pub mod graph_router;
 mod ownership;
 mod ownership_fence;
 #[cfg(not(target_arch = "wasm32"))]
