@@ -15,8 +15,9 @@ const MIN_COVERAGE: f64 = 0.5;
 const MAX_REQUIRED_TERMS: usize = 3;
 
 /// Distinct query terms a row must contain: `ceil(MIN_COVERAGE * n)`, capped.
+/// Integer form of the 0.5 fraction; a test pins the equivalence.
 fn required_terms(n: usize) -> usize {
-    ((n as f64 * MIN_COVERAGE).ceil() as usize).min(MAX_REQUIRED_TERMS)
+    n.div_ceil(2).min(MAX_REQUIRED_TERMS)
 }
 const STOP: &[&str] = &[
     "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for", "from", "how",

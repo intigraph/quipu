@@ -145,6 +145,12 @@ fn required_terms_is_the_plain_fraction_up_to_six_terms_then_capped() {
     ] {
         assert_eq!(required_terms(n), required, "{n} terms");
     }
+    // The integer form is ceil(MIN_COVERAGE * n) only while the fraction is 0.5.
+    assert!((MIN_COVERAGE - 0.5).abs() < f64::EPSILON);
+    for n in 1..=2 * MAX_REQUIRED_TERMS {
+        let required = required_terms(n);
+        assert!(2 * required >= n && 2 * (required - 1) < n, "{n} terms");
+    }
 }
 
 #[test]
