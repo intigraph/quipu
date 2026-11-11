@@ -229,6 +229,66 @@ fn ci_entrypoint_replays_historical_merges_and_has_a_positive_control() {
 }
 
 #[test]
+fn ci_entrypoint_checks_merge_queue_groups_like_a_push() {
+    for kind in ["alias", "disjoint"] {
+        let f = Fixture::new(kind);
+        if kind == "alias" {
+            git(f.path(), &["merge", "--no-commit", "--no-ff", &f.theirs]);
+            let m = g(
+                f.path(),
+                &["show", &format!("{}:qpack/manifest.json", f.ours)],
+            );
+            std::fs::write(f.path().join("qpack/manifest.json"), m).unwrap();
+            rehash(f.path());
+        } else {
+            assert!(f.merge().status.success());
+        }
+        // Same history shape as the push-event control above.
+        std::fs::create_dir(f.path().join("fixture")).unwrap();
+        std::fs::write(
+            f.path().join("fixture/export.nt"),
+            "<urn:a> <urn:b> <urn:c> .\n",
+        )
+        .unwrap();
+        f.commit();
+        g(f.path(), &["mv", "fixture/export.nt", "fixture/payload.nq"]);
+        f.commit();
+        let head = g(f.path(), &["rev-parse", "HEAD"]).trim().to_string();
+        let run = |head_sha: &str| {
+            let event = f.temp.path().join("merge-group.json");
+            std::fs::write(
+                &event,
+                serde_json::to_vec(
+                    &json!({"merge_group": {"base_sha": f.theirs, "head_sha": head_sha}}),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            Command::new("python3")
+                .arg(
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/pendant-merge-check.py"),
+                )
+                .args(["--binary", env!("CARGO_BIN_EXE_quipu")])
+                .env("GITHUB_EVENT_NAME", "merge_group")
+                .env("GITHUB_EVENT_PATH", &event)
+                .current_dir(f.path())
+                .output()
+                .unwrap()
+        };
+        let output = run(&head);
+        assert_eq!(
+            output.status.success(),
+            kind == "disjoint",
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let moved = run(&"0".repeat(40));
+        assert!(!moved.status.success());
+        assert!(String::from_utf8_lossy(&moved.stderr).contains("merge group's head commit"));
+    }
+}
+
+#[test]
 fn driver_binds_temporary_inputs_to_context_before_writing() {
     let f = Fixture::new("functional");
     let base = f.path().join("base.nt");
