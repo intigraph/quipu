@@ -452,3 +452,70 @@ fn startup_refuses_while_a_transition_holds_the_lineage_latch() {
             .expect("admits once the transition releases the latch"),
     );
 }
+
+/// One positive fixture through the same non-test route over the W2 backend
+/// and its private conditional-create emulator, plus a transport refusal.
+#[cfg(feature = "ownership-witness-s3")]
+#[test]
+fn admission_through_the_s3_witness_backend_and_emulator() {
+    use crate::ownership_handoff_model::witness::objects::{Created, Objects};
+    use crate::ownership_handoff_model::witness::s3::S3Objects;
+    use crate::ownership_handoff_model::witness::s3_emulator::{EmuFault, Emulator};
+    use crate::ownership_handoff_model::witness::{ObjectWitness, assumed_genesis_bytes};
+
+    struct S3Source(ObjectWitness<S3Objects>);
+    impl WitnessSource for S3Source {
+        fn head_evidence(
+            &self,
+            profile: &str,
+            store_id: &str,
+            anchor: u64,
+        ) -> Reply<(WitnessHead, Vec<(String, String)>)> {
+            if profile != PROFILE {
+                return Reply::Unknown;
+            }
+            self.0.head_evidence(store_id, anchor)
+        }
+    }
+
+    let f = Fixture::new();
+    let emulator = Emulator::start();
+    let backend = emulator.backend();
+    assert_eq!(
+        backend.create("active/00", &assumed_genesis_bytes(&authority())),
+        Reply::Ok(Created::New)
+    );
+    let source = S3Source(ObjectWitness::attach(STORE_ID.into(), backend));
+    let config = EnrolledStartup {
+        inventory: &f.inventory,
+        witness: &source,
+    };
+    let mut store =
+        Store::open_enrolled(f.db.to_str().unwrap(), &config).expect("admitted over S3");
+    store
+        .ownership_operation(|s| write(s, "over-s3"))
+        .expect("admitted write");
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fs::read(f.receipt()).unwrap()).unwrap();
+    assert!(
+        receipt["witness_versions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v[0] == "active/00" && v[1] == "\"v1\""),
+        "S3 entity tag recorded: {receipt}"
+    );
+    drop(store);
+    fs::remove_file(f.receipt()).unwrap();
+    emulator.push(EmuFault::Status500);
+    refused_without_receipt_with(&f, &config, "S3 server error");
+}
+
+#[cfg(feature = "ownership-witness-s3")]
+fn refused_without_receipt_with(f: &Fixture, config: &EnrolledStartup<'_>, why: &str) {
+    assert!(
+        Store::open_enrolled(f.db.to_str().unwrap(), config).is_err(),
+        "{why}: admitted"
+    );
+    assert!(!f.receipt().exists(), "{why}: no receipt on refusal");
+}

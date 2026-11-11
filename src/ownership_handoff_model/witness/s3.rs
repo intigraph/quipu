@@ -18,7 +18,7 @@ use std::io::Read;
 use std::time::Duration;
 
 /// A witness record is at most this large; anything longer is UNKNOWN.
-const MAX_BODY: u64 = crate::ownership_handoff_model::MAX_RECORD_BYTES as u64;
+pub(super) const MAX_BODY: u64 = crate::ownership_handoff_model::MAX_RECORD_BYTES as u64;
 /// Listing bodies are bounded independently of record bodies.
 const MAX_LIST_BODY: u64 = 1 << 20;
 

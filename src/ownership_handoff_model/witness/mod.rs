@@ -11,6 +11,8 @@ pub(crate) mod objects;
 mod records;
 #[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 pub(crate) mod s3;
+#[cfg(all(test, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub(crate) mod s3_emulator;
 mod walk;
 use objects::{Created, Object, Objects};
 use records::*;
@@ -242,6 +244,13 @@ impl<B: Objects> ObjectWitness<B> {
         }
         Ok(out)
     }
+}
+
+/// Canonical bytes of an assumed genesis record, for private fixtures that
+/// seed a backend from outside the witness. Not enrollment.
+#[cfg(test)]
+pub(crate) fn assumed_genesis_bytes(genesis: &Authority) -> Vec<u8> {
+    Entry::Active(genesis.clone()).bytes().unwrap()
 }
 
 impl<B: Objects> AuthorityWitness for ObjectWitness<B> {
