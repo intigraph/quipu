@@ -131,6 +131,76 @@ fn coverage_and_top_hit_must_both_pass_and_provenance_survives() {
 }
 
 #[test]
+fn required_terms_is_the_plain_fraction_up_to_six_terms_then_capped() {
+    for (n, required) in [
+        (1, 1),
+        (2, 1),
+        (3, 2),
+        (4, 2),
+        (5, 3),
+        (6, 3),
+        (7, 3),
+        (9, 3),
+        (40, 3),
+    ] {
+        assert_eq!(required_terms(n), required, "{n} terms");
+    }
+    // The integer form is ceil(MIN_COVERAGE * n) only while the fraction is 0.5.
+    assert!((MIN_COVERAGE - 0.5).abs() < f64::EPSILON);
+    for n in 1..=2 * MAX_REQUIRED_TERMS {
+        let required = required_terms(n);
+        assert!(2 * required >= n && 2 * (required - 1) < n, "{n} terms");
+    }
+}
+
+#[test]
+fn long_question_admits_corroborated_rows_k4uz() {
+    // Probe-B shape (aegis-k4uz): a nine-term question whose relevant rows
+    // carry the subject plus a few terms. Synthetic words keep indexing this
+    // source from manufacturing evidence.
+    let subject = concat!("zor", "gleplex");
+    let query = format!("w3x {subject} commons circle sitting breakaway timetable kort cagel");
+    let four = candidate(&format!("w3x {subject} sitting baseline circle"), 0.745);
+    let three = candidate(&format!("w3x {subject} circle roster"), 0.570);
+    let two = candidate(&format!("w3x {subject} unrelated"), 0.9);
+    let out = response(&query, &[four.clone(), three.clone(), two]);
+    assert_eq!(out["context"]["reason"], "sufficient_context");
+    assert_eq!(out["context_results"], json!([four, three]));
+    // Before the cap, 4/9 and 3/9 fell under the 0.5 fraction.
+    assert!(out["context"]["top_term_coverage"].as_f64().unwrap() < MIN_COVERAGE);
+}
+
+#[test]
+fn short_queries_keep_the_exact_fraction_and_refusals_hold_on_long_ones() {
+    // Up to six terms, behaviour is unchanged: 2 of 5 terms still refuses.
+    let out = response(
+        "memory scheduler allocation budget fairness",
+        &[candidate("memory scheduler", 0.9)],
+    );
+    assert_eq!(out["context"]["reason"], "insufficient_term_coverage");
+    let subject = concat!("zor", "gleplex");
+    let query = format!("w3x {subject} commons circle sitting breakaway timetable kort cagel");
+    // Floor, subject and identifier refusals are untouched by the cap.
+    let below = response(
+        &query,
+        &[candidate(&format!("w3x {subject} circle sitting"), 0.51)],
+    );
+    assert_eq!(below["context"]["reason"], "no_result_above_floor");
+    // The admission subject is the first query term ("w3x"), not the rarest.
+    let no_subject = response(
+        &query,
+        &[candidate(&format!("{subject} commons circle sitting"), 0.9)],
+    );
+    assert_eq!(no_subject["context"]["reason"], "subject_not_covered");
+    let id_query = format!("w3x {subject} commons circle sitting breakaway aegis-zz99");
+    let no_id = response(
+        &id_query,
+        &[candidate(&format!("w3x {subject} circle sitting"), 0.9)],
+    );
+    assert_eq!(no_id["context"]["reason"], "identifier_not_covered");
+}
+
+#[test]
 fn missing_query_empty_candidates_and_invalid_floors_are_explicit() {
     assert_eq!(
         response("", &[candidate("memory", 0.9)])["context"]["reason"],

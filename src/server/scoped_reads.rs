@@ -69,13 +69,14 @@ pub(super) fn validate(config: &quipu::QuipuConfig, args: &[String]) {
 /// The first scoped profile publishes only HTTP capabilities. Native MCP is
 /// explicitly unsupported, including metadata/tool discovery; do not merge an
 /// unqualified transport beside the guarded application.
-pub(super) async fn serve_http(app: axum::Router, bind: &str) {
+pub(super) async fn serve_http(app: axum::Router, bind: &str, ready: impl FnOnce()) {
     let listener = tokio::net::TcpListener::bind(bind)
         .await
         .unwrap_or_else(|_| {
             eprintln!("cannot bind scoped read listener");
             std::process::exit(1)
         });
+    ready();
     axum::serve(listener, app)
         .await
         .expect("scoped read listener failed");

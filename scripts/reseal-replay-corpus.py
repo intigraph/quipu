@@ -144,7 +144,7 @@ def oracle_hits(doc: dict, words: list[str]) -> list[str]:
 # A wordlist an outsider could plausibly assemble: project names visible on the
 # public remote, plus ordinary English words. It is deliberately SMALL — the
 # finding is that a trivial list works, so a large one would understate it.
-WORDS = """quipu bobbin yupana yupana shantytown shanty skein beads gastown aegis
+WORDS = """quipu bobbin yupana shantytown shanty skein beads gastown aegis
 reactor tapestry mayor prometheus grafana loki ntfy traefik forgejo librechat
 pushgateway alertmanager automation dolt Dolt Quipu desire-path""".split()
 

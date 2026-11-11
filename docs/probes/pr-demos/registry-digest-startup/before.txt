@@ -1,0 +1,18 @@
+running 1 test
+test shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows ... FAILED
+
+failures:
+
+---- shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows stdout ----
+
+thread 'shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows' (454540) panicked at src/shape_mapping/backfill_tests.rs:11:5:
+assertion `left == right` failed: opening must not canonicalize historical Turtle
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3488 filtered out; finished in 0.00s

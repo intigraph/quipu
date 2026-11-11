@@ -159,7 +159,7 @@ fn unknown_slow_and_lost_reply_are_distinct_from_conflict() {
     assert_eq!(w.reserve(0, &c.request), Reply::Ok(()));
     let other = certificate(initial(), "C", "op2");
     assert_eq!(w.reserve(0, &other.request), Reply::Conflict);
-    let lock = w.0.lock().unwrap();
+    let lock = w.backend.0.lock().unwrap();
     assert_eq!(w.head(&initial().store_id, 0), Reply::Unknown);
     drop(lock);
 }
@@ -209,7 +209,7 @@ fn stale_skipped_and_malformed_inputs_never_create_records() {
         Reply::Conflict
     );
     assert_eq!(w.head("wrong-store", 0), Reply::Conflict);
-    assert_eq!(w.0.lock().unwrap().entries.len(), 1);
+    assert_eq!(w.backend.0.lock().unwrap().entries.len(), 1);
 }
 
 #[test]
@@ -225,7 +225,7 @@ fn tampered_missing_and_unexpected_keys_are_unknown_with_positive_control() {
             })
         );
         {
-            let mut m = w.0.lock().unwrap();
+            let mut m = w.backend.0.lock().unwrap();
             match variant {
                 0 => {
                     m.entries.insert(
@@ -372,4 +372,85 @@ fn lost_reply_does_not_advance_local_model_until_exact_readback() {
         model.witness_head(),
         &WitnessHead::Reserved { request: c.request }
     );
+}
+
+#[test]
+fn key_names_round_trip_including_one_past_probe() {
+    for key in [
+        Key::Active(0),
+        Key::Active(MAX_GENERATION + 1),
+        Key::Reserved(MAX_GENERATION, MAX_ATTEMPT + 1),
+        Key::Outcome(3, 7),
+    ] {
+        assert_eq!(objects::parse(&objects::name(key)), Some(key));
+    }
+    for bad in [
+        "active/1",
+        "active/001",
+        "reserved/00",
+        "outcome/00/0x",
+        "x/00",
+        "active/00/",
+    ] {
+        assert_eq!(objects::parse(bad), None, "{bad}");
+    }
+    // The walk probes one past the last attempt; absent must stay absent.
+    let w = witness();
+    assert_eq!(
+        w.backend
+            .get(&objects::name(Key::Reserved(0, MAX_ATTEMPT + 1))),
+        Reply::Ok(None)
+    );
+}
+
+/// A backend that lists one name the witness cannot parse.
+struct ForeignName(MemoryObjects);
+impl Objects for ForeignName {
+    fn get(&self, key: &str) -> Reply<Option<Object>> {
+        self.0.get(key)
+    }
+    fn create(&self, key: &str, bytes: &[u8]) -> Reply<Created> {
+        self.0.create(key, bytes)
+    }
+    fn list(&self, limit: usize) -> Reply<Vec<String>> {
+        match self.0.list(limit) {
+            Reply::Ok(mut names) => {
+                names.push("active/00.bak".into());
+                Reply::Ok(names)
+            }
+            other => other,
+        }
+    }
+}
+
+#[test]
+fn unparseable_listed_name_is_unknown_not_ignored() {
+    let w = witness();
+    assert_eq!(
+        w.head(&initial().store_id, 0),
+        Reply::Ok(WitnessHead::Active {
+            authority: initial()
+        })
+    );
+    let foreign = ObjectWitness::attach(initial().store_id, ForeignName(w.backend.clone()));
+    assert_eq!(foreign.head(&initial().store_id, 0), Reply::Unknown);
+}
+
+struct MemoryHarness;
+impl conformance::Harness for MemoryHarness {
+    type Backend = MemoryObjects;
+    fn fresh(&self) -> InMemoryWitness {
+        let Reply::Ok(w) = InMemoryWitness::new(conformance::genesis()) else {
+            panic!("genesis positive control");
+        };
+        w
+    }
+    fn inject(&self, witness: &InMemoryWitness, fault: Fault) {
+        assert_eq!(witness.inject(fault), Reply::Ok(()));
+    }
+}
+
+#[test]
+fn memory_backend_passes_the_shared_conformance_suite() {
+    conformance::run(&MemoryHarness);
 }

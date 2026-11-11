@@ -240,6 +240,9 @@ owl = []
 # crate compiles for wasm32 (mio has no wasm target) — see
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
+# Design W2: S3-compatible conditional-create witness backend (source only;
+# selecting a bucket and principal is a deployment decision).
+ownership-witness-s3 = ["dep:ureq"]
 mcp = ["dep:url", "dep:rmcp", "dep:tower", "dep:axum", "dep:tokio", "dep:tower-http"]
 server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "dep:futures", "remote", "jemalloc"]
 # quipu-server's global allocator; implied by `server` so every deployed build

@@ -58,6 +58,19 @@ def ledger(rows):
 
 
 class BadgeTests(unittest.TestCase):
+    def test_atomic_documents_do_not_inflate_the_independent_write_fraction(self):
+        data = REPORT.load(RESULTS)
+        data["shacl_write_path"] = {
+            "cases": 4, "atomic_documents": ["together-only"],
+            "divergences": [["independent-defect", "per_triple"]],
+            "unjudged": [], "by_component": {},
+        }
+        section = REPORT.render_markdown(data).split("### Write-path conformance", 1)[1]
+        section = section.split("## Entailment-regime commitments", 1)[0]
+        self.assertIn("**2/3** agree", section)
+        self.assertIn("**1 together-only document** uses", section)
+        self.assertNotIn("**3/4** agree", section)
+
     def test_unsupported_only_class_is_grey_not_red(self):
         # 0/34 in red would claim we tried and failed; grey says not implemented.
         counts = REPORT.tally([evaluation_row(":p1", "unsupported", "protocol")])

@@ -12,7 +12,8 @@ oracle. There is no language model anywhere in the loop; the writers are
 deterministic, so a run is its own ground truth.
 
 \paragraph{The oracle is recomputable by a reader, with one stated exception.}
-For the three triple-visible classes, \texttt{ground\_truth} derives the oracle
+For the three triple-visible classes of \S\ref{sec:operator} (functional
+divergence, cardinality overflow and delete/modify), \texttt{ground\_truth} derives the oracle
 from the three graphs and the shapes and nothing else --- no edit log, no
 generator intent --- so a reader holding only the published inputs recomputes
 them exactly, and a generator bug cannot hide inside them. An instrument control
@@ -34,12 +35,17 @@ the conflicts --- corruption it admitted without charging anyone. Either can be
 driven to zero by sacrificing the other, so neither is reportable alone.
 \emph{Triples lost} and \emph{triples spurious} are the third leg, and they
 catch the arm that admits no corruption and asks no questions because it
-discarded one side's work.
+discarded one side's work. Both are measured against the oracle's merge, in
+which a true conflict is held at its base value. For an arm that asks, a change
+it deferred on a slot that was not a true conflict is therefore counted as lost
+or spurious: the change is waiting for a person, not destroyed.
 
 \paragraph{Results.} Table~\ref{tab:armA} aggregates five seeds
 ($1, 7, 42, 99, 2026$) at $200$ entities, $200$ edits per side ($400$ in total)
 and overlap $0.5$ --- the harness defaults, so the command below reproduces it
-unchanged. Regenerate with \texttt{just bench merge --seed <N>}; instrument controls
+unchanged. Regenerate with \texttt{just bench merge --seed <N>}; the outputs of those five
+runs are committed under \texttt{benchmark/mergebench/results/}, and
+Tables~\ref{tab:armAseed} and~\ref{tab:armAclass} are read from them. Instrument controls
 with \texttt{just bench merge --selftest} ($7$ properties, non-zero exit on any
 failure).
 
@@ -62,8 +68,54 @@ arm & decisions & precision & recall & SHACL & lost & spurious \\
 \caption{Eight strategies, five seeds, ranges across seeds. Recall is bounded
 above by $1$ minus the alias-mint fraction for \emph{every} arm
 (\S\ref{sec:limits}). The line-merge arms shell out to real \texttt{git
-merge-file}; where git is absent they report \emph{unavailable}, never zero.}
+merge-file}; where git is absent they report \emph{unavailable}, never zero.
+\ctx is our reimplementation of the Context Merge overlap rule, counted per
+slot, not an execution of Quit Store. For arms that ask, \emph{lost} and
+\emph{spurious} include changes deferred to a person on slots that were not
+true conflicts; they are not irreversible deletions.}
 \label{tab:armA}
+\end{table}
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{rrrrrr}
+\toprule
+seed & oracle & alias-mint & triple-visible & \ctx decisions & \op decisions \\
+\midrule
+1    & 14 & 7  & 7  & 159 & 7 \\
+7    & 8  & 4  & 4  & 163 & 4 \\
+42   & 12 & 4  & 8  & 173 & 8 \\
+99   & 10 & 4  & 6  & 168 & 6 \\
+2026 & 10 & 2  & 8  & 182 & 8 \\
+\midrule
+total & 54 & 21 & 33 & 845 & 33 \\
+\bottomrule
+\end{tabular}
+\caption{Arm A per seed. Both arms detect every triple-visible conflict and no
+alias-mint conflict at every seed.}
+\label{tab:armAseed}
+\end{table}
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+arm & alias-mint & cardinality overflow & delete/modify & functional divergence \\
+\midrule
+\texttt{git-turtle-reserialized} & 0/21 & 8/10 & 9/10 & 13/13 \\
+\texttt{git-turtle-stable}       & 0/21 & 0/10 & 10/10 & 13/13 \\
+\texttt{git-canonical}           & 0/21 & 1/10 & 10/10 & 13/13 \\
+\texttt{union}, \texttt{lww-theirs}, \texttt{triple-3way} & 0/21 & 0/10 & 0/10 & 0/13 \\
+\ctx                             & 0/21 & 10/10 & 10/10 & 13/13 \\
+\op                              & 0/21 & 10/10 & 10/10 & 13/13 \\
+\bottomrule
+\end{tabular}
+\caption{Conflicts detected of conflicts declared, by class, summed over the
+five seeds. The three right-hand columns are definitional for \op: its
+predicate and the oracle read the same shapes. Of its $33$ decisions, $13$ are
+functional divergence, $10$ are cardinality overflow on a predicate bounded at
+four, and $10$ are delete/modify.}
+\label{tab:armAclass}
 \end{table}
 
 Three readings matter.
@@ -73,7 +125,19 @@ Summed over the five seeds the oracle contains $54$ conflicts, of which $21$ are
 alias-mint and $33$ are visible at triple level. \op raised exactly those $33$,
 with zero false positives at every individual seed. \ctx raised the
 \emph{same} $33$ --- identical recall, seed by seed --- and $812$ others, for
-$845$ questions in total. The schema does not find conflicts the node-overlap
+$845$ questions in total. Two qualifications belong beside that figure. The
+\ctx arm is our reimplementation of the overlap rule, and it counts one question
+per changed slot on a subject both sides touched; Quit Store presents its
+overlap as a review set rather than a question count, and a reviewer who settles
+a whole subject at once would face fewer prompts than $845$. And the ratio
+depends on how much the two sides overlap: rerunning the same five
+seeds at overlap $0.1$, $0.3$, $0.7$ and $0.9$ gives $821$ questions against
+$31$, $797$ against $25$, $899$ against $60$ and $983$ against $89$, a ratio
+between $11\times$ and $32\times$. In those twenty further runs \op raised all
+$205$ triple-visible conflicts with no false positive, while \ctx missed $5$ of
+them; the identical detection reported above holds at overlap $0.5$ and is not a
+general property of the overlap rule
+(\texttt{benchmark/mergebench/results/overlap-*/}). The schema does not find conflicts the node-overlap
 heuristic misses. It distinguishes the ones that need a person from the $812$
 that do not, which is a $25.6\times$ difference in the quantity the operator is
 actually spending: attention.
@@ -103,9 +167,9 @@ both read the same shapes graph, and for the triple-visible classes their rules
 coincide by construction. \op's precision of $1.000$ on this arm is therefore a
 property of the design, not evidence about it. We do not repair this by making
 the oracle cleverer, which would only move the coincidence somewhere less
-visible. We handle it by reporting per-class results so a reader can see which
-rows are definitional, by confining this arm's contribution to the \emph{cost of
-the alternatives}. The replay arm (\S\ref{sec:replay}) replaces the generated
+visible. We handle it in two ways: by reporting per-class results
+(Table~\ref{tab:armAclass}) so a reader can see which rows are definitional, and
+by confining this arm's contribution to the \emph{cost of the alternatives}. The replay arm (\S\ref{sec:replay}) replaces the generated
 corpus with recorded divergence and the harness with the shipped operator, but
 its positive results are scored against the same shapes. It therefore does not
 supply shape-independent correctness evidence either (\S\ref{sec:limits}).

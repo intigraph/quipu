@@ -310,6 +310,9 @@ fn create_refuses_when_absence_cannot_be_established() {
 #[test]
 fn the_size_limit_admits_the_final_newline() {
     let dir = journal_path();
+    // A protected regular file reaches the codec; unprotected files now
+    // deliberately refuse before their contents are interpreted.
+    write_atomic(&dir.path, &active()).unwrap();
     // A maximum-length body with a correct trailer must reach the decoder:
     // refused as an invalid record, never as oversized.
     let body = " ".repeat(MAX_RECORD_BYTES);

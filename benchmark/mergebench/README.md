@@ -38,7 +38,13 @@ just bench merge --sweep                           # wall time vs graph size
 just bench merge --selftest                        # prove the instruments
 ```
 
-Outputs land in `benchmark/mergebench/out/` (gitignored):
+The runs the paper quotes are committed under `benchmark/mergebench/results/`:
+seeds 1, 7, 42, 99 and 2026 at the defaults, and the same seeds at overlap 0.1,
+0.3, 0.7 and 0.9 in `results/overlap-<v>/`. Regenerate any of them with the
+command in its `RESULTS-seed<N>.md` header. Every count is determined by the
+seed; only the `merge_us` and `validate_us` timings vary between runs.
+
+Fresh outputs land in `benchmark/mergebench/out/` (gitignored):
 
 - `metrics-seed<N>.json` — every metric for every arm.
 - `RESULTS-seed<N>.md` — the same numbers as a markdown table, with the command
