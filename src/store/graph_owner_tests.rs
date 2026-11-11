@@ -1543,3 +1543,6 @@ mod resource_reservation;
 
 #[path = "graph_owner_scope_tests.rs"]
 mod commit_scope;
+
+#[path = "graph_owner_parity_tests.rs"]
+mod cutover_parity;

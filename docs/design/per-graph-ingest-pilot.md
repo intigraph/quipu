@@ -121,10 +121,17 @@ the owner against the baseline. Controls: moved facts left ROOT, an unmoved
 producer stayed in ROOT and never reached the owner, and the producer's next
 `replace_snapshot` in the owner replaces the copied facts.
 
-This is source parity only. It copies current state, not history. It does
-not yet cover consumer queries over a composed ROOT-plus-owner dataset, paging
-beyond the endpoint row cap, the production stored-query inventory, `/search`
-or code-intelligence joins. Those remain required before any cutover.
+A consumer parity test runs one consumer query through the strict composed
+reader before and after the move. The query selects ROOT as the default graph
+and the routed graph by `FROM NAMED`, as `{ ?s ?p ?o } UNION { GRAPH <g> {...} }`.
+It requires identical W3C bindings, including datatypes and language tags.
+Controls: after the move, ROOT alone and the routed graph alone each give only
+their part. This shows the consumer-side rewrite a migrated consumer needs.
+Existing ROOT-only queries do not see moved facts until they adopt it.
+
+Still not covered: history copy, paging beyond the endpoint row cap, the
+production stored-query inventory, `/search` and code-intelligence joins.
+Those remain required before any cutover.
 
 ### Write router
 
