@@ -8,6 +8,17 @@ use crate::{Error, Result};
 
 const DEFAULT_FLOOR: f64 = 0.52;
 const MIN_COVERAGE: f64 = 0.5;
+/// Long natural-language questions need corroboration, not half the sentence.
+/// Without this cap a nine-term question rejected a 0.745-similarity row that
+/// held the subject and three other terms (aegis-k4uz). Queries of up to six
+/// terms keep the plain `MIN_COVERAGE` fraction exactly.
+const MAX_REQUIRED_TERMS: usize = 3;
+
+/// Distinct query terms a row must contain: `ceil(MIN_COVERAGE * n)`, capped.
+/// Integer form of the 0.5 fraction; a test pins the equivalence.
+fn required_terms(n: usize) -> usize {
+    n.div_ceil(2).min(MAX_REQUIRED_TERMS)
+}
 const STOP: &[&str] = &[
     "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for", "from", "how",
     "i", "in", "is", "it", "me", "of", "on", "or", "please", "show", "tell", "that", "the", "this",
@@ -103,10 +114,11 @@ impl Policy {
             row["text"].as_str().unwrap_or("")
         );
         let words: BTreeSet<_> = words(&text).into_iter().collect();
+        let covered = terms.iter().filter(|term| words.contains(*term)).count();
         let coverage = if terms.is_empty() {
             0.0
         } else {
-            terms.iter().filter(|term| words.contains(*term)).count() as f64 / terms.len() as f64
+            covered as f64 / terms.len() as f64
         };
         let reason = match similarity {
             None => "similarity_unavailable",
@@ -115,7 +127,7 @@ impl Policy {
             _ if !identifiers.iter().all(|id| exact_identifier(&text, id)) => {
                 "identifier_not_covered"
             }
-            _ if coverage < MIN_COVERAGE => "insufficient_term_coverage",
+            _ if covered < required_terms(terms.len()) => "insufficient_term_coverage",
             _ => "sufficient_context",
         };
         Evaluation { reason, coverage }
