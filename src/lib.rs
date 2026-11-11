@@ -366,8 +366,8 @@ pub use sparql::{
 };
 pub use store::forks::{ForkDiff, ForkInfo, ForkPromotion};
 pub use store::{
-    Datum, GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus,
-    RowsAfter, Store,
+    Datum, GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionCertificate,
+    ProjectionRows, ProjectionStatus, RowsAfter, Store,
 };
 #[cfg(feature = "reactive-reasoner")]
 pub use store::{Delta, TransactObserver};
