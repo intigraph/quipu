@@ -5,6 +5,37 @@ that currently knows it. Link to the role when you mean a job; link to the host
 when you mean the hardware. Renaming a label does not change an IRI. Existing
 IRIs retain their meaning; this feature does not infer sameAs or migrate data.
 
+## Published stack vocabularies
+
+The stack's published vocabulary names use the registered
+`https://w3id.org/intigraph/` namespace:
+
+| Vocabulary or pack | Namespace |
+| --- | --- |
+| Quechua | <https://w3id.org/intigraph/quechua/ns#> |
+| Seeds | <https://w3id.org/intigraph/seeds/ns#> |
+| Quipu | <https://w3id.org/intigraph/quipu/ns#> |
+| Camayoc core | <https://w3id.org/intigraph/camayoc/core/ns#> |
+| Camayoc delivery | <https://w3id.org/intigraph/camayoc/delivery/ns#> |
+| Camayoc code entities | <https://w3id.org/intigraph/camayoc/code-entities/ns#> |
+| Camayoc session transcript | <https://w3id.org/intigraph/camayoc/session-transcript/ns#> |
+| Camayoc usage breakdown | <https://w3id.org/intigraph/camayoc/usage-breakdown/ns#> |
+| Camayoc homelab infrastructure | <https://w3id.org/intigraph/camayoc/homelab-infra/ns#> |
+| Camayoc personal media | <https://w3id.org/intigraph/camayoc/personal-media/ns#> |
+| Camayoc software factory | <https://w3id.org/intigraph/camayoc/software-factory/ns#> |
+
+Request `Accept: text/turtle` when dereferencing a vocabulary IRI to read its
+Turtle representation. The redirect preserves the vocabulary path under
+`https://intigraph.ai/ids/`; browsers receive its HTML representation.
+
+Camayoc's release bundle retains legacy files and supplies stable packs plus an
+explicit compatibility ontology. Its manifest records the source and artifact
+hashes. Compatibility uses equivalence declarations for classes and properties;
+loading a stable pack or its aliases is an explicit consumer operation. Installing
+the bundle does not rewrite stored IRIs, load aliases into an existing server,
+or migrate namespace policy. Keep legacy validation and reader checks when
+qualifying a consumer's transition.
+
 ## Configure and list
 
 Declare namespaces in `.bobbin/config.toml` or the normal user config:
