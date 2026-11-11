@@ -50,6 +50,8 @@ struct Placement {
     lease: Arc<super::writer_lease::Lease>,
     device: u64,
     inode: u64,
+    lease_device: u64,
+    lease_inode: u64,
 }
 
 fn refused(message: impl std::fmt::Display) -> Error {
@@ -73,15 +75,20 @@ impl Placement {
             .ok_or_else(|| refused("writable Store admission required"))?
             .clone();
         lease.claim_exclusive()?;
-        let metadata = lease.file.metadata().map_err(refused)?;
+        // Identify the database by path metadata (a stat, no descriptor): the
+        // lease is held on a sibling file, never on the database itself.
+        let metadata = std::fs::symlink_metadata(&path).map_err(refused)?;
         if !metadata.is_file() {
             return Err(refused("store is not a regular file"));
         }
+        let held = lease.file.metadata().map_err(refused)?;
         let placement = Self {
             path,
             lease,
             device: metadata.dev(),
             inode: metadata.ino(),
+            lease_device: held.dev(),
+            lease_inode: held.ino(),
         };
         placement.verify()?;
         Ok(placement)
@@ -89,12 +96,16 @@ impl Placement {
 
     fn verify(&self) -> Result<()> {
         let metadata = std::fs::symlink_metadata(&self.path).map_err(refused)?;
+        let lease_path = super::ownership_latch::sibling(&self.path, ".writer-lease")?;
+        let lease = std::fs::symlink_metadata(&lease_path).map_err(refused)?;
         let held = self.lease.file.metadata().map_err(refused)?;
         if !metadata.is_file()
             || metadata.dev() != self.device
             || metadata.ino() != self.inode
-            || held.dev() != self.device
-            || held.ino() != self.inode
+            || lease.dev() != self.lease_device
+            || lease.ino() != self.lease_inode
+            || held.dev() != self.lease_device
+            || held.ino() != self.lease_inode
             || self.path.canonicalize().map_err(refused)? != self.path
         {
             return Err(refused("native file placement changed"));

@@ -3,17 +3,25 @@
 //! Shared leases preserve ordinary multi-handle use. A graph Owner upgrades
 //! its supplied handle to exclusive admission before it becomes usable. This
 //! is not persistent ownership, retirement fencing or protection from raw SQLite.
+//!
+//! The lease is an flock on a SIBLING file (`<db>.writer-lease`), never on the
+//! database file itself. SQLite holds POSIX fcntl locks on the database, and
+//! closing ANY descriptor of that file in a process drops every fcntl lock the
+//! process holds on it. A lease descriptor on the database would therefore
+//! silently release another connection's write lock when a lease is dropped,
+//! e.g. after a failed exclusive upgrade. The sibling follows the same pattern
+//! as `ownership_latch`'s `.lock` file.
 
 use crate::{Error, Result};
 use rusqlite::Connection;
-use std::{
-    fs::{File, OpenOptions},
-    os::unix::fs::OpenOptionsExt,
-    sync::Arc,
-};
+use std::{fs::File, path::Path, sync::Arc};
 
 pub(super) struct Lease {
     pub(super) file: File,
+}
+
+fn denied(message: impl std::fmt::Display) -> Error {
+    Error::PolicyDenied(format!("native writer lease: {message}"))
 }
 
 impl Lease {
@@ -21,18 +29,19 @@ impl Lease {
         let Some(path) = conn.path().filter(|p| !p.is_empty()) else {
             return Ok(None);
         };
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_CLOEXEC)
-            .open(path)
-            .map_err(|e| Error::PolicyDenied(format!("native writer lease: {e}")))?;
-        rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockShared).map_err(
-            |_| {
-                Error::PolicyDenied(
-                    "native writer lease: graph owner is active or admission unavailable".into(),
-                )
-            },
-        )?;
+        let sibling = super::ownership_latch::sibling(Path::new(path), ".writer-lease")?;
+        let file = super::ownership_latch::no_follow(
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false),
+        )
+        .open(&sibling)
+        .map_err(denied)?;
+        super::ownership_latch::regular(&file)?;
+        rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockShared)
+            .map_err(|_| denied("graph owner is active or admission unavailable"))?;
         Ok(Some(Arc::new(Self { file })))
     }
 
@@ -49,3 +58,7 @@ impl Lease {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "writer_lease_tests.rs"]
+mod tests;

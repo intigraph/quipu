@@ -532,7 +532,15 @@ fn refused_without_receipt_with(f: &Fixture, config: &EnrolledStartup<'_>, why: 
 fn enrolled_handle_takes_the_native_writer_lease() {
     use rustix::fs::{FlockOperation, flock};
     let f = Fixture::new();
-    let exclusive = || fs::File::open(&f.db).unwrap();
+    // The lease is the sibling file; never open the database outside SQLite.
+    let lease = ownership_latch::sibling(&f.db, ".writer-lease").unwrap();
+    let exclusive = || {
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lease)
+            .unwrap()
+    };
 
     // Exclusive admission held elsewhere (what Owner::prepare takes): S1 refuses.
     let owner = exclusive();
