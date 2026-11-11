@@ -265,7 +265,9 @@ fn ci_entrypoint_checks_merge_queue_groups_like_a_push() {
             )
             .unwrap();
             Command::new("python3")
-                .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/pendant-merge-check.py"))
+                .arg(
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/pendant-merge-check.py"),
+                )
                 .args(["--binary", env!("CARGO_BIN_EXE_quipu")])
                 .env("GITHUB_EVENT_NAME", "merge_group")
                 .env("GITHUB_EVENT_PATH", &event)
