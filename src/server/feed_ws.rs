@@ -38,7 +38,7 @@ use axum::{
 use serde_json::{Value, json};
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
-use super::{Cursor, FeedFrame, Params, scope_ok, stream_slot};
+use super::{Cursor, FeedFrame, Params, member_lease, scope_ok, stream_slot};
 use crate::SharedStore;
 use crate::event_cursor::resume_offset;
 
@@ -231,6 +231,12 @@ fn subscribe(
         (Ok(p), Ok(s)) => (p, s),
         (Err(reason), _) | (_, Err(reason)) => return fail(reason),
     };
+    // One membership condition (aegis-n0wc.3): a single string.
+    let member = match &message["member"] {
+        Value::Null => None,
+        Value::String(text) => Some(text.clone()),
+        _ => return fail("member must be one \"<predicate> <term>\" string"),
+    };
     let since = match &message["since"] {
         Value::Null => None,
         value => match value.as_i64() {
@@ -241,7 +247,7 @@ fn subscribe(
     let params: Params = match serde_json::from_value(json!({
         "since": since, "types": types,
         "group": message.get("group"), "graph": message.get("graph"),
-        "predicate": predicate, "subject": subject,
+        "predicate": predicate, "subject": subject, "member": member,
     })) {
         Ok(params) => params,
         Err(_) => return fail("unsupported feed scope"),
@@ -259,7 +265,12 @@ fn subscribe(
     let Some(held) = Held::take(quota) else {
         return fail("subscription capacity exhausted; retry later");
     };
+    let member = match member_lease(store, &params) {
+        Ok(member) => member,
+        Err(reason) => return fail(&reason),
+    };
     let mut cursor = Cursor::open(store.clone(), offset, params, changes, None);
+    cursor.member = member;
     let name = sub.to_string();
     let outbox = outbox.clone();
     let task = tokio::spawn(async move {

@@ -78,9 +78,19 @@ once per commit, not per subscriber:
 4. Catch-up from the store computes the same set for the page with the same
    helper, so ring and store pages stay equal (extend the parity test).
 
-A condition is identified by its normalized `(graph, predicate, value)`, and a
-subscription refused if the hub already tracks 64 distinct conditions (a
-bounded per-commit cost; the refusal names the limit).
+A condition is identified by its normalized `(predicate, value)`, and a
+subscription is refused if the hub already tracks 64 distinct conditions (a
+bounded per-commit cost; HTTP 503 on SSE like the stream-capacity refusal, a
+`quipu.error` on the WebSocket; the refusal names the limit). Graph is not part
+of the key: membership is always evaluated in each record's own graph (below),
+and `graph=X` already limits records to X, so a per-graph key would only
+multiply reads. Each subscription holds a lease on its condition; the last
+release removes it.
+
+A ring entry holds membership only for conditions live when the hub read it.
+A subscriber whose condition is missing from an entry it would otherwise match
+is served from the store (catch-up), which uses the same helper, so the pages
+stay equal.
 
 **Graph scope.** A condition is evaluated in one graph, never across graphs:
 
@@ -102,9 +112,12 @@ term ids), so non-matching transactions are skipped in SQL, as `graph` is.
 `member` cannot be pushed down. On the store path it runs on the page the
 pushed-down filters already narrowed, with the same batched helper as the hub:
 per page (one transaction) at most two indexed reads (before and after) over that
-transaction's distinct subjects, chunked at 500 ids. So a far-behind `member`
-subscriber costs at most one page read plus two bounded reads per transaction
-it walks; it never scans the graph.
+transaction's distinct subjects, chunked at 500 ids. Before and after are one
+read (`(before) OR (after)` on the as-of row predicate). A store page walks at
+most 256 transactions; a walk that keeps nothing (at the bound, or at the end
+of the log) still moves the cursor past what it walked, without a frame. So a
+far-behind `member` subscriber costs at most one page read plus one bounded
+read per transaction it walks; it never scans the graph.
 
 ## 4. Errors and limits
 

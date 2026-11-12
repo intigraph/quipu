@@ -596,6 +596,10 @@ impl Store {
     }
 }
 
+/// Membership (`member`) conditions for change-stream filters (aegis-n0wc.3).
+#[path = "changes_member.rs"]
+pub mod member;
+
 #[cfg(test)]
 #[path = "changes_tests.rs"]
 mod tests;

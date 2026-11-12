@@ -21,6 +21,8 @@ use futures::stream::unfold;
 use serde_json::{Value, json};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 
+use quipu::store::changes::member::MemberSpec;
+
 use super::{
     SharedStore,
     base::blocking,
@@ -52,6 +54,9 @@ pub(crate) struct Params {
     predicate: Option<String>,
     /// Comma-separated subject IRIs (change stream only, aegis-n0wc.3).
     subject: Option<String>,
+    /// One `<predicate> <term>` membership condition (change stream only,
+    /// aegis-n0wc.3).
+    member: Option<String>,
 }
 
 impl Params {
@@ -65,8 +70,23 @@ impl Params {
             graph: self.graph.as_deref(),
             predicates: set(self.predicate.as_deref()),
             subjects: set(self.subject.as_deref()),
+            member: None,
         }
     }
+}
+
+/// Hold this change stream's `member` condition on the hub, so it is
+/// evaluated on every commit while the stream lives; refused when the hub is
+/// at its condition limit. `scope_ok` has already parsed the condition.
+pub(crate) fn member_lease(
+    store: &SharedStore,
+    params: &Params,
+) -> Result<Option<feed_hub::MemberLease>, String> {
+    let Some(text) = params.member.as_deref() else {
+        return Ok(None);
+    };
+    let spec = MemberSpec::parse(text).map_err(|e| e.to_string())?;
+    feed_hub::Hub::of(store).lease_member(spec).map(Some)
 }
 
 pub(crate) struct Cursor {
@@ -85,6 +105,9 @@ pub(crate) struct Cursor {
     hub: Option<(Arc<feed_hub::Hub>, watch::Receiver<i64>)>,
     /// How far the hub's ring has been searched for this stream's graph.
     scanned: i64,
+    /// The hub's hold on this stream's `member` condition. A member stream
+    /// without one is served from the store only, never unfiltered.
+    member: Option<feed_hub::MemberLease>,
     _slot: Option<OwnedSemaphorePermit>,
 }
 
@@ -126,7 +149,12 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         )
             .into_response();
     };
-    let cursor = Cursor::open(store, offset, params, changes, Some(slot));
+    let member = match member_lease(&store, &params) {
+        Ok(member) => member,
+        Err(message) => return (StatusCode::SERVICE_UNAVAILABLE, message).into_response(),
+    };
+    let mut cursor = Cursor::open(store, offset, params, changes, Some(slot));
+    cursor.member = member;
     let output = unfold(cursor, |mut cursor| async move {
         let frame = cursor.next_frame().await?;
         Some((Ok::<_, Infallible>(frame.into_sse()), cursor))
@@ -137,16 +165,21 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
 }
 
 /// Whether a stream may serve this scope: a change feed takes a graph,
-/// predicates and subjects; an event feed takes types, a group and a graph.
-/// No filter is empty or oversized, and a term list holds 1 to
-/// [`feed::MAX_TERM_LIST`] IRIs.
+/// predicates, subjects and one member condition; an event feed takes types,
+/// a group and a graph. No filter is empty or oversized, a term list holds 1
+/// to [`feed::MAX_TERM_LIST`] IRIs, and a member condition parses.
 pub(crate) fn scope_ok(params: &Params, changes: bool) -> bool {
     let term_list_bad = |list: &Option<String>| {
         list.as_ref()
             .is_some_and(|s| s.len() > 2048 || feed::term_list(s).is_none())
     };
     !(changes && (params.types.is_some() || params.group.is_some())
-        || !changes && (params.predicate.is_some() || params.subject.is_some())
+        || !changes
+            && (params.predicate.is_some() || params.subject.is_some() || params.member.is_some())
+        || params
+            .member
+            .as_ref()
+            .is_some_and(|m| MemberSpec::parse(m).is_err())
         || term_list_bad(&params.predicate)
         || term_list_bad(&params.subject)
         || params
@@ -183,6 +216,7 @@ impl Cursor {
             pending: VecDeque::new(),
             hub: None,
             scanned: 0,
+            member: None,
             _slot: slot,
         }
     }
@@ -235,11 +269,18 @@ impl Cursor {
                 head.borrow_and_update();
             }
             let served = match &self.hub {
-                Some((hub, _)) if self.changes => {
-                    hub.serve_filtered(self.offset, &self.params.record_filter(), &mut self.scanned)
+                Some((hub, _))
+                    if self.changes && (self.params.member.is_none() || self.member.is_some()) =>
+                {
+                    let mut filter = self.params.record_filter();
+                    filter.member = self.member.as_ref().map(|lease| &lease.spec);
+                    hub.serve_filtered(self.offset, &filter, &mut self.scanned)
                 }
                 _ => feed_hub::Serve::CatchUp,
             };
+            // A member page may start past the cursor, over transactions the
+            // ring or an earlier walk proved hold nothing in scope.
+            let mut floor = self.offset;
             let page = if let feed_hub::Serve::Page(body) = served {
                 Ok(axum::Json(body))
             } else if matches!(served, feed_hub::Serve::Wait) {
@@ -250,8 +291,11 @@ impl Cursor {
                     hub.catchup_reads
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
+                if self.params.member.is_some() {
+                    floor = self.offset.max(self.scanned);
+                }
                 let params = serde_json::from_value(
-                    json!({"since": self.offset, "limit": 1, "capture": "old_and_new_values", "graph": self.params.graph, "predicate": self.params.predicate, "subject": self.params.subject}),
+                    json!({"since": floor, "limit": 1, "capture": "old_and_new_values", "graph": self.params.graph, "predicate": self.params.predicate, "subject": self.params.subject, "member": self.params.member}),
                 );
                 match params {
                     Ok(params) => {
@@ -289,7 +333,7 @@ impl Cursor {
                     Err(_) => unreachable!("constructed event params"),
                 }
             };
-            let body = match page {
+            let mut body = match page {
                 Ok(page) => page.0,
                 Err(_) => {
                     self.terminal = true;
@@ -312,7 +356,7 @@ impl Cursor {
                 "next_offset"
             };
             let next = body.get(key).and_then(Value::as_i64).unwrap_or(self.offset);
-            if next <= self.offset {
+            if next <= floor {
                 // An empty store page proves no in-scope transaction up to its
                 // watermark: the stream need not search below it again, so a
                 // quiet graph behind the ring floor reaches the ring instead of
@@ -327,6 +371,17 @@ impl Cursor {
                 // a commit the hub read meanwhile is not slept through.
                 self.wait = !attached;
                 continue;
+            }
+            if self.changes && body["records"].as_array().is_some_and(Vec::is_empty) {
+                // A member walk that reached its bound and kept nothing:
+                // `(floor, next]` holds nothing in scope. Search on from there.
+                self.scanned = self.scanned.max(next);
+                self.wait = false;
+                continue;
+            }
+            if floor != self.offset {
+                // The page answers this stream's cursor, as a ring page does.
+                body["since"] = json!(self.offset);
             }
             let data = body.to_string();
             if self.changes && !fits_frame(&data) {

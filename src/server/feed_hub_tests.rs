@@ -12,9 +12,9 @@ use serde_json::Value as Json;
 use super::{Hub, Serve};
 use crate::{SharedStore, StoreHandle};
 
-const T: &str = "2026-10-24T00:00:00Z";
-const BOARD: &str = "urn:graph:board";
-const OTHER: &str = "urn:graph:other";
+pub(super) const T: &str = "2026-10-24T00:00:00Z";
+pub(super) const BOARD: &str = "urn:graph:board";
+pub(super) const OTHER: &str = "urn:graph:other";
 
 fn write(shared: &SharedStore, graph: &str, entity: &str) {
     let mut store = shared.lock();
@@ -35,7 +35,7 @@ fn write(shared: &SharedStore, graph: &str, entity: &str) {
     store.transact_to_graph(&[datum], T, None, None, g).unwrap();
 }
 
-fn shared() -> SharedStore {
+pub(super) fn shared() -> SharedStore {
     let shared: SharedStore = Arc::new(StoreHandle::writer_only(Store::open_in_memory().unwrap()));
     write(&shared, BOARD, "urn:seed");
     write(&shared, OTHER, "urn:x:seed");
@@ -43,7 +43,7 @@ fn shared() -> SharedStore {
 }
 
 /// Wait until the hub's ring head reaches the store's latest transaction.
-async fn settled(shared: &SharedStore, hub: &Hub) {
+pub(super) async fn settled(shared: &SharedStore, hub: &Hub) {
     let latest = shared.read().latest_tx_id().unwrap();
     let mut head = hub.watch();
     for _ in 0..200 {
@@ -58,7 +58,7 @@ async fn settled(shared: &SharedStore, hub: &Hub) {
 /// Wait until the hub's reader has gone quiet: no read for 100 ms. A write can
 /// commit more than one transaction, and a late hint wakes one more (empty)
 /// read; measuring before it ends would charge it to the wrong step.
-async fn quiet(hub: &Hub) {
+pub(super) async fn quiet(hub: &Hub) {
     let reads = || hub.reads.load(std::sync::atomic::Ordering::Relaxed);
     let mut last = reads();
     loop {
@@ -72,7 +72,7 @@ async fn quiet(hub: &Hub) {
 }
 
 /// The page fields that do not depend on when the page was read.
-fn stable(page: &Json) -> Json {
+pub(super) fn stable(page: &Json) -> Json {
     serde_json::json!({
         "records": page["records"], "since": page["since"], "next_tx": page["next_tx"],
         "capture": page["capture"], "source": page["source"],
@@ -341,6 +341,7 @@ async fn a_ring_page_equals_the_store_page_for_predicate_and_subject_filters() {
             graph,
             predicates: predicate.map(|p| p.split(',').collect()),
             subjects: subject.map(|s| s.split(',').collect()),
+            member: None,
         };
         let mut cursor = start;
         let mut scanned = 0;

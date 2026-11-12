@@ -2667,8 +2667,26 @@ records whose predicate (`attribute`) and subject (`entity`) are in the lists,
 renumbered from 0; a transaction with no such record sends no frame. Lists are
 OR within a parameter and AND across parameters and with `graph`. An IRI the
 store has never seen matches nothing. The same `predicate` and `subject`
-parameters narrow `GET /changes`. Unrelated filter kinds and invalid resume
-cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
+parameters narrow `GET /changes`.
+
+A change stream also accepts one `member` condition, `<predicate> <term>`:
+the predicate an IRI in angle brackets and the term one RDF term in N-Triples
+syntax, an IRI (`<urn:Class>`) or a quoted literal (`"alice"`, `"x"@en`,
+`"5"^^<datatype>`). A record is kept when its subject has that predicate and
+term in the record's own graph (so with `graph=X`, in X only) in the state
+just before the record's transaction OR just after it. The transaction that
+moves a subject out of the condition therefore still arrives, carrying the
+retract and its `old_value`; later ones on that subject do not. The term is
+matched exactly: `"alice"` matches neither `"alice"^^<other>` nor
+`"alice"@en`, with no case folding or numeric equivalence (`"alice"` and
+`"alice"^^xsd:string` are the same term). Blank nodes, quoted triples and
+Turtle shorthand (`5`, `true`, prefixed names) are refused. `member`
+combines with the other filters by AND, and also narrows `GET /changes`.
+A predicate or IRI term the store has never seen matches nothing. The server
+evaluates at most 64 distinct `member` conditions at once, each once per
+commit for all its subscribers; a stream with a 65th is refused with HTTP
+503 until one ends. Unrelated filter kinds, a malformed `member` and invalid
+resume cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
 
 Delivery does not acknowledge a consumer. Commit applied data and its cursor
 atomically, then reconnect from that cursor after a disconnect. A transaction
@@ -2730,8 +2748,9 @@ From the server:
   the SSE data as a string, not parsed, because the part digests of a chunked
   transaction (`quipu.changes.begin`/`.part`/`.commit`) hash those exact bytes.
 - A subscription takes the same scope as its SSE stream: change subscriptions
-  take `graph`, `predicate` and `subject` (lists of IRIs without commas);
-  event subscriptions take `types` (a list), `group` and `graph`.
+  take `graph`, `predicate` and `subject` (lists of IRIs without commas) and
+  `member` (one `"<predicate> <term>"` string); event subscriptions take
+  `types` (a list), `group` and `graph`.
   An invalid scope, an unknown `feed`, a duplicate `sub`, a subscription over a
   limit and an unknown `op` are each answered with `quipu.error` for that
   message. The connection stays open.
@@ -2899,8 +2918,12 @@ Standards-flavoured read endpoints for semantic-web tooling.
 
 Returns fact-level change records after the optional `since` transaction.
 `capture` selects `new_values`, `old_and_new_values`, or `new_row`; `graph`
-optionally scopes the feed to one graph IRI. The response includes `next_tx`
+optionally scopes the feed to one graph IRI; `predicate`, `subject` and
+`member` narrow it as on `GET /changes/stream`. The response includes `next_tx`
 and a watermark so consumers can distinguish an idle feed from a stalled one.
+With `member`, one page walks at most 256 transactions: a page that reaches
+that bound returns what it kept (possibly no records) with `next_tx` at the
+last transaction walked, and the next page continues from there.
 
 ### `GET /entity/{iri}`
 
