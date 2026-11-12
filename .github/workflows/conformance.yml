@@ -14,38 +14,11 @@ name: Conformance
 # reads. They gate on "not worse than what we published", which is a condition
 # that is green today and stays meaningful all the way to 168/168.
 
-# ⚠️ `src/**` IS IN THESE FILTERS DELIBERATELY, AND WAS MISSING (aegis-1gp76j).
-# The ledger check asks whether a published ledger was derived from the code it
-# ships beside — so the push that can INVALIDATE a ledger is a push to `src/`,
-# and that was the one push this workflow did not run on. Measured 2026-09-05:
-# main sat at f7150dc3 with a ledger derived at 4aa67ad5, differing in
-# src/rdf.rs, and every main run was GREEN because the job never fired.
-#
-# Only the fast `published-matches-ledger` job is affected; the re-derive job is
-# `schedule || workflow_dispatch` and stays skipped, so this costs seconds.
-# Cargo changes must reach the same provenance gate as source changes.
-# Keep these triggers aligned with conformance_report.py CODE_PATHS, including
-# release version bumps whose generated PRs otherwise never run this workflow.
+# Required CI calls this workflow on every PR, main push and queue candidate,
+# without path filters. Release correctness depends on its blocking verdict.
+# Standalone release/weekly/dispatch runs provide read-only audit artifacts.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'benchmark/public/**'
-      - 'docs/book/src/benchmarks/**'
-      - '.github/workflows/conformance.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'benchmark/public/**'
-      - 'docs/book/src/benchmarks/**'
-      - '.github/workflows/conformance.yml'
+  workflow_call:
   release:
     types: [published]
   schedule:
@@ -66,7 +39,7 @@ permissions:
 jobs:
   published-matches-ledger:
     name: Published results match the ledgers
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push') }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     steps:
       # fetch-depth: 0 is REQUIRED, not tidiness — the sibling provenance job
@@ -85,35 +58,13 @@ jobs:
       - name: Benchmark unit tests
         run: python3 -m unittest discover -s benchmark/public -p 'test_*.py'
 
-  # A SEPARATE JOB, not a second step, and that distinction is the whole fix
-  # (aegis-fn3hdn). GitHub surfaces check runs at the JOB level: two steps in one
-  # job produce ONE check with ONE name, so a step-level split leaves the reader
-  # exactly where they started — and worse, the single name then asserts
-  # something specific ("published results match") while the actual failure was
-  # the other arm. Measured on PR #246, which is the PR that introduced this:
-  # the content step PASSED and the provenance step FAILED, and the PR page
-  # reported one red check named for content.
-  #
-  #   CONTENT    an OUTCOME moved — a real defect, every time.
-  #   PROVENANCE the ledgers name a revision that is not this HEAD — a stale
-  #              STAMP. Routine; one re-derive fixes it, and it says nothing
-  #              about conformance results.
-  #
-  # CONTENT blocks. PROVENANCE REPORTS (aegis-qmrymu): a stale stamp exits 0 with
-  # a notice and sets `stale=true`, and re-run-conformance below then re-derives
-  # on that signal. Measured before: 17 of 37 PR runs in 13.5h red on this job
-  # alone, all 17 cleared by a hand dispatch. UNVERIFIED (a shallow or broken
-  # checkout) still fails — a check that could not look is not a fresh stamp.
-  # The check NAME still tells a reader which question failed. Measured cost of not doing so: three quipu
-  # PRs in one day (#237, #244, #245) sat red on the provenance arm looking like
-  # broken conformance, while every re-derive changed nothing but duration_ms
-  # and the stamps.
+  # Provenance is a blocking pre-merge check. A stale ledger must be
+  # updated in the source PR; a later bot commit cannot repair this gate.
+  # Strict mode checks the entire candidate tree, including merge_group.
   ledger-provenance:
     name: Ledgers were derived from the code they ship with
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push') }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
-    outputs:
-      stale: ${{ steps.provenance.outputs.stale }}
     steps:
       # fetch-depth: 0 is REQUIRED, not tidiness. This asks whether each ledger
       # was derived from the code it ships with, which needs the ledger's own
@@ -127,21 +78,11 @@ jobs:
 
       - name: Ledgers were derived from the code they ship with
         id: provenance
-        run: python3 benchmark/public/conformance_report.py --check --arm provenance --report-stale
+        run: python3 benchmark/public/conformance_report.py --check --arm provenance --pr-base ""
 
-  # Also runs when the provenance job reports a STALE stamp (aegis-qmrymu):
-  #   pull_request  PR mode, so only a PR whose OWN code changes the conformance
-  #                 inputs triggers it. It gates that PR on check_regression
-  #                 BEFORE merge. That is not optional: the red provenance arm
-  #                 used to force a hand re-derive, and that re-derive was the
-  #                 only pre-merge regression check a src PR ever got. Making
-  #                 provenance report-only without this would silently move the
-  #                 regression gate to after merge. Nothing is committed here.
-  #   push (main)   derives at the merged SHA and uploads
-  #                 conformance-ledgers-<sha>; the aegis ledger cron commits it
-  #                 through a chore PR, so main is stamped with no human step.
-  # `!cancelled()` is needed because ledger-provenance is SKIPPED on release,
-  # schedule and dispatch, and a skipped `needs` would otherwise skip this job.
+  # A failed provenance check still produces fresh artifacts for the author
+  # to adopt in this PR. Scheduled runs remain read-only audits; no bot commits.
+  # Queue candidates are always remeasured against the committed outcomes.
   re-run-conformance:
     name: Re-derive conformance from the pinned W3C suite
     needs: ledger-provenance
@@ -150,7 +91,8 @@ jobs:
         github.event_name == 'release' ||
         github.event_name == 'schedule' ||
         github.event_name == 'workflow_dispatch' ||
-        needs.ledger-provenance.outputs.stale == 'true'
+        github.event_name == 'merge_group' ||
+        needs.ledger-provenance.result == 'failure'
       ) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -336,19 +278,30 @@ jobs:
             --baseline benchmark/public/results/sparql12.json \
             --candidate /tmp/sparql12.json
 
+      - name: Preserve raw run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-run-${{ github.sha }}
+          path: |
+            /tmp/sparql*.json
+            /tmp/shacl-core.json
+            /tmp/rdf11-syntax.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Create stable ledgers for the author
+        run: python3 benchmark/public/ledger_snapshot.py --source /tmp --output /tmp/stable-ledgers
+
+      - name: Candidate outcomes match the committed ledgers
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push' }}
+        run: python3 benchmark/public/ledger_snapshot.py --source /tmp/stable-ledgers --check benchmark/public/results
+
       - name: Publish the re-derived ledgers
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: conformance-ledgers-${{ github.sha }}
-          path: |
-            /tmp/sparql11-syntax.json
-            /tmp/sparql11-evaluation.json
-            /tmp/sparql11-entailment.json
-            /tmp/sparql11-federated-query.json
-            /tmp/shacl-core.json
-            /tmp/rdf11-syntax.json
-            /tmp/sparql10-evaluation.json
-            /tmp/sparql12.json
+          path: /tmp/stable-ledgers/*.json
           if-no-files-found: warn
           retention-days: 90

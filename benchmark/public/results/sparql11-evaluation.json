@@ -3,8 +3,6 @@
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
   "quipu_revision": "cd86223bd2afdce9ce616cdaa90825b6d23ab3ab",
   "quipu_version": "quipu 0.17.0\ngit_sha: cd86223bd2afdce9ce616cdaa90825b6d23ab3ab\ngit_dirty: false",
-  "generated_at": "2026-11-10T03:22:22Z",
-  "generated_by": "https://github.com/intigraph/quipu/actions/runs/42748227370",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",

@@ -36,6 +36,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  conformance:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    uses: ./.github/workflows/conformance.yml
+
   query-builders:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Typed SPARQL client builders
@@ -902,7 +906,7 @@ jobs:
   release-correctness:
     name: Release correctness
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
-    needs: [clippy, test, build, check, shacl-write-path, generated-docs]
+    needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass

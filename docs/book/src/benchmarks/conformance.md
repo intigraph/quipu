@@ -436,7 +436,7 @@ Ledger: [`shacl-write-path.json`](https://github.com/intigraph/quipu/blob/main/b
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-11-10T03:22:39Z by [CI run](https://github.com/intigraph/quipu/actions/runs/42748227370), from quipu `cd86223bd2af`.
+Ledger records quipu `cd86223bd2af`. Per-run timestamps, producer URLs and timings are retained in the [Conformance CI artifacts](https://github.com/intigraph/quipu/actions/workflows/conformance.yml), outside the stable committed ledger.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.

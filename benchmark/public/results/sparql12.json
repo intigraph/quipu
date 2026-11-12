@@ -2476,7 +2476,5 @@
       "status": "unsupported",
       "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
     }
-  ],
-  "generated_at": "2026-11-10T03:22:53Z",
-  "generated_by": "https://github.com/intigraph/quipu/actions/runs/42748227370"
+  ]
 }

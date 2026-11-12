@@ -940,8 +940,10 @@ def render_markdown(data: dict) -> str:
         prov = f"Ledger re-derived {when} by {origin}, from quipu `{led['quipu_revision'][:12]}`."
     else:
         prov = (
-            "Ledger carries no re-derivation provenance — it predates "
-            "`generated_at`/`generated_by`, so WHEN and BY WHAT are unknown."
+            f"Ledger records quipu `{led['quipu_revision'][:12]}`. "
+            "Per-run timestamps, producer URLs and timings are retained in the "
+            "[Conformance CI artifacts](https://github.com/intigraph/quipu/actions/workflows/conformance.yml), "
+            "outside the stable committed ledger."
         )
     out += ["", "## Entailment-regime commitments", "", headline, prov,
         "Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.", "",

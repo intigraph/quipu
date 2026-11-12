@@ -84,7 +84,5 @@
       "status": "passed",
       "diagnostic": ""
     }
-  ],
-  "generated_at": "2026-11-10T03:22:23Z",
-  "generated_by": "https://github.com/intigraph/quipu/actions/runs/42748227370"
+  ]
 }

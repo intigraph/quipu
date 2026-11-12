@@ -1,6 +1,5 @@
 """Cargo-only changes must reach and invalidate the conformance ledger gate."""
 import contextlib
-import fnmatch
 import pathlib
 import re
 import unittest
@@ -34,17 +33,22 @@ class CargoConformanceTest(unittest.TestCase):
                 code, messages = probe._provenance(root, {"quipu_revision": base}, pr_base)
                 self.assertEqual(code, 0, messages)
 
-    def test_workflow_selects_cargo_on_pr_and_main_push(self):
+    def test_required_ci_calls_blocking_conformance_for_pr_push_and_queue(self):
         root = pathlib.Path(__file__).resolve().parents[2]
-        workflow = (root / ".github/workflows/conformance.yml").read_text()
-        for event in ("pull_request", "push"):
-            section = re.search(rf"^  {event}:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow, re.M | re.S)
+        ci = (root / ".github/workflows/ci.yml").read_text()
+        for event in ("pull_request", "push", "merge_group"):
+            section = re.search(rf"^  {event}:\n(.*?)(?=^  [a-z_]+:|\Z)", ci, re.M | re.S)
             self.assertIsNotNone(section)
-            paths = re.findall(r"^      - '([^']+)'$", section.group(1), re.M)
-            for filename in ("Cargo.toml", "Cargo.lock", "src/lib.rs"):
-                with self.subTest(event=event, filename=filename):
-                    self.assertTrue(any(fnmatch.fnmatchcase(filename, p) for p in paths),
-                                    (event, filename, paths))
+            self.assertNotIn("paths:", section.group(1), "all source inputs must reach the gate")
+        self.assertIn("uses: ./.github/workflows/conformance.yml", ci)
+        required = ci.split("  release-correctness:", 1)[1].split("  extended-correctness:", 1)[0]
+        self.assertRegex(required, r"needs: \[[^\]]*conformance")
+        workflow = (root / ".github/workflows/conformance.yml").read_text()
+        self.assertIn("  workflow_call:", workflow)
+        provenance = workflow.split("  ledger-provenance:", 1)[1].split("  re-run-conformance:", 1)[0]
+        self.assertIn("--arm provenance --pr-base \"\"", provenance)
+        self.assertNotIn("--report-stale", provenance)
+        self.assertIn("github.event_name == 'merge_group'", provenance)
 
 
 if __name__ == "__main__":
