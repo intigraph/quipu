@@ -96,6 +96,11 @@ path = "examples/agentbranches/main.rs"
 required-features = ["shacl"]
 
 [[example]]
+name = "merge_native_oracle"
+path = "examples/merge_native_oracle/main.rs"
+required-features = ["shacl"]
+
+[[example]]
 name = "merge_load"
 required-features = ["shacl"]
 
@@ -217,6 +222,8 @@ ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
 tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [features]
+## Diagnostic planner projection for benchmark examples; no store or writer access.
+merge-benchmark = []
 default = ["full", "bundled-onnx"]
 # Source-only HA profile: not in default/full, no server/config/packaging caller.
 ha-read-profile = ["rustix/time"]
