@@ -182,7 +182,8 @@ thread_local! {
 
 /// Owned evidence for synchronous internal writers. A declared JSON actor is
 /// never installed here; adapters establish this scope from verified evidence.
-pub(crate) fn current_identity() -> Option<Identity> {
+#[must_use]
+pub fn current_identity() -> Option<Identity> {
     IDENTITY.with(|slot| slot.borrow().clone())
 }
 

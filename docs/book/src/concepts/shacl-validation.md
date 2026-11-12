@@ -17,6 +17,38 @@ hw:korimako a hw:Host .            # Missing required hostname
 With SHACL shapes loaded, Quipu catches these problems before they enter
 the fact log.
 
+## Atomic documents and independent writes
+
+Each independent write must be valid in its own post-state. For example, a
+new node with a required name cannot be committed with only its type and
+completed by a later write. The first write is missing a required value even
+if the proposed final graph would be valid. Existing-context refusals are a
+different problem: a value already in the destination graph must be considered
+under the write path's documented context rules.
+
+For data that is valid only together, stage a complete RDF document on the
+client, then submit it once. The existing `POST /knot` / `quipu_knot` operation
+accepts the completed document as `turtle`; it validates and commits its data
+atomically. No new staging graph or admission bypass is needed. The CLI also
+accepts a complete file:
+
+```bash
+# These are chunks of ONE RDF document, with shared prefixes/base and labels.
+cat document.part1.ttl document.part2.ttl > complete.ttl
+quipu knot complete.ttl --shapes contract.ttl --db graph.db
+```
+
+Do not submit the parts separately or use chunked `quipu ingest` as an atomic
+commit: each ingest chunk is a separate transaction. Preserve the original
+document's blank-node identity while assembling it; labels from unrelated RDF
+documents do not identify the same node. An invalid completed document is still
+refused without committing its data. A refusal audit record may be retained.
+
+The W3C `shacl-shacl` fixture is a together-only document: it describes shapes
+and lists that refer to definitions later in the same document. The write-path
+harness tests its staged atomic commits and retains independent-prefix
+refusals separately, including the violated component, path and focus node.
+
 ## Class targets and subclasses
 
 A `sh:targetClass` selects instances of that class and of its subclasses,
@@ -274,10 +306,19 @@ publication, pinning, loading and validation have been verified. They cover:
 - `LXCContainer`, `ProxmoxNode`, `BareMetalHost` — compute resources
 - `SystemdService`, `WebApplication`, `Database` — services
 - `CommandDiskImpactObservation` — one privacy-preserving command/filesystem
-  measurement. `diskDeltaBytes` is signed: positive values mean space consumed
-  and negative values mean space freed. Command and filesystem identity use
-  canonical classes rather than raw arguments or paths; aggregate counts and
-  quantiles belong in a separate summary entity.
+  disk/command-class summary. New producers reuse a stable subject for each
+  filesystem and finite command class, dropping repository and cwd from its
+  identity. `runCount`, `maximumDeltaBytes`, histogram `p95DeltaBytes` and
+  `observedAt` describe the summary; `diskDeltaBytes` is the approximate p90 bucket upper bound. Disk advice
+  uses the exact class maximum to avoid lowering protection by pooling
+  repositories. Signed values mean space consumed (positive) or
+  freed (negative). `aggregateState` holds a fixed 66-bucket histogram and last-update retry
+  identity, with no raw sample list; atomic compare-and-swap replaces the
+  coherent summary. It never
+  mints a subject per run. Historical per-run nodes remain valid during staged
+  migration, and the reader can use exact-signature history until a class
+  aggregate exists. Historical retraction requires a separately admitted,
+  verified archive/export plan; this schema change deletes nothing.
 - `ConfigFile` — optional migration-safe `configPath` and `contentSha256`
   facts support exact drift lookups. When present, each is single-valued and
   the digest must be a full lowercase SHA-256 hexadecimal string.

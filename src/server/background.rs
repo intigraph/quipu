@@ -48,7 +48,7 @@ pub(crate) fn start(
         });
     }
 
-    wal_maintenance::spawn_periodic_checkpoint(push_store_outer.clone());
+    wal_maintenance::spawn_periodic_checkpoint(&push_store_outer);
     graph_metrics::spawn_refresh(&push_store_outer);
 
     // Configured read-only primaries still publish metrics and checkpoint WAL,
@@ -189,4 +189,14 @@ fn spawn_vector_retention(store: &SharedStore, cfg: &quipu::EmbeddingConfig) {
             }
         }
     });
+}
+
+#[path = "registry_digests.rs"]
+mod registry_digests;
+
+/// Listener-ready callback. Read-only, replica and relay processes pass None.
+pub(crate) fn start_registry_digests(store: Option<SharedStore>) {
+    if let Some(store) = store {
+        registry_digests::spawn(store);
+    }
 }

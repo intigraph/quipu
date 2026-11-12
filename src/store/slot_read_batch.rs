@@ -4,6 +4,7 @@ use super::slot_reads::SlotReadLimits;
 use crate::resolver_contract::Slot;
 use crate::write_base::PreparedSlotReads;
 use crate::{Error, Fact, Result};
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy)]
 pub(crate) struct BatchReadLimits {
@@ -18,6 +19,7 @@ pub(crate) struct SlotViews {
     pub slot: Slot,
     pub base: Vec<Fact>,
     pub current: Vec<Fact>,
+    pub current_claims_digest: [u8; 32],
 }
 
 pub(crate) struct BatchViews {
@@ -100,9 +102,9 @@ impl Store {
                     )?;
                     out.physical_claims += read.claims;
                     out.encoded_bytes += read.bytes;
-                    read.facts
+                    (read.facts, read.claims_digest)
                 } else {
-                    Vec::new()
+                    (Vec::new(), Sha256::digest(b"quipu-slot-claims/v1\0").into())
                 };
                 sides.push(facts);
             }
@@ -110,8 +112,9 @@ impl Store {
             let base = sides.pop().ok_or_else(refused)?;
             out.slots.push(SlotViews {
                 slot: slot.clone(),
-                base,
-                current,
+                base: base.0,
+                current: current.0,
+                current_claims_digest: current.1,
             });
         }
         if !matches()? {

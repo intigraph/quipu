@@ -1,0 +1,40 @@
+Script started on 2026-11-09 06:58:44-05:00 [COMMAND="python3 docs/probes/pr-demos/typed-limit/run.py" <not executed on terminal>]
+BEFORE: base 360f8f49 with the same newly injected work-bound test
+running 1 test
+TYPED_LIMIT_ONE_VM_INSTRUCTIONS=120101
+
+thread 'sparql::triple::limited_tests::chaski_typed_limit_one_avoids_grouping_the_type_relation' (2810689) panicked at src/sparql/triple/limited_tests.rs:118:5:
+LIMIT 1 performed 120101 VM instructions
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sparql::triple::limited_tests::chaski_typed_limit_one_avoids_grouping_the_type_relation ... FAILED
+
+failures:
+
+failures:
+    sparql::triple::limited_tests::chaski_typed_limit_one_avoids_grouping_the_type_relation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3488 filtered out; finished in 1.72s
+
+AFTER: candidate native evaluator, same 10000 typed facts and canary query
+
+running 9 tests
+
+thread 'sparql::triple::limited_tests::limited_scope_refuses_unsafe_shapes_and_restores_after_failure' (3222801) panicked at src/sparql/triple/limited_tests.rs:286:13:
+owned unwind control
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sparql::triple::limited_tests::limited_scope_refuses_unsafe_shapes_and_restores_after_failure ... ok
+test sparql::triple::limited_tests::typed::fixed_predicate_scope_keeps_wrapped_and_seeded_queries_on_original_paths ... ok
+test sparql::triple::limited_tests::one_seed_cannot_exceed_an_explicit_materialization_budget ... ok
+test sparql::triple::limited_tests::ordinary_filtered_scan_keeps_existing_join_budget_semantics ... ok
+test sparql::triple::limited_tests::limited_canonical_rows_keep_duplicate_numeric_and_graph_semantics ... ok
+test sparql::triple::limited_tests::typed::fixed_predicate_limits_preserve_full_canonical_multisets ... ok
+LIMIT_ONE_VM_INSTRUCTIONS=35
+test sparql::triple::limited_tests::explicit_limit_one_avoids_grouping_the_entire_graph ... ok
+test sparql::triple::limited_tests::limited_attached_rows_preserve_subject_predicate_and_object_aliases ... ok
+TYPED_LIMIT_ONE_VM_INSTRUCTIONS=52
+test sparql::triple::limited_tests::typed::chaski_typed_limit_one_avoids_grouping_the_type_relation ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 3482 filtered out; finished in 1.80s
+
+
+Script done on 2026-11-09 06:58:46-05:00 [COMMAND_EXIT_CODE="0"]

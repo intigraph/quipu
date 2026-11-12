@@ -468,6 +468,8 @@ qp export
 
 - `--format <VALUE>`: Output or input format for this operation.
 
+- `--read-only`: Export a cold local snapshot without writes; refuses sidecars and attachments.
+
 ## `qp databook`
 
 Export a graph as a DataBook, or import a DataBook's graph data.
@@ -793,6 +795,8 @@ qp share
 - `--shapes <VALUE>`: Shapes used for validation or packaging.
 
 - `--queries <VALUE>`: Stored queries to include.
+
+- `--competency <VALUE>`: Verbatim competency.toml to compile and seal with the share.
 
 - `--alignments <VALUE>`: Reviewed SSSOM/RDF alignment file to carry.
 
@@ -1144,6 +1148,16 @@ Merge pendants from Git snapshots and stop before committing.
 qp git-merge <ref>
 ```
 
+## `qp git-mergetool`
+
+Interactively resolve a pendant or declared DataBook using the standard merge layout.
+
+```text
+qp git-mergetool <pendant-export.nt|book.databook.md>
+```
+
+- `--by <VALUE>`: Identity recording a resolution.
+
 ### `qp git-merge show`
 
 Show a pendant's pending merge decisions in the standard layout.
@@ -1172,6 +1186,22 @@ Low-level Git merge driver for pendant files.
 
 ```text
 qp merge-driver <base> <ours> <theirs> <path>
+```
+
+## `qp databook-merge-driver`
+
+Low-level Git merge driver for declared DataBook files.
+
+```text
+qp databook-merge-driver <base> <ours> <theirs> <path>
+```
+
+## `qp databook-check`
+
+Verify an immutable DataBook merge result and its decisions.
+
+```text
+qp databook-check <base-ref> <ours-ref> <theirs-ref> <result-ref> <path>
 ```
 
 ## `qp pendant-resolve`

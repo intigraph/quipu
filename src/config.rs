@@ -769,6 +769,10 @@ pub struct ServerConfig {
     /// Optional verifier-only registry of additive per-crew credentials.
     pub crew_credentials_file: Option<String>,
 
+    /// Separate verifier registry for exact-graph machine writers. Every write
+    /// requires an owner-local grant; no shared/ordinary-named fallback.
+    pub scoped_writer_credentials_file: Option<String>,
+
     /// Verifier-only full-store replication identities. This is a distinct
     /// registry, never a source of graph-write or scoped-read grants.
     pub replication_credentials_file: Option<String>,
@@ -874,6 +878,7 @@ impl Default for ServerConfig {
             auth_token: None,
             session_keys: crate::http_auth::SessionKeyPolicy::default(),
             crew_credentials_file: None,
+            scoped_writer_credentials_file: None,
             replication_credentials_file: None,
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,
@@ -911,11 +916,8 @@ impl ServerConfig {
         if self.heavy_read_operations.as_slice() != ["owner-rows"] {
             return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
         }
-        if self.read_processes > 0
-            || self.heavy_read_permits == 0
-            || self.heavy_read_permits >= ordinary_readers
-        {
-            return Err("heavy reads require in-process ordinary readers and 0 < heavy_read_permits < ordinary_readers".into());
+        if self.heavy_read_permits == 0 || self.heavy_read_permits >= ordinary_readers {
+            return Err("heavy reads require 0 < heavy_read_permits < ordinary_readers".into());
         }
         Ok(())
     }
@@ -925,74 +927,11 @@ impl ServerConfig {
 #[path = "config/heavy_reads_tests.rs"]
 mod heavy_reads_tests;
 
-/// Embedding configuration for auto-embedding on write.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct EmbeddingConfig {
-    /// Whether to auto-embed entities after writes (default: true).
-    pub auto_embed: bool,
-
-    /// Number of entities to embed in each batch (default: 32).
-    pub embed_batch_size: usize,
-
-    /// Path to the ONNX model file (e.g. all-MiniLM-L6-v2/onnx/model.onnx).
-    pub model_path: Option<PathBuf>,
-
-    /// Path to the tokenizer.json file (same directory as model typically).
-    pub tokenizer_path: Option<PathBuf>,
-
-    /// Embedding dimension (default: 384 for all-MiniLM-L6-v2).
-    pub dimension: usize,
-
-    /// Maximum input tokens fed to the model; longer inputs are truncated
-    /// (default: 256). Caps the tensor size so an oversized `episode_body`
-    /// can't blow up the sequence length or degrade embeddings (hq-7v0).
-    pub max_sequence_length: usize,
-
-    /// Predicate IRIs whose values never enter an entity's embedding text
-    /// (default: none). For values that change on every write but carry no
-    /// meaning to search, such as a write-probe marker: each new value would
-    /// otherwise make new text and so a new vector, while the identical-text
-    /// skip keeps the vector when only an excluded predicate changed. The
-    /// facts are still stored and queryable; only the embedding ignores them.
-    pub exclude_predicates: Vec<String>,
-
-    /// Days a superseded vector (one whose `valid_to` is set) is kept before
-    /// the server deletes it (default: 30; `0` keeps every version forever).
-    /// Current vectors are never deleted. The cost is recall for
-    /// `search --valid-at`: a point in time older than this window finds
-    /// only the entities whose vector was still current then or is current
-    /// now, not the older text of entities that changed since. A row whose
-    /// `valid_to` is not a parseable timestamp is kept.
-    pub superseded_retention_days: u32,
-
-    /// Most superseded vectors deleted in one hourly retention pass
-    /// (default: 50 000). A store upgraded with a large backlog drains it
-    /// over several passes instead of in one long delete.
-    pub superseded_prune_max_per_pass: usize,
-}
-
-/// Default for [`EmbeddingConfig::superseded_retention_days`].
-pub const DEFAULT_SUPERSEDED_RETENTION_DAYS: u32 = 30;
-
-/// Default for [`EmbeddingConfig::superseded_prune_max_per_pass`].
-pub const DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS: usize = 50_000;
-
-impl Default for EmbeddingConfig {
-    fn default() -> Self {
-        Self {
-            auto_embed: true,
-            embed_batch_size: 32,
-            model_path: None,
-            tokenizer_path: None,
-            dimension: 384,
-            max_sequence_length: 256,
-            exclude_predicates: Vec::new(),
-            superseded_retention_days: DEFAULT_SUPERSEDED_RETENTION_DAYS,
-            superseded_prune_max_per_pass: DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS,
-        }
-    }
-}
+#[path = "config/embedding.rs"]
+mod embedding;
+pub use embedding::{
+    DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS, DEFAULT_SUPERSEDED_RETENTION_DAYS, EmbeddingConfig,
+};
 
 // `QuipuConfig::load` / `load_from` (the host-file half) live in
 // `config_load` — split for the file-size ratchet, native-only by nature.

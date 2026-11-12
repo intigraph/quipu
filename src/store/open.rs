@@ -248,7 +248,41 @@ impl Store {
         super::ownership_startup::require_unenrolled(&conn)?;
         let inspected = Self::with_connection(conn);
         inspected.ownership_state()?;
-        let conn = inspected.conn;
+        Self::init_after_admission_checks(inspected.conn, attachments)
+    }
+
+    /// S1 enrolled writable open (docs/design/ownership-startup-boundary.md,
+    /// "S1"). The only route to a writable handle on an enrolled database:
+    /// admission first, then initialization while the startup latch is held,
+    /// then the generation pin and admitted binding. Any doubt is a refusal.
+    #[cfg(not(target_arch = "wasm32"))]
+    // Dormant: no production caller until a witness-profile resolver and an
+    // enrolled lineage exist (S1 contract, "Still refusing after S1").
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn open_enrolled(
+        path: &str,
+        config: &super::ownership_admission::EnrolledStartup<'_>,
+    ) -> Result<Self> {
+        let admission = super::ownership_admission::admit(std::path::Path::new(path), config)?;
+        let conn = Connection::open(admission.database_path())?;
+        admission.same_file_as_admitted()?;
+        let store = Self::init_after_admission_checks(conn, &[])?;
+        let fence = store.ownership_fence.clone().ok_or_else(|| {
+            crate::error::Error::PolicyDenied(
+                "store handoff: enrolled startup needs a native commit fence".into(),
+            )
+        })?;
+        admission.install(&fence)?;
+        store.ensure_ownership_writable()?;
+        Ok(store)
+    }
+
+    /// Private to this module: callers must have passed the ordinary
+    /// unenrolled checks above or hold an S1 `Admission` (`open_enrolled`).
+    fn init_after_admission_checks(
+        conn: Connection,
+        attachments: &[attach::Attachment],
+    ) -> Result<Self> {
         crate::lexical::register(&conn)?;
         // Per-row SPARQL scans reuse cached statements, one per text and
         // nesting depth (aegis-ek4); a multi-branch board query needs more
@@ -329,6 +363,9 @@ impl Store {
         Self::migrate_frozen_packs(&conn)?;
         Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
+        Self::migrate_writer_scope(&conn)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        Self::migrate_client_changesets(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
         // the space-collision check needs the local store's own space — which
@@ -576,6 +613,9 @@ impl Store {
             write_shapes: None,
             write_reference_graphs: None,
             poststate_profile: PoststateProfile::default(),
+            validator_observation: std::cell::RefCell::new(None),
+            #[cfg(feature = "owl")]
+            owl_cache_source: None,
             current_g_index: std::cell::Cell::new(None),
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]

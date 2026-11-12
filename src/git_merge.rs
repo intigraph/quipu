@@ -2,12 +2,20 @@
 use crate::error::{Error, Result};
 use crate::git_merge_alias::{AliasProposal, propose};
 pub use crate::git_merge_repo::{
-    check, check_history, driver, merge, merge_refs, merge_with_pending, resolve, resolve_by,
+    check, check_history, driver, merge, merge_refs, merge_with_pending, reconcile, resolve,
+    resolve_by,
 };
 use crate::share::{ShareManifest, canonicalize_ntriples, manifest_bytes, sha256};
-use crate::share_merge::{DecisionRecord, Graph, merge_graphs, parse_graph};
+use crate::share_merge::{DecisionRecord, Graph, parse_graph};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+#[path = "git_merge_core.rs"]
+mod core;
+#[path = "databook_merge.rs"]
+pub mod databook;
+#[path = "git_merge_graph.rs"]
+mod graph;
 
 #[derive(Clone)]
 pub(crate) struct Pack {
@@ -17,10 +25,14 @@ pub(crate) struct Pack {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Decisions {
     pub schema: String,
     pub inputs: [String; 3],
     pub conflicts: Vec<DecisionRecord>,
+    /// v2 report kinds aligned with rows; v1 files omit them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kinds: Vec<crate::share_merge_decisions_view::ConflictKind>,
     pub aliases: Vec<AliasProposal>,
     #[serde(default)]
     pub resolutions: BTreeMap<String, String>,
@@ -33,25 +45,7 @@ pub struct Decisions {
 
 /// The values a conflict resolves to under `choice`, or why it cannot.
 pub(crate) fn resolved_values(c: &DecisionRecord, choice: &str) -> Result<Vec<String>> {
-    Ok(match choice {
-        "base" => c.base.clone(),
-        "ours" => c.ours.clone(),
-        "theirs" => c.theirs.clone(),
-        "both" => {
-            let values = crate::share_merge_decisions::union(&c.ours, &c.theirs);
-            if values.len() > c.max_count {
-                return Err(invalid(format!(
-                    "`both` would hold {} values for {} <{}>, above sh:maxCount {}",
-                    values.len(),
-                    c.subject,
-                    c.predicate,
-                    c.max_count
-                )));
-            }
-            values
-        }
-        _ => return Err(invalid("conflict resolution must be base/ours/theirs/both")),
-    })
+    core::resolve(c, choice)
 }
 
 pub(crate) struct Merged {
@@ -78,6 +72,7 @@ pub(crate) fn spawn_git(e: &std::io::Error) -> Error {
 impl Pack {
     pub(crate) fn verify(&self) -> Result<()> {
         let m = &self.manifest;
+        crate::competency::carriage::refuse_unsupported(m, "pendant Git merge")?;
         if m.schema != "https://github.com/scbrown/quipu/share-manifest/v1"
             || m.files.graph != "export.nt"
             || m.files.shapes != "shapes.ttl"
@@ -189,19 +184,17 @@ pub(crate) fn plan(base: &Pack, ours: &Pack, theirs: &Pack) -> Result<Merged> {
             "Git pendant merge requires IRI subjects/objects; skolemize blank nodes first",
         ));
     }
-    let (graph, conflicts) = merge_graphs(&b, &o, &t, &shapes)?;
-    let decisions = Decisions {
-        schema: "https://github.com/scbrown/quipu/git-decisions/v1".into(),
-        inputs: [
+    let (graph, decisions) = graph::prepare(
+        &b,
+        &o,
+        &t,
+        &shapes,
+        [
             base.manifest.share_id.clone(),
             ours.manifest.share_id.clone(),
             theirs.manifest.share_id.clone(),
         ],
-        conflicts,
-        aliases: propose(&b, &o, &t),
-        resolutions: BTreeMap::new(),
-        resolved_by: BTreeMap::new(),
-    };
+    )?;
     let mut pack = Pack {
         graph: render(&graph),
         shapes,
@@ -218,69 +211,12 @@ pub(crate) fn plan(base: &Pack, ours: &Pack, theirs: &Pack) -> Result<Merged> {
 
 impl Merged {
     pub(crate) fn apply(&mut self, recorded: Option<&Decisions>) -> Result<bool> {
-        if let Some(recorded) = recorded {
-            let mut expected = self.decisions.clone();
-            expected.resolutions = recorded.resolutions.clone();
-            expected.resolved_by = recorded.resolved_by.clone();
-            if expected != *recorded {
-                return Err(invalid(
-                    "stale or altered decisions: inputs/proposals differ",
-                ));
-            }
-            self.decisions = expected;
-        }
-        let mut graph = parse_graph(&self.pack.graph, "merge output")?;
-        let mut known = std::collections::BTreeSet::new();
-        let mut unresolved = 0;
-        for (i, c) in self.decisions.conflicts.iter().enumerate() {
-            let key = format!("conflict:{i}");
-            known.insert(key.clone());
-            let values = match self.decisions.resolutions.get(&key) {
-                Some(choice) => resolved_values(c, choice)?,
-                None => {
-                    unresolved += 1;
-                    continue;
-                }
-            };
-            graph.retain(|t| {
-                t.subject.to_string() != c.subject || t.predicate.as_str() != c.predicate
-            });
-            for value in &values {
-                graph.extend(parse_graph(
-                    &format!("{} <{}> {} .", c.subject, c.predicate, value),
-                    "resolution",
-                )?);
-            }
-        }
-        for (i, a) in self.decisions.aliases.iter().enumerate() {
-            let key = format!("alias:{i}");
-            known.insert(key.clone());
-            match self.decisions.resolutions.get(&key).map(String::as_str) {
-                Some("accept") => graph.extend(parse_graph(
-                    &format!(
-                        "{} <http://www.w3.org/2002/07/owl#sameAs> {} .",
-                        a.ours, a.theirs
-                    ),
-                    "alias resolution",
-                )?),
-                Some("reject") => {}
-                None => unresolved += 1,
-                _ => return Err(invalid("alias resolution must be accept/reject")),
-            }
-        }
-        if self
-            .decisions
-            .resolutions
-            .keys()
-            .any(|k| !known.contains(k))
-        {
-            return Err(invalid("unknown decision key"));
-        }
+        let (graph, ready) = graph::apply(&self.pack.graph, &mut self.decisions, recorded)?;
         self.pack.graph = render(&graph);
         self.pack.rehash()?;
-        if unresolved == 0 {
+        if ready {
             validate(&self.pack)?;
         }
-        Ok(unresolved == 0)
+        Ok(ready)
     }
 }

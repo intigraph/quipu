@@ -45,6 +45,28 @@ def equal(actual, expected):
     return hashlib.sha256("\n".join(sorted(str(t) for t in a)).encode()).hexdigest()
 
 
+def decision_conflicts(file, expected_slots):
+    """Count pending conflicts separately from R2's explicit convergent rows."""
+    conflicts = []
+    seen = set()
+    for row in file["rows"]:
+        slot = (row["subject"].strip("<>"), row["predicate"])
+        if slot in seen:
+            raise AssertionError("duplicate decision slot")
+        seen.add(slot)
+        if row.get("kind") == "convergent":
+            if (row["ours"] != row["theirs"]
+                    or row.get("decision") != {"choose": "continue"}
+                    or slot in expected_slots):
+                raise AssertionError("invalid convergent decision row")
+        else:
+            conflicts.append(row)
+    actual = {(r["subject"].strip("<>"), r["predicate"]) for r in conflicts}
+    if actual != expected_slots:
+        raise AssertionError("decision rows do not cover the seeded slots")
+    return conflicts
+
+
 class Run:
     def __init__(self, root, driver, cli, timeout):
         self.root, self.driver, self.cli = root, driver, cli
@@ -122,15 +144,14 @@ class Run:
         self.cmd([self.cli, "merge", incoming, "--emit-decisions", decisions, "--db", db])
         self.samples[-1]["operation"] = "CLI --emit-decisions"
         file = json.loads(decisions.read_text())
-        if len(file["rows"]) != len(expected_slots):
-            raise AssertionError("decision rows do not cover the seeded slots")
+        pending = decision_conflicts(file, expected_slots)
         labels = file.get("labels", {})
         if expected_slots and not all(s in labels and model.STATUS in labels for s, _ in expected_slots):
             raise AssertionError("decision labels missing")
         if expected_slots:
             if graph(self.export(db)) != graph(before):
                 raise AssertionError("unresolved native merge wrote facts")
-            for row in file["rows"]:
+            for row in pending:
                 row["decision"] = {"choose": "ours"}
             decided = decisions.with_suffix(".applied.json")
             decided.write_text(json.dumps(file, indent=2))

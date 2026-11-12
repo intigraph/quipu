@@ -2360,10 +2360,10 @@ ex:PersonShape a sh:NodeShape ;
     });
     let result = tool_knot(&mut store, &input).unwrap();
     assert_eq!(result["conforms"], false);
-    assert_eq!(
-        result["hint"],
-        "propose a schema change via quipu_propose_schema_change"
-    );
+    let hint = result["hint"].as_str().unwrap();
+    assert!(hint.contains("own post-state"));
+    assert!(hint.contains("one complete document"));
+    assert!(hint.contains("quipu_propose_schema_change"));
 }
 
 #[test]

@@ -56,6 +56,12 @@ fn memory_token_never_resolves_as_writer_or_replication_credential() {
     assert!(
         policy
             .clone()
+            .with_scoped_writers(registry.clone())
+            .is_err()
+    );
+    assert!(
+        policy
+            .clone()
             .with_replication_only(registry.clone())
             .is_err()
     );

@@ -2,16 +2,21 @@
 
 This is the source contract for implementing fluents. It is not permission to
 activate a served schema, reinterpret existing slots, migrate data, or discard
-history. `shapes/fluents-v1.ttl` preserves proposal 51 byte for byte, including
-its pending-proposal warning. `shapes/MANIFEST` explicitly excludes it from
+history. `shapes/fluents-v1.ttl` versions pending proposal 52, the stable-IRI
+successor to proposal 51. Proposal 51 remains unchanged as historical evidence.
+The successor retains its pending-proposal warning. `shapes/MANIFEST` excludes it from
 deployment loading. The warning describes live admission; versioning the draft
 does not accept the proposal in a running store.
 
 ## Names and declaration
 
-The canonical prefix is `qp: <https://quipu.dev/ontology/>`, the existing
-`namespace::QUIPU`. No parallel stable-namespace spelling, alias, generic
-Observation substitution, or identifier migration is admitted by this contract.
+The canonical prefix for this new vocabulary is
+`qp: <https://w3id.org/intigraph/quipu/ns#>`, the accepted stable Quipu vocabulary
+identity. New Fluent, FluentObservation, Observable and associated property/shape
+IRIs use that prefix. Implementations must use a dedicated fluent vocabulary
+constant rather than minting these terms from the legacy `namespace::QUIPU`.
+This does not rename that existing constant, migrate its terms or stored data,
+admit aliases, or substitute a generic Observation for FluentObservation.
 The registry name for a future activation is `quipu-fluents-v1`.
 
 | Class | Required fields, exactly one unless specified |

@@ -263,29 +263,57 @@ pub(crate) async fn knot(
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let mut completion = super::knot_completion::begin(&store, &headers, &input)?;
+    use quipu::write_observation::{Observation, Path, Stage, observe};
+    let observation = Observation::new(Path::Knot, crate::request_middleware::request_id());
+    let dispatch = observation.stage(Stage::Dispatch);
     blocking(move || {
-        if let Some(completion) = &mut completion {
-            completion.running();
-        }
-        let outcome = (|| {
-            let (result, work) = {
-                let mut st = store.lock();
-                let result = quipu::tool_knot(&mut st, &input)?;
-                (result, st.take_deferred_embed())
-            };
-            if let Some(work) = work {
-                finish_deferred_embed(&store, &work)?;
+        dispatch.finish(true);
+        observation.run(|| {
+            if let Some(completion) = &mut completion {
+                completion.running();
             }
-            Ok(axum::Json(super::input_fields::annotate(
-                "quipu_knot",
-                &input,
-                result,
-            )))
-        })();
-        if let Some(completion) = &mut completion {
-            completion.finish(outcome.as_ref().ok().map(|value| &value.0));
-        }
-        outcome
+            let outcome = (|| {
+                let (result, work) = {
+                    let waiting = quipu::write_observation::stage(Stage::LockWait);
+                    let mut st = store.lock();
+                    waiting.finish(true);
+                    let held = quipu::write_observation::stage(Stage::LockHeld);
+                    let targets = super::update::writer_targets::json(&input);
+                    let result = observe(Stage::Tool, || {
+                        st.with_writer_scope(
+                            quipu::writer_scope::WriteOperation::Knot,
+                            &targets,
+                            |st| quipu::tool_knot(st, &input),
+                        )
+                    });
+                    let work = if result.is_ok() {
+                        if quipu::writer_scope::is_scoped_request() {
+                            let _ = st.take_deferred_embed();
+                            None
+                        } else {
+                            st.take_deferred_embed()
+                        }
+                    } else {
+                        None
+                    };
+                    drop(st);
+                    held.finish(result.is_ok());
+                    (result?, work)
+                };
+                if let Some(work) = work {
+                    observe(Stage::Deferred, || finish_deferred_embed(&store, &work))?;
+                }
+                Ok(axum::Json(super::input_fields::annotate(
+                    "quipu_knot",
+                    &input,
+                    result,
+                )))
+            })();
+            if let Some(completion) = &mut completion {
+                completion.finish(outcome.as_ref().ok().map(|value| &value.0));
+            }
+            outcome
+        })
     })
     .await
 }

@@ -1,0 +1,18 @@
+Script started on 2026-11-08 13:56:40-05:00 [COMMAND="bash ./run.sh" <not executed on terminal>]
+Baseline library source: 6411b3ed
+fixture=disposable-sqlite reader=opened-before-new-terms
+same-iri-different-file-ids=true
+late-shared-canonical=false
+local-id-unchanged=true
+remote-only-unchanged=true
+later-local-spelling-canonical=false
+
+Candidate library source: 0eea52a7
+fixture=disposable-sqlite reader=opened-before-new-terms
+same-iri-different-file-ids=true
+late-shared-canonical=true
+local-id-unchanged=true
+remote-only-unchanged=true
+later-local-spelling-canonical=true
+
+Script done on 2026-11-08 13:56:42-05:00 [COMMAND_EXIT_CODE="0"]

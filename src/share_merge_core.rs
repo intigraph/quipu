@@ -141,6 +141,7 @@ pub(crate) fn persist(
     // Lower both steps before receive changes the ROOT provenance view.
     let receive = datums(store, &plan.receive)?;
     let decide = datums(store, &plan.decide)?;
+    crate::merge_plan_gate::datums(store, &[&receive, &decide], None)?;
     let mut tx = 0;
     for (step, data) in [("receive", receive), ("decide", decide)] {
         if !data.is_empty() {

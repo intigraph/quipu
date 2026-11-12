@@ -21,6 +21,9 @@ use crate::types::{Op, Value};
 use crate::verdict_schemes::{Scheme, webauthn};
 
 mod admission;
+#[cfg(test)]
+mod census_fixture;
+pub mod census_observer;
 mod expect;
 #[cfg(test)]
 mod gate_tests;

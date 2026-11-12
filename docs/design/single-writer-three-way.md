@@ -207,3 +207,76 @@ head/epoch. Both passed in the scoped run at `6be9e447`, with a clean HOME guard
 The [retained transcript and limits](../demos/scoped-slot-reader/README.md)
 describe that synthetic source target. This does not prove writer admission,
 reservation exclusion, slice hash verification or installed behavior.
+
+## Scoped common pending ledger (internal source slice)
+
+An optional `scope` on the retained internal merge request now binds its schema,
+ROOT graph, explicit canonical valid time and at most 256 named subject/predicate
+slots (64 KiB of scope terms). The field is omitted for legacy requests, retaining
+their existing identity encoding. Scoped requests are refused by public profiled
+file ingress; this is not endpoint admission or a replacement for declared-base
+slice authentication, retained-history proof or graph rollout policy.
+
+The common pending executor and authenticated resume use bounded current-cut
+snapshots for this scope. Base/current/incoming input graphs must fit inside it;
+list-cell closures, other graphs, duplicate slots and out-of-scope units refuse.
+Each snapshot uses the indexed physical reader with the existing aggregate
+65536-claim/16-MiB budget across both cuts. No scoped branch calls the full ROOT
+snapshot or its whole-subject guard. Multiple validation/persistence phases can
+capture separate bounded snapshots; these limits are per snapshot, not a claim
+about total admission latency or validator work.
+
+Held-slot guards bind store/epoch, the exact scope and valid time, and a digest
+of every bounded physical history row before visibility filtering or value
+deduplication. An invisible received interval therefore invalidates resume even
+when live values stay identical. Unrelated slots may change without invalidating
+the retained remainder. Guard and snapshot data are evidence, not reservation,
+authentication or retention capabilities. The existing atomic common ledger
+continues to own received/decision/receipt ordering and rollback.
+
+The real writer adapter, legacy policy/counters, declared-base hash/retention
+admission, generalized time and blank-node support, full prospective validation
+binding, and endpoint/performance acceptance remain separate open work. This
+slice activates no server caller, graph policy, runtime or production database.
+
+The existing planner provenance-start callback still reads current entity facts;
+this slice does not claim all planner work is bounded. Only the common pending
+snapshot/guard paths are replaced. Bounding that callback, authenticating declared
+base slices and full writer integration must precede live admission.
+
+## Reserved admission fixture (source prototype)
+
+The private `store::reserved_admission_fixture` module exists only in native
+unit-test builds. No endpoint, production adapter, configuration switch or live
+writer calls it. Its enable argument defaults to refusal at the call boundary.
+
+It composes the existing share-merge writer reservation with native WRITE_V2
+verification against the protected session registry. The signature binds the
+complete proposal, receiving store, explicit time, incoming sets and profile.
+Nonce consumption, base reconstruction, merge planning and data writes share
+one outer reservation. The authenticated signer narrows any existing authority
+chain; ROOT is never added to named-graph capabilities.
+
+A private fresh-fixture genesis witness supplies retained-history evidence.
+This is deliberately not a production retention watermark. Both cuts use the
+bounded slot reader. The independently reconstructed base hash uses canonical
+RDF terms and explicit empty slots, rather than local term ids or the current
+head. Extra source inputs and unsupported profiles refuse.
+
+The profile is exactly the fixture's one loaded maxCount-one shape. Complete
+incoming sets feed the unified slot planner. Held conflicts refuse without
+writing; pending-ledger persistence and no-data settlement remain unwired.
+Actual normal transactions provide validator observations. Their coordinates,
+loaded profile and complete staged bytes must bind before the outer release;
+a separate full SHACL check refuses old violations outside incremental focus.
+The whole-graph check has a 4096-fact fixture cap, not a production cost claim.
+
+The native fixture controls pass on default and SHACL-only builds (seven on
+each); the full publication gate is recorded with the PR. Both OWL flags are
+explicitly false in fixture setup, matching this asserted/SHACL-only profile.
+The actual binding guards retain both refusals. This prototype does not
+complete the whole writer:
+production retained-history proof, general shape-derived cardinalities,
+authenticated master receipts, pending-ledger integration, durable publication
+and runtime enrollment remain separate gates. Native unit tests cover the
+prototype; Wasm only checks that the production-disabled boundary stays absent.

@@ -3,6 +3,7 @@
 //! No endpoint calls this reader. The caller must already hold the normal
 //! reservation and validate store identity, retained history and slice hashes.
 
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
 use rusqlite::{params, types::ValueRef};
@@ -22,6 +23,7 @@ pub(super) struct SlotRead {
     pub facts: Vec<Fact>,
     pub claims: usize,
     pub bytes: usize,
+    pub claims_digest: [u8; 32],
 }
 
 fn refused() -> Error {
@@ -87,6 +89,8 @@ impl Store {
         let mut bytes = 0_usize;
         let mut seen = HashSet::new();
         let mut facts = Vec::new();
+        let mut claims_hash = Sha256::new();
+        claims_hash.update(b"quipu-slot-claims/v1\0");
         while let Some(row) = rows.next()? {
             count += 1;
             if count > limits.max_claims {
@@ -125,7 +129,29 @@ impl Store {
             {
                 return Err(refused());
             }
-            if row.get::<_, i64>(4)? != 1 || asserted_tx > tx || start > valid_at {
+            let operation: i64 = row.get(4)?;
+            for field in [value, start.as_bytes()] {
+                claims_hash.update((field.len() as u64).to_be_bytes());
+                claims_hash.update(field);
+            }
+            match end {
+                Some(end) => {
+                    claims_hash.update([1]);
+                    claims_hash.update((end.len() as u64).to_be_bytes());
+                    claims_hash.update(end.as_bytes());
+                }
+                None => claims_hash.update([0]),
+            }
+            claims_hash.update(asserted_tx.to_be_bytes());
+            claims_hash.update(operation.to_be_bytes());
+            match retracted_tx {
+                Some(closed) => {
+                    claims_hash.update([1]);
+                    claims_hash.update(closed.to_be_bytes());
+                }
+                None => claims_hash.update([0]),
+            }
+            if operation != 1 || asserted_tx > tx || start > valid_at {
                 continue;
             }
             // A future retracted_tx certifies that this assertion's end was
@@ -156,6 +182,7 @@ impl Store {
             facts,
             claims: count,
             bytes,
+            claims_digest: claims_hash.finalize().into(),
         })
     }
 }

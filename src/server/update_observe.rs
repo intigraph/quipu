@@ -40,8 +40,18 @@ pub(super) fn apply_update_observed(
     let wait = waiting.elapsed().as_secs_f64();
     let acquired = Instant::now();
     let mut times = UpdateTimes::default();
-    let (result, profile) = store
-        .observe_poststate(|store| apply_locked(store, &plan, update, attribution, &mut times));
+    let targets = if quipu::writer_scope::is_scoped_request() {
+        super::writer_targets::update(update)?
+    } else {
+        Default::default()
+    };
+    let (result, profile) = store.observe_poststate(|store| {
+        store.with_writer_scope(
+            quipu::writer_scope::WriteOperation::Update,
+            &targets,
+            |store| apply_locked(store, &plan, update, attribution, &mut times),
+        )
+    });
     // While the guard is still alive, as /query does, so `held` is the
     // lock-holding interval.
     let held = acquired.elapsed().as_secs_f64();
@@ -74,6 +84,10 @@ pub(super) fn apply_update_observed(
             "poststate_check_graph_ms": ms(profile.check_graph.as_secs_f64()),
             "poststate_check_ownership_ms": ms(profile.check_ownership.as_secs_f64()),
             "poststate_check_entities_ms": ms(profile.check_entities.as_secs_f64()),
+            "poststate_check_entity_bounded_ms": ms(profile.check_entity_bounded.as_secs_f64()),
+            "poststate_check_entity_object_targets_ms": ms(profile.check_entity_object_targets.as_secs_f64()),
+            "poststate_check_entity_reference_types_ms": ms(profile.check_entity_reference_types.as_secs_f64()),
+            "poststate_check_entity_subclasses_ms": ms(profile.check_entity_subclasses.as_secs_f64()),
             "poststate_check_values_ms": ms(profile.check_values.as_secs_f64()),
             "poststate_check_encode_ms": ms(profile.check_encode.as_secs_f64()),
             "poststate_check_validate_ms": ms(profile.check_validate.as_secs_f64()),

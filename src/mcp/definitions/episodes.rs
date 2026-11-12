@@ -84,13 +84,14 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "type": "object",
                 "properties": {
                     "graph": {"type": "string", "description": "Destination graph for the episode."},
+                    "strict_new_entities": {"type": "boolean", "default": false, "description": "Request-local strict new-entity validation. Requires an existing local committed named graph; grants no write authority. Same-IRI reuse and reasoned distinct_from remain supported. Probe quipu.episode-strict-new/v1 first."},
                     "shapes": {"type": "string", "description": "Optional SHACL validation shapes in Turtle."},
                     "replace_snapshot": {"type": "boolean", "description": "Replace facts previously asserted by this episode."},
                     "name": { "type": "string", "description": "Episode name/identifier" },
                     "episode_body": { "type": "string", "description": "Natural language description of the knowledge" },
                     "source": { "type": "string", "description": "Who/what produced this episode" },
                     "group_id": { "type": "string", "description": "Knowledge graph group (e.g. aegis-ontology)" },
-                    "nodes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "description": { "type": "string" }, "properties": { "type": "object" } }, "required": ["name"] }, "description": "Entity nodes to create" },
+                    "nodes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "iri": { "type": "string", "description": "Optional exact absolute HTTP(S) or URN subject IRI; absent preserves legacy name addressing" }, "type": { "type": "string", "description": "One loaded class: bare name, quechua prefix, or absolute class IRI" }, "description": { "type": "string" }, "properties": { "type": "object" } }, "required": ["name", "type"] }, "description": "Entity nodes to create" },
                     "edges": { "type": "array", "items": { "type": "object", "properties": { "source": { "type": "string" }, "target": { "type": "string" }, "relation": { "type": "string" } }, "required": ["source", "target", "relation"] }, "description": "Relationship edges between nodes" }
                 },
                 "required": ["name"]

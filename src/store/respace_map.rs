@@ -48,6 +48,22 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "principal", TermIdKind::None),
     ("transaction_auth", "credential_id", TermIdKind::None),
     ("transaction_auth", "auth_class", TermIdKind::None),
+    ("writer_grants", "id", TermIdKind::None),
+    ("writer_grants", "revision", TermIdKind::None),
+    ("writer_grants", "payload", TermIdKind::None),
+    // Master-local changeset authority and receipts contain text/JSON and tx
+    // identifiers, never interned term IDs. Owned copies clear these rows.
+    ("client_changeset_grants", "id", TermIdKind::None),
+    ("client_changeset_grants", "revision", TermIdKind::None),
+    ("client_changeset_grants", "payload", TermIdKind::None),
+    (
+        "client_changeset_receipts",
+        "operation_id",
+        TermIdKind::None,
+    ),
+    ("client_changeset_receipts", "receipt", TermIdKind::None),
+    ("writer_graph_instances", "g", TermIdKind::Id),
+    ("writer_graph_instances", "generation", TermIdKind::None),
     ("transaction_declarations", "tx", TermIdKind::None),
     ("transaction_declarations", "declarations", TermIdKind::None),
     // OWL receipts contain semantic digests and transaction IDs, never term IDs.
@@ -233,10 +249,12 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("shapes", "valid_to", TermIdKind::None),
     ("shapes", "tx", TermIdKind::None),
     ("shapes", "digest", TermIdKind::None),
+    ("shapes", "digest_backfill_error", TermIdKind::None),
     ("ontologies", "valid_from", TermIdKind::None),
     ("ontologies", "valid_to", TermIdKind::None),
     ("ontologies", "tx", TermIdKind::None),
     ("ontologies", "digest", TermIdKind::None),
+    ("ontologies", "digest_backfill_error", TermIdKind::None),
     // -- Store::migrate_query_registry (quipu #79) --
     ("queries", "name", TermIdKind::None),
     ("queries", "description", TermIdKind::None),

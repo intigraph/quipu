@@ -64,6 +64,13 @@ indexing is unavailable. Set `auto_embed = false` to disable automatic vector
 writes. This does not disable model initialization, explicit semantic queries,
 or existing import identity resolution, which may also use the provider.
 
+CLI commands that initialize automatic embedding refuse with a nonzero exit and
+the canonical `no embedding provider configured` reason when `auto_embed = true`
+is explicitly configured but neither a configured nor an installed model is available. This refusal happens
+before writing facts. Use explicit `auto_embed = false` for graph-only writes;
+the omitted default remains quiet, and pure graph reads continue to work
+without initializing a provider.
+
 ## Writes and staged imports
 
 Native CLI writes (`knot`, `ingest`, episodes) and server writes use the configured
@@ -88,6 +95,12 @@ available mismatched provider refuses **before staging**. Legacy shares without
 this recipe remain importable; local indexing does not attest which model the
 publisher intended. Re-importing with a real provider recomputes eligible
 vectors instead of treating matching text as proof of model identity.
+
+For the explicitly installed default model, the native loader also checks the
+model and tokenizer buffers against the installation's compiled pins before
+runtime initialization. A cache verification followed by a changed file is
+refused. Ordinary commands still do not download model assets, and explicit
+custom model paths keep their own recipe and the selected runtime bootstrap.
 
 Existing graph data can still use the explicit startup `--embed-backfill` or
 bounded `POST /embed_backfill_graph` operations when needed.

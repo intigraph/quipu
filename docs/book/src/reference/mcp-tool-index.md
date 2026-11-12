@@ -210,6 +210,7 @@ Ingest structured knowledge from an agent episode (nodes + edges)
 | `replace_snapshot` | boolean | no | Replace facts previously asserted by this episode. |
 | `shapes` | string | no | Optional SHACL validation shapes in Turtle. |
 | `source` | string | no | Who/what produced this episode |
+| `strict_new_entities` | boolean | no | Request-local strict new-entity validation. Requires an existing local committed named graph; grants no write authority. Same-IRI reuse and reasoned distinct_from remain supported. Probe quipu.episode-strict-new/v1 first. |
 
 ## `quipu_episodes_complete`
 
@@ -410,6 +411,8 @@ Stage a portable share with hash, vocabulary and attestation gates. Copy member 
 | `actor` | string | no |  |
 | `alignments_turtle` | string | no |  |
 | `attestation` | object | no |  |
+| `commands_turtle` | string | no |  |
+| `competency_toml` | string | no |  |
 | `export_ntriples` | string | yes |  |
 | `manifest` | object | yes |  |
 | `queries_turtle` | string | no |  |
@@ -432,7 +435,7 @@ Promote a staged share only when existing promotion gates permit it. Does not by
 
 ## `quipu_knot`
 
-Assert facts into the knowledge graph (with optional SHACL validation)
+Assert facts into the knowledge graph (with optional SHACL validation). When a loaded class vocabulary exists, unknown rdf:type IRIs refuse before writing. Inspect quipu_shapes with action=vocabulary; similar class names are not semantic equivalence. Propose and load a shape if no sanctioned type fits.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -533,41 +536,48 @@ READ. Qualify explicit one-hop schema correspondences, existing named scope and 
 
 ## `quipu_merge_apply`
 
-WRITE. Finish a share merge (incoming + base) or a fork promotion (fork): the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (either side moved), more values than sh:maxCount, a value that is not an RDF term, or (forks) a SHACL refusal. Applying the same decisions again returns outcome already-applied and writes nothing.
+WRITE. Finish a share merge (incoming + base) or fork promotion (fork) under one writer reservation, with ordered receive/decide transactions recording reviewer and decisions hash. Convergent continue writes no slot operations. Refuses undecided or stale inputs, invalid RDF values, invalid explicit cardinality decisions or failed validation. Applying the same decisions again reports already-applied and writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `actor` | string | no | Who is applying. |
 | `base` | object | no | Its parent share. Inline, as /import takes it. |
-| `decisions` | object | yes | The file from merge_decisions with each row's decision set (quipu_merge_resolve): {choose: ours\|theirs\|base\|both} or {values: [N-Triples terms]}. |
+| `decisions` | object | yes | The file from merge_decisions with each row decided through quipu_merge_resolve. Convergence accepts continue/base/value; conflicts accept their advertised choices. Explicit values are N-Triples terms. |
 | `dry_run` | boolean | no | Run every check and report the counts it would write; write nothing. |
 | `fork` | string | no | Apply to this fork's promotion, instead of incoming + base. |
 | `incoming` | object | no | The share to merge. Inline, as /import takes it. |
+| `ledger` | string | no | Existing admitted private receipt graph, required for profiled application. Normal writer and ownership gates still apply. |
 | `reviewer` | string | yes | Who decided. Recorded in provenance. |
 
 ## `quipu_merge_decisions`
 
-READ. The conflicts of merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to what was reviewed. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. present:true returns {decisions, presentation, view}: the standard markdown to show the user, unchanged. Writes nothing.
+READ. Review rows for merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, with base/ours/theirs values and provenance. Convergent rows default to continue, which preserves the current claim without writing. propose:true adds advisory proposals; conflicts still require the reviewer's choice. present:true returns {decisions, presentation, view}. Writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `base` | object | no | Its parent share. Inline, as /import takes it. |
+| `choices` | array | no | Typed profiled choices: each has slot [subject, predicate] and decision. Omitted choices remain held. |
 | `fork` | string | no | A fork whose promotion stopped on conflicts, instead of incoming + base. |
 | `incoming` | object | no | The share to merge. Inline, as /import takes it. |
+| `ledger` | string | no | Existing admitted private receipt graph for resume; naming it does not grant access. |
 | `present` | boolean | no | Also return the standard presentation (markdown + JSON view). |
+| `profile` | object | no | Explicit quipu-merge-profile/v1 selection profile. Opts into authenticated profiled planning; omitted retains the legacy path. |
 | `propose` | boolean | no | Fill each row's proposal (never its decision). |
-| `slot_scoped` | boolean | no | Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes. |
+| `resume` | string | no | Retained parent merge ID whose held remainder is resumed. Requires ledger and authenticated receipt ownership. |
+| `slot_scoped` | boolean | no | Opt in to v3 slot values and last-modifying-transaction binding. Default v3-whole-root remains strict over all ROOT changes; legacy v1/v2 files retain their checks. |
 
 ## `quipu_merge_resolve`
 
-Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Choices: ours, theirs, base, both (only within sh:maxCount), value (with values), defer. Validates the choice against the row; touches no store. Apply with quipu_merge_apply.
+Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Convergent rows accept continue/base/value. Conflicts accept ours/theirs/base/both (within sh:maxCount), value or defer. Continue is refused on a conflicting row. Touches no store. Apply with quipu_merge_apply.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `by` | string | yes | Who decided: the person who chose, or the agent id when the agent rules allow it. |
-| `choose` | string: `ours`, `theirs`, `base`, `both`, `value`, `defer` | no |  |
+| `by` | string | no | Who decided: the person who chose, or the agent id when the agent rules allow it. |
+| `choose` | string: `continue`, `ours`, `theirs`, `base`, `both`, `value`, `defer` | no |  |
+| `decision` | object | no | Typed profiled-session decision, instead of legacy choose/values. |
 | `decisions` | object | yes | The decisions file from quipu_merge_decisions. |
-| `row` | string | yes | The row id, e.g. d1. |
+| `row` | string | no | The row id, e.g. d1. |
+| `slot` | array | no | Profiled session slot [subject, predicate], instead of legacy row. |
 | `values` | array | no | N-Triples terms, with choose: value. |
 
 ## `quipu_namespaces`
@@ -695,7 +705,7 @@ Manage STORED named queries — competency questions a consumer ships with its d
 
 ## `quipu_query`
 
-Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx)
+Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx). Declare every prefixed name with an explicit PREFIX; namespaces are not assumed. For exploratory text discovery use quipu_search instead of unbound FILTER(CONTAINS(...)) scans. Search does not replace exact-ID, owner-plate, named-graph or absence checks.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -924,6 +934,7 @@ Produce a bounded portable share payload, including canonical manifest and membe
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `alignments_turtle` | string | no |  |
+| `competency_toml` | string | no |  |
 | `max_bytes` | integer | no |  |
 | `no_shapes` | boolean | no |  |
 | `parent_share` | string | no |  |

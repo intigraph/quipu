@@ -74,10 +74,30 @@ readers never observe a retract-then-repost gap.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | Yes | Entity identifier |
-| `type` | No | rdf:type (e.g., "ProxmoxNode") |
+| `name` | Yes | Entity label and legacy identifier; edges refer to this name |
+| `iri` | No | Exact absolute HTTP(S) or URN subject IRI |
+| `type` | Yes | One loaded class: bare name, `quechua:` name, or absolute class IRI |
 | `description` | No | rdfs:comment |
 | `properties` | No | Key-value pairs as typed literals |
+
+An explicit `iri` separates entity addressing from the class namespace. For
+example, an independently admitted entity address can use a loaded class
+`https://schema.org/SoftwareApplication` without changing the server's legacy
+base. The loaded-vocabulary and strict identity gates still apply. Omitted
+addresses retain the existing name mapping; URL-like names are not reinterpreted
+as addresses. Within a batch, two entries cannot claim one explicit subject IRI.
+
+Edges continue to use node names and resolve to those nodes' exact addresses,
+including confidence reification. Address changes participate in idempotency.
+The episode activity and ordinary property namespace retain the configured base.
+Selecting an instance namespace, loading governed classes, and recording an
+approved former-name alias remain separate migration decisions. Supplying an
+address alone never creates an alias or merges historical identities.
+
+Before sending explicit addresses, clients must observe
+`quipu.episode-addresses/v1` in `/version`'s `write_contracts`. Older servers can
+silently ignore an unknown node field; a missing capability therefore requires
+the client to refuse the write rather than fall back to legacy addressing.
 
 ### Edge Fields
 

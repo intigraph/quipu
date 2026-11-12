@@ -49,6 +49,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("owl_page_job", Disposition::Excluded),
     ("owl_page_queue", Disposition::Excluded),
     ("owl_page_all", Disposition::Excluded),
+    // Host-local ownership enrollment is a fence, never portable authority.
+    // Reconstructing it on another store would import an enrollment decision.
+    ("ownership_handoff_enrollment", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection
@@ -74,6 +77,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // reconstruction preserves exact bytes; ordinary graph shares carry only
     // an explicitly selected carrier and never apply these mappings.
     ("share_alignment_members", Disposition::Content),
+    // Verified authoring and compiled contract bytes are inert content, not
+    // receiver authorization; reconstruct them together without reinterpreting.
+    ("share_competency_members", Disposition::Content),
     ("datasets", Disposition::Content),
     ("dataset_members", Disposition::Content),
     // Pendant autoload repository state (aegis-koxp0u) travels with the datasets
@@ -135,6 +141,13 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // must never install such claims as locally authenticated transactions.
     // Historical actor/source remain content, independently of this evidence.
     ("transaction_auth", Disposition::Excluded),
+    // Local owner authority and registry-instance pins are never imported.
+    ("writer_grants", Disposition::Excluded),
+    ("writer_graph_instances", Disposition::Excluded),
+    // Owner-issued changeset authority never travels in a share. Receipts bind
+    // acceptance to this master lineage; importing one cannot admit a retry.
+    ("client_changeset_grants", Disposition::Excluded),
+    ("client_changeset_receipts", Disposition::Excluded),
     // Master-local lifecycle admission/receipt state. A foreign pack carries
     // mapping and audit RDF as content, but cannot authorize changes by
     // installing a protected writer's execution cache. Missing cache with an

@@ -32,6 +32,12 @@ pub struct ShareImportRequest {
     /// Verified ancillary evidence, retained separately; never loaded as graph or policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alignments_turtle: Option<String>,
+    /// Verbatim source of the sealed competency contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub competency_toml: Option<String>,
+    /// Sealed compiled command descriptions; never executed by import.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands_turtle: Option<String>,
     /// Registry namespace for the share's queries; defaults to one derived from
     /// the producer's store identity (`share_queries::default_namespace`).
     #[serde(default)]
@@ -258,6 +264,7 @@ pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
         )));
     }
     crate::share_queries::verify_member(&request.manifest, request.queries_turtle.as_deref())?;
+    crate::competency::carriage::verify_request(request)?;
     crate::share_alignments::verify_member(
         &request.manifest,
         request.alignments_turtle.as_deref(),
@@ -440,9 +447,10 @@ pub(crate) fn import_inner(
     #[cfg(target_arch = "wasm32")]
     observation.tier("transport");
     // Queries are parsed and vetted before anything is staged; none is run.
+    let projected = crate::competency::carriage::verified_projection(request)?;
     let queries = crate::share_queries::prepare(
         store,
-        request.queries_turtle.as_deref(),
+        projected.as_deref().or(request.queries_turtle.as_deref()),
         &request.manifest.store_id,
         request.query_namespace.as_deref(),
         request.replace_queries,
@@ -529,6 +537,7 @@ pub(crate) fn import_inner(
         &request.manifest.share_id,
         request.alignments_turtle.as_deref(),
     )?;
+    crate::competency::carriage::retain(store, request)?;
     observation.outcome(outcome);
     Ok(ShareImportResult {
         embedding: crate::import_embedding::ImportEmbeddingStatus::default(),

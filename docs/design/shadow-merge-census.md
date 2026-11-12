@@ -129,3 +129,173 @@ complete capture, atomic health reconciliation, process-restart retention or
 writer behavior. The producer must still bind real authority/base/profile inputs,
 account for native planning refusal, and connect the source to a separately
 admitted durable consumer. New aggregation tests await a Cargo START.
+
+## Default-off observation bridge (source only, unqualified)
+
+`AggregateSink::try_observe` connects the existing bounded native observer to
+the existing aggregate sink without calling a writer. `ShadowMode` defaults to
+`Disabled`; that path skips planning and increments a disabled-batch health
+counter. Explicit `Observe` counts whole-batch planning refusal separately from
+sink input, capacity, contention and poison drops. Planning errors are discarded
+after counting; private term bytes and diagnostics are never placed in health
+output. All counters use the same saturating path and independent-sampling caveat.
+Native unknown inputs remain unknown observations, not successful classifications.
+
+The bridge returns observation outcomes rather than a writer `Result`. A future
+caller must preserve the original writer success/refusal and must not propagate
+observer outcomes into admission. No configuration, writer invocation, sink
+export or live-store read is installed by this change. Bounded input planning
+and a nonwaiting mutex do not prove a wall-clock or writer-latency budget;
+producer capture cost and worst-case qualification remain open. The two new
+bridge tests are unrun pending a separate Cargo START.
+
+## Writer capture and commit evidence (design, not wired)
+
+The source adapter observes hypothetical merge decisions; its accepted-batch
+counter is not a committed-write counter. Live integration must retain that
+meaning. The current server source gives three concrete boundaries:
+
+- `StoreHandle::lock` settles signed attestation under the existing writer
+  lock; `metadata_lock` explicitly does not. Do not acquire the latter to avoid
+  nonce settlement, or settle a second time for census observation. Rejecting
+  authority must preserve existing write behavior and cannot create a census
+  classification that implies authorized application.
+- `StoreHandle::commit_wake_for` installs a `watch` notification carrying `()`.
+  It is a coalesced commit hint, not a per-write receipt, transaction identifier
+  or exactly-once census stream. Polling current state after that hint cannot
+  reconstruct the request's original base/profile inputs.
+- `AppError::message` documents failures after earlier committed steps. HTTP
+  status, successful planning and client delivery therefore cannot establish
+  commit or rollback. A disconnected client is not proof a write was unrun.
+
+The future producer captures bounded touched-slot inputs and immutable profile
+identity under the normal authenticated reservation, before mutation, and tags
+that work as a classification observation only. No new SQLite read or planner
+work may be smuggled into a commit hook. The producer must bind an eventual
+committed outcome to actual store transaction evidence, or report outcome
+unknown. Only that separate evidence permits claims about received or applied
+writes. Explicit rollback/refusal, no-op and unknown outcome must stay separate;
+do not count all observer `Accepted` results as overwrites. Numeric transaction
+identifiers remain private join evidence, outside aggregate labels.
+
+A bounded staged observation must be discarded or accounted for on rollback,
+with no partial publication advertised as complete. If classification occurs
+only after commit, the producer must have captured the immutable pre-write
+inputs first; re-reading current slots afterward is not an equivalent base.
+Overflow, busy sink, classification refusal and commit-evidence loss remain
+visible coverage gaps. The current in-memory bridge does not supply an atomic
+commit/outbox join, replay identity or process-restart retention. Do not add an
+unbounded queue or block the writer to hide those gaps.
+
+Future integration controls must include successful commit with lost client
+response, a refusal before a data transaction, rollback after classification,
+no-op with attestation settlement, two commits coalescing into one wake, and
+process loss between commit and observation delivery. Each must preserve the
+writer's original return/authority behavior and show explicit census coverage
+or unknownness. This design adds no hook, transaction, endpoint or activation.
+
+## Consuming staged capture (source only, unqualified)
+
+`AggregateSink::try_stage` now owns the bounded value-free reports and their
+producer binding before mutation. Request data may then be dropped or changed;
+completion never re-reads it. Disabled mode still skips all planning. The
+staged object is not clonable and completion consumes it; there is no queue,
+commit hook or new SQL work. This module remains under the existing test-only
+census gate, with no production writer caller.
+
+The future adapter supplies a separate write outcome. A declared committed
+transaction must be positive, but is caller evidence rather than authenticated
+proof. No-data-change remains distinct. Rollback and unknown outcome discard
+the classifications and increment separate health counters. Dropping an
+unfinished stage accounts for in-process abandonment. A declared commit
+still reports sink contention, poison or capacity loss independently: its
+writer outcome cannot be changed by observation failure. Transaction IDs
+remain private join evidence outside aggregate keys and snapshots.
+
+These counters remain independently sampled classification/coverage evidence,
+not committed-write counts or a durable outcome ledger. In-process ownership
+does not give restart retention or exactly-once publication; process death
+before `Drop` remains unobserved. Real reservation/authentication, profile
+validation, store transaction evidence, durable delivery and crash recovery
+are still required before live integration. Four new controls for owned
+capture, rollback/unknown/abandonment, no-op versus commit/contention, and
+disabled/refused planning are source-only and unrun. The previous eight
+aggregate controls passed the earlier admitted combined slot; that result
+does not qualify this extension.
+
+## Receipt/outbox fixture boundary
+
+The receipt/outbox experiment is compiled only under `cfg(test)`. It installs its
+schema explicitly in disposable test databases; it registers no production
+producer, endpoint, migration, background task, or configuration switch. Its
+only native tap runs after the attested atomic body records its verified receipt
+and before graph staging. A nested savepoint stages a bounded, value-free outbox
+record. The native outer transaction owns its durability. An inner release alone
+never authorizes export.
+
+The fixture consumer takes a transaction snapshot and verifies the native
+receipt, store identity, log epoch, and positive data transaction before counting
+a graph commit. It scans durable receipts rather than counting wake hints.
+Receipt-only settlement is a separate bucket. The public attested route always
+writes provenance RDF; its receipt-only control therefore exercises the private
+atomic primitive and does not claim a public no-data route.
+
+A separate disposable SQLite sink deduplicates logical records by store, epoch,
+and nonce. Reopening both databases and losing an acknowledgement exercises
+persistent replay. This does not promise exactly-once in-memory metrics across
+arbitrary sink failures or simulate an operating-system crash. The fixture owns
+its retained base cut and uses a fixed test cardinality profile; neither is an
+authenticated client base or a loaded production shape witness.
+
+Controls cover lost response, authority refusal, classification followed by
+outer rollback, receipt-only settlement, coalesced hints, close/reopen with lost
+acknowledgement, and capacity/contention/poison/nonfatal observer SQL failures.
+Additional controls reject invalid capture bindings and tampered receipts, and
+confirm an unarmed writer produces no outbox record. The [fixture transcript](../demos/receipt-outbox/README.md) records native
+default-feature results and seven rejected naive policies. Other feature surfaces
+and the full gate require their own qualification receipts. SQLite failures that abort
+the entire transaction, such as some disk-full paths, are outside the nonfatal
+observer-isolation claim. Live binding, corpus collection, and runtime activation
+remain separate acceptance work.
+
+## Zero-SQL native boundary (source qualification pending)
+
+`store::attested_write::census_observer` adds a fixed 64-row, value-free native
+observation queue. No production caller can arm it: only disposable controls
+supply the observer to the existing attested transaction path. There is no
+configuration, endpoint, schedule, database schema or live enrollment.
+
+The tentative handoff follows the existing native body, after SQLite writer
+reservation and before graph authority/staging. It receives no connection,
+store, callback, terms or request strings. It issues no additional SQL, including
+SELECT, profile lookup, receipt lookup, savepoints or cleanup. The current native
+body does not supply verified preimages, a historical read base, a loaded profile
+or a lineage/principal bundle. All four therefore remain explicitly unknown;
+there is no fallback query or three-way classification. A request above 64
+normalized datums drops its entire observation instead of expanding the budget.
+
+Completion uses the existing native transaction ID in memory after outer RELEASE
+and before fallible hooks. Rollback, indeterminate release and private no-data
+settlement remain distinct. The public attested route still writes provenance;
+this does not introduce a public no-data route. Refusal before the handoff is a
+separate health count. Queue full, contention, poison and abandoned stages are
+explicit losses; queue-read unavailability is distinct from a proven empty queue.
+Counts saturate and health is sampled independently. None of this establishes
+complete process coverage, authenticated receipt recovery or a durable corpus.
+
+The source controls compare expanded native SQL (including bindings) between
+unarmed and observed disposable writes, and reject a deliberate bounded-SELECT
+mutant at the exact handoff even when its native write succeeds. Signed receipt
+replay and authority rollback controls exercise the normal attested route. These
+new controls passed within all 33 attested-write controls on both native default
+and SHACL surfaces; the separate Wasm check passed. The full quality gate and
+independent source review remain separate. Durable export, crash-gap
+reconciliation, content-bound profile/preimage handoff, measured latency and a
+separately admitted live rollout remain open. Disabling the unarmed observer
+requires no schema reversal and must not remove future receipt or gap history.
+
+The normal unarmed writer has no new user-facing behavior to demonstrate. The
+offline demonstration is the SQL-trace control: observed and unarmed native
+writes have identical statements and bindings, while the deliberately added
+SELECT is detected despite preserving the resulting data. Run the controls with
+`just test --locked --offline --lib census_observer -- --nocapture`.

@@ -432,6 +432,9 @@ impl Store {
         if actor == Some("speculate") || source == Some("speculate") {
             return;
         }
+        if crate::writer_scope::defer_refusal(refusal, graph_iri, actor, source, timestamp) {
+            return;
+        }
         let reason: String = refusal.reason.chars().take(REFUSAL_REASON_MAX).collect();
         // Watermark, like `emit_registry_event`: the refused write's own tx
         // row was rolled back, so the event carries the last COMMITTED tx.

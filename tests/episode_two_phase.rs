@@ -46,6 +46,49 @@ fn hinted(output: &Value, node: &str, candidate: &str) -> bool {
         && output["resolution_hints"].to_string().contains(candidate)
 }
 
+#[test]
+fn explicit_addresses_cross_both_phases_and_keep_idempotency() {
+    let mut store = store(0.85);
+    let mut input = episode("explicit-phases", &["document-address"]);
+    input["nodes"][0]["iri"] = json!("urn:example:document");
+    input["nodes"][0]["type"] = json!(format!("{}Document", store.base_ns()));
+    assert_eq!(two_phase(&mut store, &input)["outcome"], "created");
+    let query = format!(
+        "ASK {{ <urn:example:document> a ?t . FILTER(?t=<{}Document>) }}",
+        store.base_ns()
+    );
+    assert!(matches!(
+        quipu::sparql::query(&store, &query).unwrap(),
+        quipu::sparql::QueryResult::Ask(true)
+    ));
+    let legacy = format!("ASK {{ <{}document-address> ?p ?o }}", store.base_ns());
+    assert!(!matches!(
+        quipu::sparql::query(&store, &legacy).unwrap(),
+        quipu::sparql::QueryResult::Ask(true)
+    ));
+    assert_eq!(two_phase(&mut store, &input)["outcome"], "unchanged");
+}
+
+#[test]
+fn explicit_address_does_not_bypass_a_strict_flip_between_phases() {
+    let mut store = store(0.85);
+    let mut input = episode("explicit-race", &["document-alias-y"]);
+    input["nodes"][0]["iri"] = json!("urn:example:new-document");
+    let prepared = tool_episode_prepare(&store, &input).unwrap().unwrap();
+    let mut between = episode("explicit-between", &["document-alias-x"]);
+    between["nodes"][0]["iri"] = json!("urn:example:existing-document");
+    between["nodes"][0]["type"] = json!(format!("{}Document", store.base_ns()));
+    tool_episode(&mut store, &between).unwrap();
+    store.resolution_config_mut().strict_mode = true;
+    let before = store.latest_tx_id().unwrap();
+    assert!(tool_episode_commit(&mut store, prepared).is_err());
+    assert_eq!(before, store.latest_tx_id().unwrap());
+    assert!(!matches!(
+        quipu::sparql::query(&store, "ASK { <urn:example:new-document> ?p ?o }").unwrap(),
+        quipu::sparql::QueryResult::Ask(true)
+    ));
+}
+
 /// Seeded with an exact match, a Jaro-Winkler match and a pair whose score
 /// EQUALS the threshold (0.88, the #538 review case), both paths must answer
 /// byte-identically and write the same facts.
@@ -144,13 +187,26 @@ fn strict_or_disabled_resolution_stays_single_phase() {
 fn strict_configured_at_commit_refuses_a_prepared_duplicate() {
     let mut store = store(0.85);
     tool_episode(&mut store, &episode("seed", &["document-epsilon"])).unwrap();
-    let prepared = tool_episode_prepare(&store, &episode("w", &["document-epsilon"]))
+    // A new spelling is a duplicate candidate; exact same-IRI reuse is safe.
+    let prepared = tool_episode_prepare(&store, &episode("w", &["document-epsilon-variant"]))
         .unwrap()
         .unwrap();
     store.resolution_config_mut().strict_mode = true;
     let before = store.current_facts().unwrap();
     assert!(tool_episode_commit(&mut store, prepared).is_err());
     assert_eq!(store.current_facts().unwrap(), before);
+}
+
+/// A strict-mode transition still permits reuse of the exact existing IRI.
+#[test]
+fn strict_configured_at_commit_preserves_existing_identity_reuse() {
+    let mut store = store(0.85);
+    tool_episode(&mut store, &episode("seed", &["document-epsilon"])).unwrap();
+    let prepared = tool_episode_prepare(&store, &episode("w", &["document-epsilon"]))
+        .unwrap()
+        .unwrap();
+    store.resolution_config_mut().strict_mode = true;
+    assert!(tool_episode_commit(&mut store, prepared).is_ok());
 }
 
 /// An expired budget refuses in phase 0 with the request's own budget, before

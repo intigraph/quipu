@@ -24,6 +24,11 @@ pub fn classify(path: &str, method: &str) -> RouteClass {
     }
 }
 
+/// Every registered path template, for tests that drive the real route table.
+pub fn census() -> &'static [&'static str] {
+    CENSUS
+}
+
 const CENSUS: &[&str] = &[
     "/",
     "/.well-known/void",

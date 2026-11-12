@@ -30,7 +30,7 @@ impl Store {
             if !seen.insert(class) {
                 continue;
             }
-            if seen.len() > 1024 {
+            if seen.len() > super::shacl_poststate::CONTEXT_NODE_BUDGET {
                 return Err(Error::CannotVerify(
                     "post-state SHACL type hierarchy exceeds 1024 classes".into(),
                 ));

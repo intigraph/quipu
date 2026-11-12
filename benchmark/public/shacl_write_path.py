@@ -32,6 +32,9 @@ SCHEMA = "quipu-shacl-write-path/v1"
 CONTROL_CASE = "core/property/maxCount-001#maxCount-001"
 CONTROL_MODE = "control_payload_only"
 EXPECTED_CASES = 98
+# This W3C document validates its own shape/list definitions. Its prefixes need
+# not conform; the admitted contract is one complete, atomic document (9q3v).
+ATOMIC_DOCUMENT_CASES = frozenset({"core/complex/shacl-shacl#shacl-shacl"})
 # Every split the adapter must exercise (src/bin/quipu_shacl_conformance.rs::splits).
 # A case missing one was never measured under it, so it gets no verdict (franklin, #707).
 EXPECTED_MODES = frozenset({"single", "subject_halves", "subject_halves_reversed", "per_subject",
@@ -48,13 +51,15 @@ def components(case) -> list[str]:
 
 def run_case(case, adapter: Path) -> dict:
     started = time.perf_counter()
+    atomic = case.identifier in ATOMIC_DOCUMENT_CASES
     proc = subprocess.run(
-        [str(adapter), "--write-path", "--shapes", str(case.shapes), "--data", str(case.data),
+        [str(adapter), "--write-path", *(["--atomic-document"] if atomic else []),
+         "--shapes", str(case.shapes), "--data", str(case.data),
          "--base", case.data.resolve().as_uri()],
         capture_output=True, text=True, timeout=300)
     if proc.returncode != 0:
         return {"status": "error", "reason": proc.stderr.strip()[-400:]}
-    row = classify(json.loads(proc.stdout), case.expected_conforms)
+    row = classify(json.loads(proc.stdout), case.expected_conforms, atomic_document=atomic)
     row["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
     return row
 
@@ -64,7 +69,7 @@ def unjudged(write: dict) -> bool:
     return write.get("accepted") is None or ("error" in write and write.get("rejection") != "shacl")
 
 
-def classify(out: dict, expected: bool) -> dict:
+def classify(out: dict, expected: bool, *, atomic_document: bool = False) -> dict:
     """One case's status from the adapter's --write-path output.
 
     Only a SHACL judgement counts as a verdict. A split with any unjudged write
@@ -76,15 +81,24 @@ def classify(out: dict, expected: bool) -> dict:
     missing, extra = mode_inventory(out["modes"])
     empty = sorted(name for name, mode in out["modes"].items()
                    if out.get("triples", 0) > 0 and not mode.get("writes"))
-    if missing or extra or empty:
+    missing_atomic = sorted(name for name, mode in out["modes"].items()
+                            if atomic_document and (not isinstance(mode.get("atomic"), dict)
+                            or (mode["atomic"].get("accepted") is True
+                                and mode["atomic"].get("count") != out.get("triples"))))
+    if missing or extra or empty or missing_atomic:
         return {"status": "mode_inventory", "expected_conforms": expected, "batch_conforms": batch,
                 "modes": {}, "control_conforms": out["control_payload_only"]["conforms"],
                 "write_errors": [], "triples": out.get("triples"),
                 "reason": f"missing modes {missing}, unexpected modes {extra}, "
-                          f"no writes for nonempty data in {empty}"}
-    modes = {name: (None if any(unjudged(w) for w in mode["writes"]) else mode["conforms"])
+                          f"no writes for nonempty data in {empty}, missing atomic proof {missing_atomic}"}
+    independent = {name: mode["conforms"] for name, mode in out["modes"].items()}
+    judged_writes = {name: mode["writes"] + ([mode["atomic"]] if atomic_document else [])
+                    for name, mode in out["modes"].items()}
+    modes = {name: (None if any(unjudged(w) for w in judged_writes[name]) else
+                   mode["atomic"]["accepted"] if atomic_document else mode["conforms"])
              for name, mode in out["modes"].items()}
-    errors = sorted({w["error"] for m in out["modes"].values() for w in m["writes"] if unjudged(w)})
+    errors = sorted({w.get("error", "no SHACL verdict") for writes in judged_writes.values()
+                     for w in writes if unjudged(w)})
     reason = ""
     if batch is None:
         status = "batch_error"
@@ -101,6 +115,9 @@ def classify(out: dict, expected: bool) -> dict:
     row = {"status": status, "expected_conforms": expected, "batch_conforms": batch,
            "modes": modes, "control_conforms": out["control_payload_only"]["conforms"],
            "write_errors": errors[:3], "triples": out["triples"]}
+    if atomic_document:
+        row.update(admission="atomic_document", independent_modes=independent,
+                   reason="Stage the complete document and submit one /knot; independent prefixes may be invalid.")
     if reason:
         row["reason"] = reason
     return row
@@ -158,6 +175,9 @@ def gate(results: list[dict], ledger: dict | None) -> list[str]:
     # Re-checked here, not only in classify: a row that never came through
     # classify (or a hand-edited result) must not pass with a split silently gone.
     for row in results:
+        atomic = row.get("admission") == "atomic_document"
+        if atomic != (row["id"] in ATOMIC_DOCUMENT_CASES):
+            failures.append(f"{row['id']}: atomic-document contract inventory mismatch")
         if row.get("status") in ("agrees", "diverges", "write_error"):
             missing, extra = mode_inventory(row.get("modes", {}))
             if missing or extra:
@@ -175,6 +195,10 @@ def gate(results: list[dict], ledger: dict | None) -> list[str]:
         failures.append(f"{row['id']}: {row.get('status')} {row.get('reason', '')}".strip())
     if ledger is None:
         return failures
+    measured_atomic = {row["id"] for row in results if row.get("admission") == "atomic_document"}
+    known_atomic = set(ledger.get("atomic_documents", []))
+    failures += [f"NEW atomic-document contract: {case}" for case in sorted(measured_atomic - known_atomic)]
+    failures += [f"STALE atomic-document contract: {case}" for case in sorted(known_atomic - measured_atomic)]
     failures += [f"STALE unjudged entry (now judged or its error changed; remove it): {case} under {mode}: {error}"
                  for case, mode, error in sorted(known_unjudged - current_unjudged)]
     current = {tuple(d) for d in divergences(results)}
@@ -242,6 +266,8 @@ def main(argv=None) -> int:
                           "(aegis-1c8q ratchet; unjudged = sattler option A).",
                   "cases": len(results),
                   "by_component": report["summary"]["by_component"],
+                  "atomic_documents": sorted(row["id"] for row in results
+                                             if row.get("admission") == "atomic_document"),
                   "owners": {case: owner for case, owner in sorted(previous.get("owners", {}).items())
                              if case in diverging},
                   "divergences": report["divergences"],

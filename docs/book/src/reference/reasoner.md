@@ -19,6 +19,11 @@ derivations and withdrawals stay in that companion. A multi-graph batch
 notifies each graph separately. A change in one project cannot update the
 same rule's derivations in another project or in ROOT.
 
+An engine write to a companion inferred graph belongs to its original premise
+graph's closure. It re-evaluates rules over that premise and the same companion,
+including changes introduced or withdrawn by OWL. It does not create a second
+inferred plane or reinterpret ordinary companion derivations as promoted facts.
+
 This applies only when the reactive reasoner is enabled and its rules are
 loaded. Explicit `evaluate_in_graph` remains available for a reconciliation
 or backfill; it is not a substitute for current reactive evaluation.
@@ -64,7 +69,13 @@ head or body string, it resolves the full IRI using this precedence:
 
 1. **Per-rule** `rule:prefix` property (highest priority)
 2. **Ruleset** `rule:defaultPrefix` property
-3. **Fallback** `http://quipu.local/default/` (lowest priority)
+3. **Caller-selected fallback** (lowest priority): the configured store namespace
+   for CLI/server calls, or the explicit library argument.
+
+Without a non-empty prefix, bare predicates and named IRI terms refuse; fully
+qualified rules remain valid. The parser never guesses a namespace. Existing
+per-rule and ruleset declarations still take precedence; no store namespace is
+changed by parsing or evaluating rules.
 
 ### Atoms and Terms
 
