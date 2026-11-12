@@ -323,18 +323,14 @@ fn conform(turtle: &str) -> Result<()> {
     if feedback.conforms {
         return Ok(());
     }
-    let first = feedback
-        .results
-        .first()
-        .map(|r| {
-            format!(
-                "{} {} {}",
-                r.focus_node,
-                r.path.as_deref().unwrap_or(""),
-                r.message.as_deref().unwrap_or(&r.component)
-            )
-        })
-        .unwrap_or_default();
+    let first = feedback.results.first().map_or_else(Default::default, |r| {
+        format!(
+            "{} {} {}",
+            r.focus_node,
+            r.path.as_deref().unwrap_or(""),
+            r.message.as_deref().unwrap_or(&r.component)
+        )
+    });
     Err(Error::InvalidValue(format!(
         "queries.ttl does not conform to the stored-query shapes ({} violation(s)): {first}",
         feedback.violations

@@ -506,8 +506,9 @@ pub fn entries(store: &Store, verdict: Option<&str>) -> Result<Vec<Entry>> {
             source: r.get(7)?,
             chain: chain
                 .filter(|c| !c.is_empty())
-                .map(|c| c.split(',').map(str::to_string).collect())
-                .unwrap_or_default(),
+                .map_or_else(Default::default, |c| {
+                    c.split(',').map(str::to_string).collect()
+                }),
             gate_now: r.get(9)?,
             rules_digest: r.get(10)?,
             post_digest: r.get(11)?,

@@ -436,11 +436,9 @@ fn episode_content_hash(episode: &Episode) -> String {
         .nodes
         .iter()
         .map(|n| {
-            let mut props: Vec<String> = n
-                .properties
-                .as_ref()
-                .map(|m| m.iter().map(|(k, v)| format!("{k}={v}")).collect())
-                .unwrap_or_default();
+            let mut props: Vec<String> = n.properties.as_ref().map_or_else(Default::default, |m| {
+                m.iter().map(|(k, v)| format!("{k}={v}")).collect()
+            });
             props.sort();
             let mut part = format!(
                 "node:{}|{}|{}|{}",
@@ -468,8 +466,7 @@ fn episode_content_hash(episode: &Episode) -> String {
                 e.target,
                 e.confidence
                     .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_default()
+                    .map_or_else(Default::default, ToString::to_string)
             )
         })
         .collect();
