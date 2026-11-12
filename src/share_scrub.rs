@@ -140,6 +140,14 @@ pub(crate) fn enforce_destination(
     destination: ShareDestination,
     context: &str,
 ) -> Result<()> {
+    // Internal transport keeps opaque bytes pending; outward/audience transfer
+    // inspects decoded nested strings without rewriting signed evidence.
+    let inspection = if matches!(destination, ShareDestination::Internal) {
+        None
+    } else {
+        crate::share_fluent::inspection_files(files)?
+    };
+    let files = inspection.as_ref().unwrap_or(files);
     crate::namespace_publication::enforce(store, files, &destination)?;
     match destination {
         ShareDestination::Audience(binding) => crate::namespace_publication::scrub_audience(
