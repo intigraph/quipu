@@ -3310,4 +3310,13 @@ fn current_triple_counts_match_the_materialised_query() {
     assert_eq!(streamed, (4, 2, 3), "facts, entities, predicates");
     let (_, physical, _) = store.graph_counts().unwrap();
     assert_eq!(physical, 6, "two live rows the dedup must remove");
+    let metrics = crate::metrics::metrics()
+        .render_with_graph_counts(Some(store.graph_counts().unwrap()), None);
+    assert!(metrics.contains("quipu_root_live_assertion_rows 6\n"));
+    assert!(metrics.contains("quipu_graph_facts 6\n"));
+    assert!(metrics.contains("repeated assertions count separately"));
+    assert!(
+        streamed.0 < physical,
+        "duplicates discriminate the two populations"
+    );
 }

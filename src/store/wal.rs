@@ -70,7 +70,15 @@ impl super::Store {
         };
         // Validate identity and ownership before handing off. Do not checkpoint
         // here: construction runs before the writer mutex can be released.
-        super::ownership_startup::require_unenrolled(&checkpointer.conn)?;
+        // An enrolled database is checkpointed only by an S1-admitted handle.
+        if super::ownership_startup::enrolled(&checkpointer.conn)?
+            && !super::ownership::admitted_marker(
+                &checkpointer.conn,
+                checkpointer.fence.as_deref(),
+            )?
+        {
+            return Err(super::ownership_startup::unavailable());
+        }
         super::ownership::state_on(&checkpointer.conn, checkpointer.fence.as_deref())?;
         let identity: String = checkpointer.conn.query_row(
             "SELECT store_id FROM store_identity WHERE id=1",
