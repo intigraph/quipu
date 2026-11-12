@@ -169,8 +169,7 @@ pub fn run(args: &[String]) {
                 "pendant decisions pending; nothing is committed. Show them with: quipu merge show <pendant>/decisions.json{}",
                 pending
                     .first()
-                    .map(|d| format!(" (here: {d}/decisions.json)"))
-                    .unwrap_or_default()
+                    .map_or_else(Default::default, |d| format!(" (here: {d}/decisions.json)"))
             );
             std::process::exit(2);
         }
