@@ -111,9 +111,7 @@ fn query_temporal_inner(store: &Store, sparql: &str, ctx: &TemporalContext) -> R
         // is just the mechanism that stopped the query.
         Err(_) if deadline.is_some_and(|dl| dl.passed()) => Err(Error::QueryTimeout {
             elapsed_ms: started.elapsed_ms(),
-            limit_ms: deadline
-                .map(|dl| dl.millis_from(&started))
-                .unwrap_or_default(),
+            limit_ms: deadline.map_or_else(Default::default, |dl| dl.millis_from(&started)),
         }),
         other => other,
     }
