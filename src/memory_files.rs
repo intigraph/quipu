@@ -276,8 +276,7 @@ fn commit_locked(
     let parent = previous.as_ref().map(|s| s.revision.clone());
     let mut files = previous
         .as_ref()
-        .map(|s| s.files.clone())
-        .unwrap_or_default();
+        .map_or_else(Default::default, |s| s.files.clone());
     let file_parent = files.get(&input.path).map(|f| f.revision.clone());
     if input.expected_snapshot != parent || input.expected_file != file_parent {
         return Err(Error::ConditionalWriteConflict);
