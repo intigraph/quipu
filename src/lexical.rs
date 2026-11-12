@@ -113,7 +113,7 @@ pub(crate) fn register(conn: &Connection) -> rusqlite::Result<()> {
             Value::Int(n) => n.to_string(),
             Value::Float(n) => n.to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::Ref(_) | Value::Bytes(_) => String::new(),
+            Value::Ref(_) | Value::Bytes(_) | Value::Triple(_) => String::new(),
         })
     })?;
     conn.create_scalar_function("quipu_lexical_ref", 1, flags, |ctx| {

@@ -220,6 +220,10 @@ pub struct PromoteImportResult {
 }
 
 pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
+    crate::share_fluent::validate(&request.manifest.fluent_proofs)?;
+    crate::fluent::pending_config::storage::validate_requests(
+        &request.manifest.observable_configs,
+    )?;
     if request.manifest.schema != SCHEMA_V1 {
         return Err(Error::InvalidValue(format!(
             "unsupported share manifest schema: {}",
@@ -537,6 +541,7 @@ pub(crate) fn import_inner(
         &request.manifest.share_id,
         request.alignments_turtle.as_deref(),
     )?;
+    crate::share_fluent::retain(store, &request.manifest)?;
     crate::competency::carriage::retain(store, request)?;
     observation.outcome(outcome);
     Ok(ShareImportResult {

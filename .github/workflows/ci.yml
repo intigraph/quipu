@@ -617,6 +617,8 @@ jobs:
           tool: git-cliff
       - name: Prove the changelog guard, pre-cut gate and freshness check
         run: ./scripts/test-verify-changelog.sh
+      - name: Prove changelog-check scope (release-plz PRs only; still fails a bad one)
+        run: python3 scripts/test_changelog_check_scope.py
       - name: Check current release-window coverage
         run: python3 scripts/check-release-window.py
 

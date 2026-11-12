@@ -1904,7 +1904,23 @@ qp trust-root status
 
 Create, label, list, import, freeze and thaw named graphs and overlays.
 
-Subcommands: `graph create`, `graph label`, `graph list`, `graph import`, `graph freeze`, `graph thaw`, `graph overlay-create`, `graph overlay-write`, `graph overlay-compose`.
+Subcommands: `graph writer-instance`, `graph writer-grant`, `graph create`, `graph label`, `graph list`, `graph import`, `graph freeze`, `graph thaw`, `graph overlay-create`, `graph overlay-write`, `graph overlay-compose`.
+
+### `qp graph writer-instance`
+
+Read a local committed graph instance pin for owner enrollment.
+
+```text
+qp graph writer-instance <iri>
+```
+
+### `qp graph writer-grant`
+
+Apply an owner-local scoped writer grant revision or revocation.
+
+```text
+qp graph writer-grant <grant.json>
+```
 
 ### `qp graph create`
 

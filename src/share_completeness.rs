@@ -77,6 +77,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // reconstruction preserves exact bytes; ordinary graph shares carry only
     // an explicitly selected carrier and never apply these mappings.
     ("share_alignment_members", Disposition::Content),
+    // Pending opaque proofs are content, never receiver-local authority.
+    ("share_fluent_carriers", Disposition::Content),
+    ("fluent_pending_configs", Disposition::Content),
     // Verified authoring and compiled contract bytes are inert content, not
     // receiver authorization; reconstruct them together without reinterpreting.
     ("share_competency_members", Disposition::Content),
@@ -141,6 +144,16 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // must never install such claims as locally authenticated transactions.
     // Historical actor/source remain content, independently of this evidence.
     ("transaction_auth", Disposition::Excluded),
+    // Native fluent guard metadata belongs to the receiving store. Rebuild
+    // the type-code cache from its own canonical terms on open; a foreign
+    // cache must never define which types its immutability guard protects.
+    ("fluent_type_codes", Disposition::Excluded),
+    // Exact native-record write authority exists only inside one transaction.
+    // No reconstruction may install a producer's temporary append permits.
+    ("fluent_write_permits", Disposition::Excluded),
+    // Admission evidence is receiver-local; foreign receipts never grant writes.
+    ("fluent_origin_receipts", Disposition::Excluded),
+    ("fluent_config_receipts", Disposition::Excluded),
     // Local owner authority and registry-instance pins are never imported.
     ("writer_grants", Disposition::Excluded),
     ("writer_graph_instances", Disposition::Excluded),
