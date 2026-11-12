@@ -26,8 +26,10 @@ The same path serves the HA read replicas: **one replication
 path, several profiles** (§3).
 
 Non-goals for this design: automatic failover (HA phase 2, separately
-gated), dynamic pattern subscriptions (§4), partial merge apply (§7), and
-offline erasure of data a client already holds (§4).
+gated), pattern replicas (§4), partial merge apply (§7), and
+offline erasure of data a client already holds (§4). Stream filters by
+subject, predicate and membership are no longer a non-goal: see
+`stream-filters.md` (aegis-n0wc.3).
 
 ## 2. What already ships, and what blocks replication
 

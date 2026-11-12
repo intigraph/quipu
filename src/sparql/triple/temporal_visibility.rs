@@ -21,9 +21,8 @@ pub(super) fn add_conditions(
         // the pinned transaction. close_assertion only closes open rows:
         // a future retracted_tx therefore certifies an originally open end.
         // Explicit finite ends (no retracted_tx) retain their original bound.
-        let future_close = tx_parameter
-            .map(|p| format!(" OR retracted_tx > ?{p}"))
-            .unwrap_or_default();
+        let future_close =
+            tx_parameter.map_or_else(Default::default, |p| format!(" OR retracted_tx > ?{p}"));
         conditions.push(format!(
             "(valid_to IS NULL OR valid_to > ?{date_parameter}{future_close})"
         ));

@@ -255,7 +255,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map(|row| {
                             variables
                                 .iter()
-                                .map(|v| row.get(v).map(|x| text(&store, x)).unwrap_or_default())
+                                .map(|v| {
+                                    row.get(v)
+                                        .map_or_else(Default::default, |x| text(&store, x))
+                                })
                                 .collect::<Vec<_>>()
                                 .join("|")
                         })
