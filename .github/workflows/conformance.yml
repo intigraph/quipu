@@ -291,7 +291,7 @@ jobs:
           retention-days: 90
 
       - name: Create stable ledgers for the author
-        run: python3 benchmark/public/ledger_snapshot.py --source /tmp --output /tmp/stable-ledgers
+        run: python3 benchmark/public/ledger_snapshot.py --source /tmp --output /tmp/stable-ledgers --record-code
 
       - name: Candidate outcomes match the committed ledgers
         if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push' }}

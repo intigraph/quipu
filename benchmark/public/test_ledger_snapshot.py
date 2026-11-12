@@ -7,8 +7,10 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
 
 import ledger_snapshot as ledger
+import test_conformance_report as report_tests
 
 
 class LedgerSnapshotTests(unittest.TestCase):
@@ -65,6 +67,52 @@ class LedgerSnapshotTests(unittest.TestCase):
             (source / ledger.LEDGERS[-1]).unlink()
             output = root / "output"
             self.assertEqual(self.run_tool("--source", source, "--output", output), 2)
+            self.assertFalse(output.exists())
+
+    def test_digest_gate_fails_code_drift_until_all_ledgers_are_updated(self):
+        with report_tests.head_tree_fixture(stale=False) as root:
+            results = root / "benchmark/public/results"
+
+            def adopt():
+                digest = ledger.code_digest(root)
+                for name in ledger.LEDGERS:
+                    path = results / name
+                    data = json.loads(path.read_text())
+                    data["code_digest"] = digest
+                    path.write_text(json.dumps(data))
+
+            def check():
+                return subprocess.run(
+                    ["python3", str(root / "benchmark/public/conformance_report.py"),
+                     "--check", "--arm", "provenance", "--pr-base", ""],
+                    cwd=root, capture_output=True, text=True,
+                )
+
+            adopt()
+            self.assertEqual(check().returncode, 0)
+            original_digest = ledger.code_digest(root)
+            (root / "README.md").write_text("metadata-only change")
+            self.assertEqual(ledger.code_digest(root), original_digest)
+            (root / "src/fixture.rs").write_text("// deliberate changed measurement input\n")
+            self.assertNotEqual(ledger.code_digest(root), original_digest)
+            failure = check()
+            self.assertEqual(failure.returncode, 1, failure.stdout + failure.stderr)
+            self.assertIn("code inputs differ", failure.stderr)
+            adopt()
+            self.assertEqual(check().returncode, 0)
+            path = results / ledger.LEDGERS[0]
+            data = json.loads(path.read_text())
+            del data["code_digest"]
+            path.write_text(json.dumps(data))
+            self.assertEqual(check().returncode, 2, "partial provenance cannot pass")
+
+    def test_old_raw_evidence_cannot_be_restamped_as_current_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, _ = self.fixture(root)
+            output = root / "output"
+            self.assertEqual(self.run_tool("--source", source, "--output", output,
+                                           "--record-code"), 2)
             self.assertFalse(output.exists())
 
 

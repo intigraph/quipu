@@ -273,6 +273,12 @@ def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
                               "Quipu has no RDF 1.2 support")
 
     return {
+        "ledger_code_digests": {
+            name: json.loads((results_dir / name).read_text()).get("code_digest")
+            for name in (SYNTAX_LEDGER, EVALUATION_LEDGER, ENTAILMENT_LEDGER,
+                         SHACL_LEDGER, FEDERATED_LEDGER, RDF11_SYNTAX_LEDGER,
+                         SPARQL10_LEDGER, SPARQL12_LEDGER)
+        },
         "classes": classes,
         "sparql10": {"rows": sparql10_rows, "counts": tally(sparql10_rows)},
         "sparql12": {"rows": sparql12_rows, "counts": tally(sparql12_rows)},
@@ -1057,6 +1063,21 @@ def ledger_provenance(data: dict, pr_base: str | None = None) -> tuple[int, list
       pass/fail verdict is FORCED to render "I examined nothing" as "nothing
       was wrong", which is the direction that lets drift through (aegis-9bgp).
     """
+    digests = data.get("ledger_code_digests", {})
+    if any(digests.values()):
+        from ledger_snapshot import code_digest
+        try:
+            measured = code_digest()
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            return 2, [f"code inputs UNVERIFIED: {error}"]
+        missing = [name for name, value in digests.items() if not value]
+        if missing:
+            return 2, ["missing code digest: " + ", ".join(missing)]
+        drift = [name for name, value in digests.items() if value != measured]
+        if drift:
+            return 1, ["code inputs differ from measured ledgers: " + ", ".join(drift)]
+        return 0, []
+
     rc, head = _git("rev-parse", "HEAD")
     if rc != 0:
         return 2, ["cannot resolve HEAD (not a git checkout?) — provenance UNVERIFIED"]
