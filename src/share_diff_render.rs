@@ -6,8 +6,7 @@ use super::{EntityStatus, Fact, Names, PackDiff, Snapshot, times};
 fn graph_suffix(graph: &Option<String>) -> String {
     graph
         .as_ref()
-        .map(|g| format!("  @ {g}"))
-        .unwrap_or_default()
+        .map_or_else(Default::default, |g| format!("  @ {g}"))
 }
 
 fn marker(status: EntityStatus) -> char {

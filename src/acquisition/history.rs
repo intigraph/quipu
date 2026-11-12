@@ -76,6 +76,7 @@ impl Drop for Budget<'_> {
 fn value(store: &Store, value: Value) -> Result<JsonValue> {
     Ok(match value {
         Value::Ref(id) => json!({"type":"iri", "value":main_graph::term(store, id)?}),
+        Value::Triple(t) => json!({"type":"triple", "value":t}),
         Value::Str(text) => json!({"type":"string", "value":text}),
         Value::Int(n) => json!({"type":"integer", "value":n.to_string()}),
         Value::Float(n) => json!({"type":"float64", "bits":format!("{:016x}", n.to_bits())}),

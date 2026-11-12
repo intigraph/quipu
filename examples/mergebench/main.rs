@@ -209,8 +209,7 @@ fn results_markdown(scenario: &generate::Scenario, arms: &[score::ArmMetrics]) -
     );
     let classes: Vec<&String> = arms
         .first()
-        .map(|a| a.recall_by_class.keys().collect())
-        .unwrap_or_default();
+        .map_or_else(Default::default, |a| a.recall_by_class.keys().collect());
     for c in &classes {
         s.push_str(&format!(" {c} |"));
     }

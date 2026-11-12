@@ -364,6 +364,7 @@ impl Store {
         Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
         Self::migrate_writer_scope(&conn)?;
+        Self::migrate_fluent_persistence(&conn)?;
         #[cfg(not(target_arch = "wasm32"))]
         Self::migrate_client_changesets(&conn)?;
 

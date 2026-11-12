@@ -96,6 +96,8 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         })
     });
     let opts = quipu::share::ShareOptions {
+        observable_configs: Vec::new(),
+        fluent_proofs: Vec::new(),
         competency_toml,
         alignments_turtle,
         scope,

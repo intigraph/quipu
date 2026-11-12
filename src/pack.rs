@@ -37,6 +37,13 @@ use std::path::Path;
 use crate::error::{Error, Result};
 use crate::store::Store;
 
+#[path = "pack_carriers.rs"]
+mod carriers;
+
+#[path = "pack_manifest.rs"]
+mod manifest_io;
+pub(crate) use manifest_io::{MANIFEST_SQL, write_manifest};
+
 /// What a pack declares about itself. Mirrored as meta-graph facts inside the
 /// pack as well as stored in `pack_manifest`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -113,6 +120,11 @@ pub struct PackOptions {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use crate::pack_load::{LoadOptions, UnpackReport, unpack, unpack_verified};
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "pack_pending.rs"]
+mod pending;
+#[cfg(not(target_arch = "wasm32"))]
+pub use pending::{PendingCarrierReport, materialize_pending_carriers};
 
 /// The canonical content of a pack, as the exact bytes that get hashed.
 ///
@@ -274,59 +286,6 @@ pub fn content_hash(canonical: &str) -> String {
     format!("sha256:{}", hex::encode(digest.as_ref()))
 }
 
-/// The `pack_manifest` DDL. One row, by construction.
-/// Create `pack_manifest` and write the single row, for every pack producer.
-///
-/// Shared so the published pack and the `--full` pack cannot drift apart on
-/// the manifest schema — the column list appears once. Same reasoning as
-/// `enforce_pack_destination`: the third producer is the one that forgets.
-///
-/// # Errors
-/// Propagates SQLite errors from the create or the insert.
-pub(crate) fn write_manifest(conn: &rusqlite::Connection, manifest: &Manifest) -> Result<()> {
-    conn.execute_batch(MANIFEST_SQL)?;
-    conn.execute(
-        "INSERT OR REPLACE INTO pack_manifest \
-         (id, pack_format, name, version, term_space, content_hash, created_at, \
-          source_graph, producer, counts, destination) \
-         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        rusqlite::params![
-            manifest.pack_format,
-            manifest.name,
-            manifest.version,
-            manifest.term_space,
-            manifest.content_hash,
-            manifest.created_at,
-            manifest.source_graph,
-            manifest.producer,
-            manifest.counts,
-            manifest.destination.as_ref().map(|d| match d {
-                crate::share_scrub::ShareDestination::Internal => "internal".into(),
-                crate::share_scrub::ShareDestination::Outward => "outward".into(),
-                crate::share_scrub::ShareDestination::Audience(_) =>
-                    serde_json::to_string(d).expect("destination JSON"),
-            }),
-        ],
-    )?;
-    Ok(())
-}
-
-pub(crate) const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
-     id           INTEGER PRIMARY KEY CHECK (id = 1),
-     pack_format  TEXT NOT NULL,
-     name         TEXT NOT NULL,
-     version      TEXT NOT NULL,
-     term_space   INTEGER NOT NULL,
-     content_hash TEXT NOT NULL,
-     created_at   TEXT NOT NULL,
-     source_graph TEXT NOT NULL,
-     producer     TEXT NOT NULL,
-     counts       TEXT NOT NULL,
-     -- Nullable ON PURPOSE: a pack written before aegis-9f899e has no row for
-     -- this and must read back as UNKNOWN rather than as either destination.
-     destination  TEXT
- );";
-
 pub(crate) fn local_name(iri: &str) -> String {
     iri.rsplit(['#', '/', ':'])
         .next()
@@ -349,6 +308,24 @@ pub fn pack(
     opts: &PackOptions,
     timestamp: &str,
 ) -> Result<Manifest> {
+    pack_with_carriers(store, graph_iri, out_path, opts, timestamp, &[])
+}
+
+/// Export ordinary RDF plus explicitly selected pending fluent manifests.
+/// Transport does not authenticate an origin or admit an event.
+///
+/// # Errors
+/// The ordinary pack errors, or malformed, conflicting or overbound carriers.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn pack_with_carriers(
+    store: &Store,
+    graph_iri: &str,
+    out_path: &str,
+    opts: &PackOptions,
+    timestamp: &str,
+    pending: &[crate::share::ShareManifest],
+) -> Result<Manifest> {
+    let selected = carriers::select(pending)?;
     // Build into a sibling, then VACUUM INTO the shipped path. WAL would
     // otherwise leave `-wal`/`-shm` next to the file people actually copy, and
     // a pack that needs three files is not "a single attachable artifact".
@@ -362,7 +339,7 @@ pub fn pack(
 
     let built = (|| -> Result<()> {
         let mut out = Store::open(&build_path)?;
-        pack_into(store, graph_iri, opts, timestamp, &mut out)?;
+        pack_into(store, graph_iri, opts, timestamp, &mut out, &selected)?;
         match opts.space.unwrap_or(0) {
             0 => {
                 // VACUUM INTO produces a single clean file with no WAL siblings.
@@ -412,6 +389,21 @@ pub fn pack_to_bytes(
     opts: &PackOptions,
     timestamp: &str,
 ) -> Result<(Manifest, Vec<u8>)> {
+    pack_to_bytes_with_carriers(store, graph_iri, opts, timestamp, &[])
+}
+
+/// Serialize ordinary RDF with explicit pending evidence, without admitting it.
+///
+/// # Errors
+/// The ordinary byte-pack errors and the same carrier bounds as file packs.
+pub fn pack_to_bytes_with_carriers(
+    store: &Store,
+    graph_iri: &str,
+    opts: &PackOptions,
+    timestamp: &str,
+    pending: &[crate::share::ShareManifest],
+) -> Result<(Manifest, Vec<u8>)> {
+    let selected = carriers::select(pending)?;
     // Refused rather than ignored: shipping bytes in space 0 when a space was
     // asked for is the same "accepted and inert flag" defect `--with-vectors`
     // shipped with once already.
@@ -425,7 +417,7 @@ pub fn pack_to_bytes(
         ));
     }
     let mut out = Store::open_in_memory()?;
-    let manifest = pack_into(store, graph_iri, opts, timestamp, &mut out)?;
+    let manifest = pack_into(store, graph_iri, opts, timestamp, &mut out, &selected)?;
     let bytes = out.serialize_db()?;
     Ok((manifest, bytes))
 }
@@ -444,6 +436,7 @@ fn pack_into(
     opts: &PackOptions,
     timestamp: &str,
     out: &mut Store,
+    selected: &carriers::Selected,
 ) -> Result<Manifest> {
     let repo_fields = [
         opts.repository.as_ref(),
@@ -477,9 +470,11 @@ fn pack_into(
         ));
     }
 
-    let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
+    let mut canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
 
     enforce_pack_destination(store, &canonical, opts, graph_iri)?;
+    carriers::enforce_destination(store, selected, opts)?;
+    carriers::extend_canonical(&mut canonical, selected);
 
     let hash = content_hash(&canonical);
 
@@ -632,6 +627,7 @@ fn pack_into(
             // rather than having to trust that the producer ran it (wu, #222).
             destination: Some(opts.destination.clone()),
         };
+        carriers::write(&out.conn, selected)?;
         write_manifest(&out.conn, &manifest)?;
 
         Ok(manifest)
@@ -652,6 +648,13 @@ pub(crate) fn open_pack_read_only(path: &str) -> Result<rusqlite::Connection> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_manifest(path: &str) -> Result<Manifest> {
     let conn = open_pack_read_only(path)?;
+    read_manifest_on(&conn)
+        .map_err(|e| Error::InvalidValue(format!("pack: {path} has no readable manifest: {e}")))
+}
+
+/// Read from the same source snapshot used to verify and retain pending bytes.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn read_manifest_on(conn: &rusqlite::Connection) -> Result<Manifest> {
     // `destination` arrived with aegis-9f899e. A pack cut before it has no such
     // column, and SELECTing one by name fails the whole read — so the column is
     // fetched separately and its absence degrades to `None` (UNKNOWN) instead
@@ -690,7 +693,7 @@ pub fn read_manifest(path: &str) -> Result<Manifest> {
             })
         },
     )
-    .map_err(|e| Error::InvalidValue(format!("pack: {path} has no readable manifest: {e}")))
+    .map_err(Error::from)
 }
 
 /// Recompute a pack's content hash and compare it to the manifest.
@@ -723,10 +726,23 @@ pub fn verify(path: &str) -> Result<(String, String, bool)> {
         .map(|(n, _, _)| n)
         .collect();
     let queries: Vec<String> = store.query_list()?.into_iter().map(|q| q.name).collect();
-    let canonical = canonical_content(&store, &manifest.source_graph, &shapes, &queries)?;
+    let mut canonical = canonical_content(&store, &manifest.source_graph, &shapes, &queries)?;
+    carriers::extend_canonical(&mut canonical, &carriers::read(&store.conn)?);
     let recomputed = content_hash(&canonical);
     let matches = recomputed == manifest.content_hash;
     Ok((manifest.content_hash, recomputed, matches))
+}
+
+/// The ordinary materializing loader cannot silently discard pending evidence.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn require_ordinary_load(path: &str) -> Result<()> {
+    let conn = open_pack_read_only(path)?;
+    if !carriers::read(&conn)?.is_empty() {
+        return Err(Error::InvalidValue(
+            "pack: pending fluent carriers require explicit evidence handling; ordinary unpack cannot discard them".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
