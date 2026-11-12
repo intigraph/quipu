@@ -520,6 +520,7 @@ impl Store {
             Value::Bool(b) => json!(b),
             // The body rides along so a replica built from the feed can hold
             // the value; a length alone replays as a different fact.
+            Value::Triple(t) => json!({"triple":t}),
             Value::Bytes(b) => json!({"bytes_len": b.len(), "base64": STANDARD.encode(b)}),
             Value::Lang { lexical, lang } => json!({"value": lexical, "lang": lang}),
             Value::Typed { lexical, datatype } => json!({"value": lexical, "datatype": datatype}),

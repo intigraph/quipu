@@ -5,12 +5,7 @@ use std::sync::OnceLock;
 use super::{LabelIndex, id_list, recorded_distinct_from};
 use crate::{Result, Store, episode, namespace, types::Value};
 
-fn semantic_kind(kind: &str) -> &str {
-    kind.strip_prefix(episode::node_type::QUECHUA_TYPE_PREFIX)
-        .unwrap_or(kind)
-}
-
-pub(super) fn needs_check(node: &episode::Node) -> bool {
+pub(super) fn needs_check(node: &episode::Node, base: &str) -> bool {
     static OPAQUE: OnceLock<regex::Regex> = OnceLock::new();
     let opaque = OPAQUE.get_or_init(|| {
         regex::Regex::new(r"(?i)^(?:(?:commit-|stmt_)?[0-9a-f]{7,64}|main-watch-[0-9a-f]{40}(?:[0-9a-f]{24})?|commit/[^\s]+/[0-9a-f]{7,64})$")
@@ -22,7 +17,9 @@ pub(super) fn needs_check(node: &episode::Node) -> bool {
             .expect("constant work identifier pattern")
     });
     let work = matches!(
-        node.node_type.as_deref().map(semantic_kind),
+        node.node_type
+            .as_deref()
+            .map(|kind| episode::node_type::local_name(kind, base)),
         Some("WorkItem" | "Bead")
     ) && work_id.is_match(&node.name);
     !node.name.starts_with("code/") && !opaque.is_match(&node.name) && !work
@@ -40,7 +37,7 @@ fn container_id(name: &str) -> Option<String> {
 }
 
 fn near(a: &str, b: &str, kind: &str, threshold: f64) -> bool {
-    if matches!(semantic_kind(kind), "LXCContainer" | "Container" | "Host")
+    if matches!(kind, "LXCContainer" | "Container" | "Host")
         && let (Some(a), Some(b)) = (container_id(a), container_id(b))
     {
         return a == b;
@@ -87,15 +84,20 @@ pub(super) fn refusal(
     threshold: f64,
 ) -> Result<Option<String>> {
     let index = LabelIndex::build(store)?;
-    for (position, node) in nodes.iter().enumerate().filter(|(_, n)| needs_check(n)) {
+    for (position, node) in nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| needs_check(n, base))
+    {
         crate::time::check_request_deadline()?;
-        let mine = episode::node_iri(&node.name, base);
+        let mine = episode::address::resolved_node_iri(node, base);
         // Updating/retyping an existing IRI is not minting a spelling variant.
         if !facts(store, &mine)?.is_empty() {
             continue;
         }
-        let kind = node.node_type.as_deref().unwrap_or("");
-        let type_iri = episode::node_type::node_type_iri(kind, base);
+        let raw_kind = node.node_type.as_deref().unwrap_or("");
+        let kind = episode::node_type::local_name(raw_kind, base);
+        let type_iri = episode::node_type::node_type_iri(raw_kind, base);
         let mut excused = recorded_distinct_from(store, &mine)?;
         if !node.distinct_from.is_empty() {
             let reason = node
@@ -121,7 +123,7 @@ pub(super) fn refusal(
             .collect();
         // Numeric identity is independent of spelling similarity. Enumerate
         // matching numeric labels even when raw Jaro scoring pruned them.
-        if matches!(semantic_kind(kind), "LXCContainer" | "Container" | "Host")
+        if matches!(kind, "LXCContainer" | "Container" | "Host")
             && let Some(identity) = container_id(&node.name)
         {
             for entry in &index.entries {
@@ -155,8 +157,12 @@ pub(super) fn refusal(
         }
         // Detect aliases submitted together before either one exists.
         for other in &nodes[position + 1..] {
-            let iri = episode::node_iri(&other.name, base);
-            if (other.node_type == node.node_type
+            let iri = episode::address::resolved_node_iri(other, base);
+            if (other
+                .node_type
+                .as_deref()
+                .map(|kind| episode::node_type_iri(kind, base))
+                == Some(type_iri.clone())
                 || node.node_type.is_none()
                 || other.node_type.is_none())
                 && iri != mine

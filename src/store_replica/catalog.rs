@@ -35,6 +35,8 @@ const DATA: &[&str] = &[
     "import_reviews",
     "events",
     "pending_share_queries",
+    "share_fluent_carriers",
+    "fluent_pending_configs",
     "denial_quarantine",
     "quarantine_deltas",
     "vectors",
@@ -47,10 +49,21 @@ const LOCAL: &[&str] = &[
     // Authentication adjudication is local evidence, not transferable writer
     // authority. Actor/source text in historical transactions remains data.
     "transaction_auth",
+    // Receiving-store type codes are rebuilt from its own term dictionary;
+    // a replica must not install another store's immutability guard cache.
+    "fluent_type_codes",
+    // Native append permission exists only inside its local transaction.
+    "fluent_write_permits",
+    "fluent_origin_receipts",
+    "fluent_config_receipts",
     // Owner-enrolled grants and graph-instance pins are local authority,
     // never logical replica content or journal entries.
     "writer_grants",
     "writer_graph_instances",
+    // Changeset admission authority and accepted-operation caches are local
+    // to this master, not transferable facts or follower journal content.
+    "client_changeset_grants",
+    "client_changeset_receipts",
     "store_identity",
     "log_epoch",
     "consumers",

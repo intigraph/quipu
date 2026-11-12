@@ -1,0 +1,7 @@
+BEFORE: one foreign listener occupies the configured reader port
+cannot start read process pool: Address already in use (os error 98)
+Observed: primary unavailable (expected baseline failure)
+AFTER: same occupied-reader fixture
+PASS occupied: primary write/auth, pool health/read admission, no retry
+CONTROL: unoccupied reader port
+PASS free: primary write/auth, pool health/read admission, no retry

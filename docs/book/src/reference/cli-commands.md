@@ -796,6 +796,8 @@ qp share
 
 - `--queries <VALUE>`: Stored queries to include.
 
+- `--competency <VALUE>`: Verbatim competency.toml to compile and seal with the share.
+
 - `--alignments <VALUE>`: Reviewed SSSOM/RDF alignment file to carry.
 
 - `--parent-share <VALUE>`: Parent share for a delta export.
@@ -1146,6 +1148,16 @@ Merge pendants from Git snapshots and stop before committing.
 qp git-merge <ref>
 ```
 
+## `qp git-mergetool`
+
+Interactively resolve a pendant or declared DataBook using the standard merge layout.
+
+```text
+qp git-mergetool <pendant-export.nt|book.databook.md>
+```
+
+- `--by <VALUE>`: Identity recording a resolution.
+
 ### `qp git-merge show`
 
 Show a pendant's pending merge decisions in the standard layout.
@@ -1174,6 +1186,22 @@ Low-level Git merge driver for pendant files.
 
 ```text
 qp merge-driver <base> <ours> <theirs> <path>
+```
+
+## `qp databook-merge-driver`
+
+Low-level Git merge driver for declared DataBook files.
+
+```text
+qp databook-merge-driver <base> <ours> <theirs> <path>
+```
+
+## `qp databook-check`
+
+Verify an immutable DataBook merge result and its decisions.
+
+```text
+qp databook-check <base-ref> <ours-ref> <theirs-ref> <result-ref> <path>
 ```
 
 ## `qp pendant-resolve`
@@ -1876,7 +1904,23 @@ qp trust-root status
 
 Create, label, list, import, freeze and thaw named graphs and overlays.
 
-Subcommands: `graph create`, `graph label`, `graph list`, `graph import`, `graph freeze`, `graph thaw`, `graph overlay-create`, `graph overlay-write`, `graph overlay-compose`.
+Subcommands: `graph writer-instance`, `graph writer-grant`, `graph create`, `graph label`, `graph list`, `graph import`, `graph freeze`, `graph thaw`, `graph overlay-create`, `graph overlay-write`, `graph overlay-compose`.
+
+### `qp graph writer-instance`
+
+Read a local committed graph instance pin for owner enrollment.
+
+```text
+qp graph writer-instance <iri>
+```
+
+### `qp graph writer-grant`
+
+Apply an owner-local scoped writer grant revision or revocation.
+
+```text
+qp graph writer-grant <grant.json>
+```
 
 ### `qp graph create`
 

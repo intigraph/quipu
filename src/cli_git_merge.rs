@@ -13,6 +13,11 @@ fn fail(error: impl std::fmt::Display) -> ! {
 /// A pendant directory given as the directory or as its `decisions.json`.
 fn pendant_dir(arg: &str) -> &str {
     let arg = arg.trim_start_matches("./");
+    if let Some(path) = arg.strip_suffix(".decisions.json")
+        && quipu::git_merge::databook::is_document(path)
+    {
+        return path;
+    }
     arg.strip_suffix("/decisions.json")
         .or_else(|| arg.strip_suffix("decisions.json"))
         .map(|d| d.trim_end_matches('/'))
@@ -22,7 +27,11 @@ fn pendant_dir(arg: &str) -> &str {
 
 /// Print one pendant's decisions in the standard layout (aegis-k7l).
 fn show(dir: &str, format: &str) {
-    let path = Path::new(dir).join("decisions.json");
+    let path = if quipu::git_merge::databook::is_document(dir) {
+        std::path::PathBuf::from(format!("{dir}.decisions.json"))
+    } else {
+        Path::new(dir).join("decisions.json")
+    };
     let file = quipu::merge_reconcile::ReconcileFile::load_path(&path).unwrap_or_else(|e| fail(e));
     let view = file.view(
         &path.to_string_lossy(),
@@ -49,6 +58,12 @@ pub(crate) fn resolve_in_merge(dir: &str, key: &str, choice: &str, by: &str) {
     let repo = Path::new(".");
     let [base, ours, theirs] = quipu::git_merge::merge_refs(repo).unwrap_or_else(|e| fail(e));
     let by = format!("{by} at {}", chrono_now());
+    if quipu::git_merge::databook::is_document(dir) {
+        quipu::git_merge::databook::resolve(repo, dir, key, choice, &by)
+            .unwrap_or_else(|e| fail(e));
+        show(dir, "text");
+        return;
+    }
     quipu::git_merge::resolve_by(repo, &base, &ours, &theirs, dir, key, choice, Some(&by))
         .unwrap_or_else(|e| fail(e));
     show(dir, "text");
@@ -88,6 +103,21 @@ pub fn run(args: &[String]) {
     }
     let mut pending = Vec::new();
     let result = match (args[1].as_str(), &args[2..]) {
+        ("databook-merge-driver", [base, ours, theirs, path]) => {
+            quipu::git_merge::databook::driver(
+                repo,
+                Path::new(base),
+                Path::new(ours),
+                Path::new(theirs),
+                path,
+            )
+        }
+        ("databook-check", [base, ours, theirs, result, path]) => {
+            quipu::git_merge::databook::check(repo, base, ours, theirs, result, path).map(|()| {
+                println!("databook-check: immutable document and decisions verified");
+                true
+            })
+        }
         ("merge-driver", [base, ours, theirs, path]) => quipu::git_merge::driver(
             repo,
             Path::new(base),

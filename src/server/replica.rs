@@ -20,6 +20,17 @@ pub(crate) fn writer_lock(
     }
 }
 
+/// Claim process ownership before any SQLite initialization, or stop startup.
+pub(crate) fn claim_writer_lock(
+    path: &str,
+    config: &QuipuConfig,
+) -> Option<quipu::writer_lock::WriterLock> {
+    writer_lock(path, config).unwrap_or_else(|e| {
+        eprintln!("error claiming store {path}: {e}");
+        std::process::exit(1);
+    })
+}
+
 pub(crate) fn open_store(path: &str, config: &QuipuConfig) -> quipu::Result<quipu::Store> {
     if let Some(replica) = &config.server.replica {
         let url = url::Url::parse(&replica.primary_url).map_err(|_| {

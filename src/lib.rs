@@ -15,6 +15,9 @@ pub mod changeset;
 /// Change-sets against a live store: `/diff` and the `/patch` state check.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod changeset_store;
+pub mod client_changeset;
+/// Separately signed resolver evidence, without changing the client v1 wire.
+pub mod client_resolver;
 pub mod compact;
 pub mod competency;
 pub mod config;
@@ -60,6 +63,10 @@ mod merge_lists;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_pending;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod merge_plan;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_plan_gate;
+#[cfg(not(target_arch = "wasm32"))]
 mod merge_profile;
 /// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
 pub mod merge_reconcile;
@@ -103,6 +110,7 @@ pub mod transaction_auth;
 /// Pure declared write-base binding; no writer integration or admission authority.
 pub mod write_base;
 pub mod write_kind;
+pub mod write_observation;
 pub mod write_provenance;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod writer_lock;
@@ -114,6 +122,7 @@ pub mod explain;
 pub mod owl;
 // Reactive OWL rides the observer infrastructure, which is gated behind
 // `reactive-reasoner`; it needs both features.
+mod change_risk;
 #[cfg(all(feature = "owl", feature = "reactive-reasoner"))]
 mod owl_reactive;
 pub mod pack;
@@ -128,10 +137,12 @@ pub mod provider;
 pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
+pub mod rdf_triple;
 pub mod term_vocabulary;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
 /// Oversized-transaction parts shared by the change stream and the as-of share.
 pub mod feed_parts;
+pub mod fluent;
 pub mod follow;
 #[cfg(feature = "remote")]
 pub mod follow_http;
@@ -209,6 +220,8 @@ pub mod share_diff;
 pub mod promotion_control;
 pub mod shape_mapping;
 pub mod share_alignments;
+/// Opaque fluent proof transport, separate from native admission authority.
+pub mod share_fluent;
 pub mod share_import;
 pub(crate) mod share_import_resolve;
 #[cfg(not(target_arch = "wasm32"))]
@@ -377,3 +390,6 @@ pub mod mcp_transport;
 /// Bounded search-seeded SPARQL SELECT queries.
 pub mod search_query;
 pub use search_query::tool_search_query;
+
+#[cfg(test)]
+mod share_competency_tests;

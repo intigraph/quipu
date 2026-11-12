@@ -89,6 +89,10 @@ fn request_from_files(
         // Optional member; whether it must be present is the manifest's call,
         // checked by `verify_share` (aegis-fxpbys.2).
         queries_turtle: files.get(QUERIES).cloned(),
+        competency_toml: files.get(crate::competency::FILE).cloned(),
+        commands_turtle: files
+            .get(crate::competency::carriage::COMMANDS_FILE)
+            .cloned(),
         alignments_turtle: files.get(ALIGNMENTS).cloned(),
         query_namespace: None,
         replace_queries: false,
@@ -140,7 +144,12 @@ fn archive_files<R: Read>(reader: R, source: &str) -> Result<BTreeMap<String, St
         if !REQUIRED.contains(&name.as_str())
             && !matches!(
                 name.as_str(),
-                "export.ttl" | "manifest.ttl" | QUERIES | ALIGNMENTS
+                "export.ttl"
+                    | "manifest.ttl"
+                    | QUERIES
+                    | ALIGNMENTS
+                    | crate::competency::FILE
+                    | crate::competency::carriage::COMMANDS_FILE
             )
         {
             return Err(Error::InvalidValue(format!(
@@ -213,6 +222,18 @@ pub fn read_local(reference: &str) -> Result<ShareImportRequest> {
         }
         if let Ok(queries) = std::fs::read_to_string(path.join(QUERIES)) {
             files.insert(QUERIES.to_string(), queries);
+        }
+        for name in [
+            crate::competency::FILE,
+            crate::competency::carriage::COMMANDS_FILE,
+        ] {
+            match std::fs::read_to_string(path.join(name)) {
+                Ok(text) => {
+                    files.insert(name.into(), text);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(Error::InvalidValue(format!("share transport {name}: {e}"))),
+            }
         }
         if let Some(text) = crate::share_alignments::read_directory(path)? {
             files.insert(ALIGNMENTS.into(), text);
@@ -294,6 +315,25 @@ pub fn read_url(url: &str) -> Result<ShareImportRequest> {
                 String::from_utf8(bytes)
                     .map_err(|e| Error::InvalidValue(format!("share alignment UTF-8: {e}")))?,
             );
+        }
+        for (declared, name) in [
+            (
+                parsed.competency_hash.is_some() || parsed.files.competency.is_some(),
+                crate::competency::FILE,
+            ),
+            (
+                parsed.commands_hash.is_some() || parsed.files.commands.is_some(),
+                crate::competency::carriage::COMMANDS_FILE,
+            ),
+        ] {
+            if declared {
+                let bytes = fetch(&format!("{url}{name}"))?;
+                files.insert(
+                    name.into(),
+                    String::from_utf8(bytes)
+                        .map_err(|e| Error::InvalidValue(format!("share fetch {name}: {e}")))?,
+                );
+            }
         }
         // A served directory exposes no listing, so fetch the member only when
         // the manifest declares it; `verify_share` then checks its seal.

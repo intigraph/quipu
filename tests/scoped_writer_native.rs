@@ -55,6 +55,7 @@ fn configured_scoped_listener_has_no_unrestricted_write_fallback() {
         valid_until: quipu::time::epoch_secs() + 3600,
         revision: 1,
         revoked: false,
+        mint_scope: None,
     };
     // A deliberately has no owner CLI: enroll the isolated fixture through
     // the reviewed local Store API before starting the actual HTTP listener.
@@ -90,10 +91,13 @@ fn configured_scoped_listener_has_no_unrestricted_write_fallback() {
         {
             break;
         }
-        assert!(
-            serving.0.try_wait().unwrap().is_none(),
-            "configured listener exited"
-        );
+        if let Some(status) = serving.0.try_wait().unwrap() {
+            let retained = dir.keep();
+            panic!(
+                "configured listener exited ({status}); private startup log retained at {}",
+                retained.join("server.log").display()
+            );
+        }
         assert!(
             Instant::now() < deadline,
             "configured listener did not become healthy"

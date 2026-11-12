@@ -19,8 +19,8 @@ by the fixture rather than read from the shapes.
 When two writers mint different names for one entity, the graphs disagree about
 the world while agreeing about every triple. No triple-level operator can see
 it, so a recall of $1.000$ is not achievable by anything in Table~\ref{tab:armA}.
-We left the class in the benchmark deliberately: it is the most common real
-divergence defect in the recorded corpus, and excluding it would have produced a
+We left the class in the benchmark deliberately: it is a real
+divergence defect in the recorded corpus ($105$ repairs), and excluding it would have produced a
 shape-aware arm scoring $1.000$ on both precision and recall as an artifact of
 what we chose to measure. Arm D tests a separate pairwise entity-resolution stage, using labels and
 historical neighborhoods to propose identity decisions. Its held-out run recovered
@@ -54,7 +54,7 @@ instead of silently doubling. It is \emph{not} a claim that the operator was
 running and prevented $1{,}784$ doublings.
 
 \paragraph{Comment bodies in the merge replay corpus are synthetic.} Real values are prose
-about a deployment. In arms A and B, only the multiplicity is real --- which is all the merge
+about a deployment. In arm B, only the incident identities and the multiplicity are real --- which is all the merge
 reasons about, but it does mean the corpus cannot support any claim about value
 content.
 

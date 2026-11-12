@@ -239,9 +239,31 @@ pub(crate) async fn version() -> impl IntoResponse {
             quipu::acquisition::history::CONTRACT,
             quipu::acquisition::history::OBSERVATION_CONTRACT,
         ],
-        "write_contracts": [crate::knot_completion::CONTRACT],
+        "write_contracts": [
+            crate::knot_completion::CONTRACT,
+            quipu::episode::EXPLICIT_ADDRESS_CONTRACT,
+            quipu::episode::STRICT_NEW_CONTRACT,
+        ],
         "features": compiled_features(),
     }))
+}
+
+#[cfg(test)]
+mod episode_address_contract_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn version_advertises_explicit_episode_addressing() {
+        let response = version().await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let value: JsonValue = serde_json::from_slice(&body).unwrap();
+        let contracts = value["write_contracts"].as_array().unwrap();
+        assert!(contracts.contains(&json!("quipu.episode-addresses/v1")));
+        assert!(contracts.contains(&json!("quipu.episode-strict-new/v1")));
+        assert!(contracts.contains(&json!("quipu.knot-completion/v1")));
+    }
 }
 
 /// Every declared feature and whether this binary has it (aegis-t1u2h).
@@ -363,6 +385,13 @@ fn stats_aggregate(store: &quipu::Store) -> quipu::Result<JsonValue> {
     let (facts, entities, predicates) = store.current_triple_counts()?;
     Ok(json!({
         "facts": facts,
+        "root_live_triples": facts,
+        "counts_scope": {
+            "graph": "ROOT",
+            "population": "live_assertions",
+            "unit": "distinct_subject_predicate_term_key",
+            "facts_alias_for": "root_live_triples"
+        },
         "entities": entities,
         "predicates": predicates
     }))
@@ -414,8 +443,8 @@ pub(crate) async fn stats(
         let mut value = (*value).clone();
         value["store_id"] = json!(store_id);
         value["write_refusals"] = quipu::metrics::metrics().write_refusal_stats();
-        // The counts describe this transaction; `counts_stale` is true only when
-        // a concurrent recompute was running and an older aggregate was returned.
+        // Older aggregates can be returned during concurrent recomputation or
+        // the minimum recompute interval; their original generation survives.
         value["counts_as_of_tx"] = json!(counts_tx);
         value["counts_stale"] = json!(counts_tx != generation);
         Ok(axum::Json(value))

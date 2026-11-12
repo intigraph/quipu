@@ -115,6 +115,8 @@ pub enum DeltaValue {
     Bool(bool),
     /// Raw bytes, hex.
     Bytes(String),
+    /// First-class projection triple, with inline IRI identities.
+    Triple(Box<crate::rdf_triple::TripleValue>),
     /// Language-tagged literal.
     Lang {
         /// Lexical form, without the tag.
@@ -143,6 +145,7 @@ impl AttemptedDelta {
                 Value::Float(f) => DeltaValue::Float(f.to_string()),
                 Value::Bool(b) => DeltaValue::Bool(*b),
                 Value::Bytes(b) => DeltaValue::Bytes(hex::encode(b)),
+                Value::Triple(t) => DeltaValue::Triple(t.clone()),
                 Value::Lang { lexical, lang } => DeltaValue::Lang {
                     lexical: lexical.clone(),
                     lang: lang.clone(),
@@ -214,6 +217,7 @@ impl AttemptedDelta {
             let value = match &d.v {
                 DeltaValue::Ref(iri) => Value::Ref(store.intern(iri)?),
                 DeltaValue::Str(s) => Value::Str(s.clone()),
+                DeltaValue::Triple(t) => Value::Triple(t.clone()),
                 DeltaValue::Int(i) => Value::Int(*i),
                 DeltaValue::Float(f) => Value::Float(
                     f.parse()

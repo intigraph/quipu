@@ -5,6 +5,7 @@ use tokio::sync::Semaphore;
 
 fn routing(workers: usize) -> Routing {
     Routing {
+        configured: workers,
         workers: (0..workers)
             .map(|index| Worker {
                 url: "http://127.0.0.1:9".into(),

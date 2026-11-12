@@ -2,6 +2,71 @@ use super::*;
 use crate::Store;
 
 #[test]
+fn fluent_guard_cache_and_live_permits_never_enter_snapshot_or_journal() {
+    let store = Store::open_in_memory().unwrap();
+    initialize(&store).unwrap();
+    // Interning the actual protected type populates the receiving-store cache.
+    // Both excluded tables contain real rows, so exclusion is non-vacuous.
+    let kind = store
+        .intern(&format!("{}Fluent", crate::namespace::QUIPU_FLUENT))
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO fluent_write_permits(tx,g,e) VALUES(91,0,?1)",
+            [kind],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO fluent_origin_receipts(g,e,tx,proof) VALUES(0,?1,91,X'01')",
+            [kind],
+        )
+        .unwrap();
+    for table in [
+        "fluent_type_codes",
+        "fluent_write_permits",
+        "fluent_origin_receipts",
+    ] {
+        let count: i64 = store
+            .conn
+            .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(count > 0, "non-vacuous local metadata for {table}");
+    }
+    let batch = read_revision(&store, 0, 100).unwrap();
+    assert_eq!(batch.changes.len(), 1);
+    assert_eq!(batch.changes[0].table, "terms");
+    let mut bytes = Vec::new();
+    let receipt = write_snapshot(&store, &mut bytes, 1024 * 1024).unwrap();
+    assert!(receipt.rows > 0);
+    assert!(
+        receipt
+            .header
+            .catalog
+            .iter()
+            .any(|table| table.name == "terms")
+    );
+    assert!(!receipt.header.catalog.iter().any(|table| matches!(
+        table.name.as_str(),
+        "fluent_type_codes" | "fluent_write_permits" | "fluent_origin_receipts"
+    )));
+    for line in bytes
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+    {
+        let record: serde_json::Value = serde_json::from_slice(line).unwrap();
+        assert!(!matches!(
+            record.get("table").and_then(|name| name.as_str()),
+            Some("fluent_type_codes" | "fluent_write_permits" | "fluent_origin_receipts")
+        ));
+    }
+}
+
+#[test]
 fn declared_provenance_is_journal_content_without_local_authentication() {
     let mut store = Store::open_in_memory().unwrap();
     let tx = store
@@ -322,7 +387,19 @@ fn scoped_writer_authority_is_local_not_snapshot_or_journal_content() {
             [],
         )
         .unwrap();
-    for table in ["writer_grants", "writer_graph_instances"] {
+    store
+        .conn
+        .execute_batch(
+            "INSERT INTO client_changeset_grants VALUES('local-client',1,'{}');
+         INSERT INTO client_changeset_receipts VALUES('local-operation','{}');",
+        )
+        .unwrap();
+    for table in [
+        "writer_grants",
+        "writer_graph_instances",
+        "client_changeset_grants",
+        "client_changeset_receipts",
+    ] {
         let count: i64 = store
             .conn
             .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
@@ -335,9 +412,19 @@ fn scoped_writer_authority_is_local_not_snapshot_or_journal_content() {
     assert!(catalog.iter().any(|table| table.name == "graphs"));
     assert!(!catalog.iter().any(|table| matches!(
         table.name.as_str(),
-        "writer_grants" | "writer_graph_instances"
+        "writer_grants"
+            | "writer_graph_instances"
+            | "client_changeset_grants"
+            | "client_changeset_receipts"
     )));
     initialize(&store).unwrap();
+    store
+        .conn
+        .execute_batch(
+            "UPDATE client_changeset_grants SET revision=2;
+         UPDATE client_changeset_receipts SET receipt='{\"changed\":true}';",
+        )
+        .unwrap();
     store
         .conn
         .execute(

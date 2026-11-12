@@ -454,6 +454,7 @@ fn shacl_validation_rejects_invalid_episode() {
         group_id: None,
         nodes: vec![Node {
             name: "broken-svc".into(),
+            iri: None,
             node_type: Some("WebService".into()),
             description: Some("Missing port".into()),
             properties: None,
@@ -503,6 +504,7 @@ fn shacl_validation_passes_valid_episode() {
         group_id: None,
         nodes: vec![Node {
             name: "valid-svc".into(),
+            iri: None,
             node_type: Some("WebService".into()),
             description: None,
             properties: Some(props),
@@ -605,6 +607,7 @@ fn batch_stops_on_validation_failure() {
             group_id: None,
             nodes: vec![Node {
                 name: "good".into(),
+                iri: None,
                 node_type: Some("Thing".into()),
                 description: None,
                 properties: Some(good_props),
@@ -622,6 +625,7 @@ fn batch_stops_on_validation_failure() {
             group_id: None,
             nodes: vec![Node {
                 name: "bad".into(),
+                iri: None,
                 node_type: Some("Thing".into()),
                 description: None,
                 properties: None,

@@ -37,6 +37,15 @@ pub enum TermIdKind {
 /// column that exists in the database and not here is the failure case, and a
 /// list that drives the work can never notice it.
 pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
+    ("share_fluent_carriers", "share_id", TermIdKind::None),
+    ("share_fluent_carriers", "manifest", TermIdKind::None),
+    ("fluent_pending_configs", "id", TermIdKind::None),
+    ("fluent_pending_configs", "request", TermIdKind::None),
+    ("fluent_config_receipts", "g", TermIdKind::Id),
+    ("fluent_config_receipts", "e", TermIdKind::Id),
+    ("fluent_config_receipts", "tx", TermIdKind::None),
+    ("fluent_config_receipts", "request", TermIdKind::None),
+    ("fluent_config_receipts", "approval", TermIdKind::None),
     // -- schema::INIT_SQL --
     ("terms", "id", TermIdKind::Id),
     ("terms", "iri", TermIdKind::None),
@@ -48,9 +57,30 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "principal", TermIdKind::None),
     ("transaction_auth", "credential_id", TermIdKind::None),
     ("transaction_auth", "auth_class", TermIdKind::None),
+    // Native fluent type encoding and transaction-local writer permits.
+    ("fluent_type_codes", "id", TermIdKind::Id),
+    ("fluent_type_codes", "value", TermIdKind::RefBlob),
+    ("fluent_write_permits", "tx", TermIdKind::None),
+    ("fluent_write_permits", "g", TermIdKind::Id),
+    ("fluent_write_permits", "e", TermIdKind::Id),
+    ("fluent_origin_receipts", "g", TermIdKind::Id),
+    ("fluent_origin_receipts", "e", TermIdKind::Id),
+    ("fluent_origin_receipts", "tx", TermIdKind::None),
+    ("fluent_origin_receipts", "proof", TermIdKind::None),
     ("writer_grants", "id", TermIdKind::None),
     ("writer_grants", "revision", TermIdKind::None),
     ("writer_grants", "payload", TermIdKind::None),
+    // Master-local changeset authority and receipts contain text/JSON and tx
+    // identifiers, never interned term IDs. Owned copies clear these rows.
+    ("client_changeset_grants", "id", TermIdKind::None),
+    ("client_changeset_grants", "revision", TermIdKind::None),
+    ("client_changeset_grants", "payload", TermIdKind::None),
+    (
+        "client_changeset_receipts",
+        "operation_id",
+        TermIdKind::None,
+    ),
+    ("client_changeset_receipts", "receipt", TermIdKind::None),
     ("writer_graph_instances", "g", TermIdKind::Id),
     ("writer_graph_instances", "generation", TermIdKind::None),
     ("transaction_declarations", "tx", TermIdKind::None),
@@ -238,10 +268,12 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("shapes", "valid_to", TermIdKind::None),
     ("shapes", "tx", TermIdKind::None),
     ("shapes", "digest", TermIdKind::None),
+    ("shapes", "digest_backfill_error", TermIdKind::None),
     ("ontologies", "valid_from", TermIdKind::None),
     ("ontologies", "valid_to", TermIdKind::None),
     ("ontologies", "tx", TermIdKind::None),
     ("ontologies", "digest", TermIdKind::None),
+    ("ontologies", "digest_backfill_error", TermIdKind::None),
     // -- Store::migrate_query_registry (quipu #79) --
     ("queries", "name", TermIdKind::None),
     ("queries", "description", TermIdKind::None),

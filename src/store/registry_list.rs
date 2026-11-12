@@ -41,6 +41,20 @@ pub struct GraphInfo {
     pub kind: Option<String>,
 }
 
+/// The latest RML materialization transaction that wrote into graph `?1`.
+///
+/// The prefix test is a BINARY range, not `LIKE 'rml:%'`: SQLite's LIKE is
+/// case-insensitive, so it cannot use the BINARY `idx_tx_source` index and
+/// scanned every transaction. `/graphs` runs this once per registered graph,
+/// which made a 170-graph listing take ~6.75s on a 1.16M-transaction store.
+/// `';'` is the byte after `':'`, so the range is exactly the sources that
+/// start with `rml:`; [`Materialization::parse`] accepts only that exact
+/// lowercase prefix, so no row it could use is lost.
+pub(crate) const MAPPED_PROVENANCE_SQL: &str = "SELECT t.id, t.timestamp, t.source FROM transactions t \
+     WHERE t.source >= 'rml:' AND t.source < 'rml;' \
+       AND EXISTS (SELECT 1 FROM facts f WHERE f.tx = t.id AND f.g = ?1) \
+     ORDER BY t.id DESC LIMIT 1";
+
 impl Store {
     /// Canonical name for a graph id, retaining an explicit unknown-id diagnostic.
     pub(crate) fn graph_display_name(&self, graph: i64) -> String {
@@ -209,14 +223,9 @@ impl Store {
     pub fn mapped_provenance(&self, g: i64) -> Result<Option<Materialization>> {
         let row: Option<(i64, Option<String>, String)> = self
             .conn
-            .query_row(
-                "SELECT t.id, t.timestamp, t.source FROM transactions t \
-                 WHERE t.source LIKE 'rml:%' \
-                   AND EXISTS (SELECT 1 FROM facts f WHERE f.tx = t.id AND f.g = ?1) \
-                 ORDER BY t.id DESC LIMIT 1",
-                params![g],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
+            .query_row(MAPPED_PROVENANCE_SQL, params![g], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
             .optional()?;
         Ok(row.and_then(|(tx, timestamp, source)| {
             Materialization::parse(&source).map(|mut m| {

@@ -216,7 +216,9 @@ impl ReadView {
             | Query::Construct { dataset, .. }
             | Query::Describe { dataset, .. } => dataset,
         };
+        use super::mutants::{Mutant, active};
         if let Some(dataset) = dataset
+            && !active(Mutant::QueryDatasetClause)
             && (dataset
                 .default
                 .iter()
@@ -232,7 +234,8 @@ impl ReadView {
         sparql::root_scope::visit_scopes(&parsed, |scope| match scope {
             sparql::root_scope::Scope::Service => Err(denied()),
             sparql::root_scope::Scope::Graph(NamedNodePattern::NamedNode(graph))
-                if !self.authorization.graphs.contains(graph.as_str()) =>
+                if !self.authorization.graphs.contains(graph.as_str())
+                    && !active(Mutant::QueryGraphScope) =>
             {
                 Err(denied())
             }

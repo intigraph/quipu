@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
+pub mod carriage;
 mod compile;
 mod lint;
 #[cfg(test)]

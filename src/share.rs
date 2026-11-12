@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
-use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -19,60 +18,8 @@ use crate::store::Store;
 mod manifest_rdf;
 pub(crate) use manifest_rdf::manifest_turtle;
 
-/// The graph slice written into a share.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub enum ShareScope {
-    /// ROOT/default graph.
-    #[default]
-    Root,
-    /// One named graph IRI.
-    Graph(String),
-    /// Facts attributed to one episode provenance group.
-    Group(String),
-    /// A SPARQL CONSTRUCT or DESCRIBE result.
-    Construct(String),
-}
-
-impl Serialize for ShareScope {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let (kind, value) = match self {
-            Self::Root => ("root", None),
-            Self::Graph(value) => ("graph", Some(value.as_str())),
-            Self::Group(value) => ("group", Some(value.as_str())),
-            Self::Construct(value) => ("construct", Some(value.as_str())),
-        };
-        let mut state = serializer.serialize_struct("ShareScope", 2)?;
-        state.serialize_field("kind", kind)?;
-        state.serialize_field("value", &value)?;
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for ShareScope {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct Wire {
-            kind: String,
-            value: Option<String>,
-        }
-        let wire = Wire::deserialize(deserializer)?;
-        match (wire.kind.as_str(), wire.value) {
-            ("root", None) => Ok(Self::Root),
-            ("graph", Some(value)) => Ok(Self::Graph(value)),
-            ("group", Some(value)) => Ok(Self::Group(value)),
-            ("construct", Some(value)) => Ok(Self::Construct(value)),
-            (kind, value) => Err(serde::de::Error::custom(format!(
-                "invalid share scope kind={kind:?} value={value:?}"
-            ))),
-        }
-    }
-}
+mod scope;
+pub use scope::ShareScope;
 
 /// Options for [`share`].
 #[derive(Debug, Clone)]
@@ -89,6 +36,12 @@ pub struct ShareOptions {
     pub queries: Option<Vec<String>>,
     /// Optional ancillary alignment evidence; never automatically applied.
     pub alignments_turtle: Option<String>,
+    /// Opaque source proofs, sealed by share identity; never authority or graph facts.
+    pub fluent_proofs: Vec<String>,
+    /// Explicit pending observable requests; no approval or registration travels.
+    pub observable_configs: Vec<String>,
+    /// Verbatim offline competency contract, compiled and sealed with the share.
+    pub competency_toml: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
@@ -127,6 +80,9 @@ impl Default for ShareOptions {
             no_shapes: false,
             queries: None,
             alignments_turtle: None,
+            fluent_proofs: Vec::new(),
+            observable_configs: Vec::new(),
+            competency_toml: None,
             parent_share: None,
             turtle_view: false,
             pack_dir: Some(PENDANT_PACK_DIR.into()),
@@ -159,6 +115,9 @@ pub struct SharePayloadRequest {
     /// Optional exact alignment evidence, sealed and outward-scrubbed.
     #[serde(default)]
     pub alignments_turtle: Option<String>,
+    /// Verbatim offline competency contract, compiled and sealed with the share.
+    #[serde(default)]
+    pub competency_toml: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also include a human-readable `export.ttl` derived view.
@@ -177,6 +136,10 @@ impl SharePayloadRequest {
             no_shapes: self.no_shapes,
             queries: self.queries.clone(),
             alignments_turtle: self.alignments_turtle.clone(),
+            // No new HTTP producer/admission surface in this source-only adapter.
+            fluent_proofs: Vec::new(),
+            observable_configs: Vec::new(),
+            competency_toml: self.competency_toml.clone(),
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
             // Not settable over HTTP: pack_dir is a property of the producing
@@ -252,6 +215,12 @@ pub struct ShareFiles {
     /// Fixed optional ancillary member name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alignments: Option<String>,
+    /// Fixed optional competency authoring member.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub competency: Option<String>,
+    /// Fixed optional compiled command member.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<String>,
 }
 
 mod pointers;
@@ -271,6 +240,12 @@ pub use pointers::{PointerTarget, SharePointer};
 /// source compatibility for this exhaustive public struct.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
+    /// Exact pending configuration strings; absent preserves legacy identities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observable_configs: Vec<String>,
+    /// Exact opaque source proofs inside share identity; absent preserves legacy bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fluent_proofs: Vec<String>,
     /// Optional exact model identity; covered by `share_id`. Legacy shares omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedding: Option<crate::embedding_runtime::EmbeddingRecipe>,
@@ -296,6 +271,12 @@ pub struct ShareManifest {
     /// Exact ancillary bytes, included in `share_id`; absent preserves legacy identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alignments_hash: Option<String>,
+    /// Exact source bytes; absent retains legacy identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub competency_hash: Option<String>,
+    /// Compiled commands; data only, never executed on import.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands_hash: Option<String>,
     /// Export scope.
     pub scope: ShareScope,
     /// Prior share in this lineage.
@@ -491,6 +472,8 @@ fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<
 }
 
 pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
+    crate::share_fluent::validate(&opts.fluent_proofs)?;
+    crate::fluent::pending_config::storage::validate_requests(&opts.observable_configs)?;
     let graph = canonicalize_ntriples(&export_scope(
         store,
         &opts.scope,
@@ -498,7 +481,8 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
     )?)?;
     let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
     let queries = crate::share_queries::select(store, &opts.scope, opts.queries.as_deref())?;
-    let queries = (!queries.is_empty()).then(|| crate::share_queries::to_turtle(&queries));
+    let (competency, queries) =
+        crate::competency::carriage::compile_optional(opts.competency_toml.as_deref(), &queries)?;
     let turtle = if opts.turtle_view {
         Some(export_scope(
             store,
@@ -526,6 +510,8 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         recipe.validate()?;
     }
     let mut manifest = ShareManifest {
+        observable_configs: opts.observable_configs.clone(),
+        fluent_proofs: opts.fluent_proofs.clone(),
         embedding,
         schema: "https://github.com/scbrown/quipu/share-manifest/v1".into(),
         share_id: String::new(),
@@ -535,6 +521,8 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         canonicalization: Some("RDFC-1.0".into()),
         shapes_hash: sha256(&shapes),
         queries_hash: queries.as_ref().map(|q| sha256(q.as_bytes())),
+        competency_hash: competency.as_ref().map(|m| sha256(m.authoring.as_bytes())),
+        commands_hash: competency.as_ref().map(|m| sha256(m.commands.as_bytes())),
         alignments_hash: opts
             .alignments_turtle
             .as_ref()
@@ -550,6 +538,10 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             version: env!("CARGO_PKG_VERSION").into(),
         },
         files: ShareFiles {
+            competency: competency.as_ref().map(|_| crate::competency::FILE.into()),
+            commands: competency
+                .as_ref()
+                .map(|_| crate::competency::carriage::COMMANDS_FILE.into()),
             alignments: opts
                 .alignments_turtle
                 .as_ref()
@@ -601,6 +593,13 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         files.insert(
             crate::share_alignments::ALIGNMENTS_FILE.into(),
             text.clone(),
+        );
+    }
+    if let Some(members) = competency {
+        files.insert(crate::competency::FILE.into(), members.authoring);
+        files.insert(
+            crate::competency::carriage::COMMANDS_FILE.into(),
+            members.commands,
         );
     }
     if let Some(queries) = queries {

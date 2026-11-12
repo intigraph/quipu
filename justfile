@@ -132,8 +132,8 @@ wasm cmd="check" n="1000":
 # === Fixtures ===
 
 # Generate test-fixtures/test-store.db from static assets
-seed:
-    cargo run --bin seed-fixtures --features dev-tools
+seed *args="":
+    cargo run --bin seed-fixtures --features dev-tools -- {{args}}
 
 # Serve the test fixture database on localhost:3030
 serve-fixtures:
@@ -201,6 +201,8 @@ demo name="explorer":
     case {{quote(name)}} in
         writer-lock) cargo run --quiet --locked --no-default-features --example writer_lock_demo ;;
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
+        strict-new) cargo run --quiet --locked --no-default-features --example episode_strict_new ;;
+        merge-risk-plan) cargo run --quiet --locked --offline --no-default-features --example merge_risk_plan ;;
         key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
         ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;
         transition-trust-root) cargo run --quiet --locked --offline --no-default-features --example transition_trust_root ;;
@@ -377,6 +379,7 @@ changelog-verify *args:
 changelog-verify-test:
     ./scripts/test-verify-changelog.sh
     python3 scripts/test_changelog_scrub.py
+    python3 scripts/test_changelog_check_scope.py
 
 # Repository contributor graph: generate, prove the receiver, or build the release share.
 contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":

@@ -52,6 +52,7 @@ impl Card {
 }
 
 /// How a slot changed relative to base.
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Change {

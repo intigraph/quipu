@@ -1,0 +1,5 @@
+{"version": 2, "width": 100, "height": 30, "title": "Offline merge-risk policy control; same copied candidate"}
+[0.013373968075029552, "o", "$ same copied candidate: INACTIVE (private in-memory fixture)\n"]
+[0.13591457798611373, "o", "root-only plan: Pass, score=4\r\nsame receiver verifies original proof: PASS\r\nsame receiver rejects mutated proof: PASS\r\ninactive actual fork promotion: APPLIED; existing behavior retained\r\nall stores were private and in memory; no deployment policy was installed\r\n"]
+[0.13595250400248915, "o", "$ same copied candidate: CONFIGURED (private in-memory fixture)\n"]
+[0.3241861970163882, "o", "root-only plan: Pass, score=4\r\nsame receiver verifies original proof: PASS\r\nsame receiver rejects mutated proof: PASS\r\nconfigured actual fork promotion: REFUSED; ROOT unchanged\r\nall stores were private and in memory; no deployment policy was installed\r\n"]

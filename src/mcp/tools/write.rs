@@ -309,7 +309,7 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 
     // Apply the configured entity-resolution policy so dedup fires on ingest
     // (hq-uye). Opts are cloned out of the store before the &mut borrow.
-    let opts = episode::IngestResolutionOpts::from_config(store.resolution_config());
+    let opts = super::episode_admission::options(store, input)?;
     // Mint IRIs under the CONFIGURED namespace, not the hardcoded aegis default
     // (aegis-4h3x). Read before the &mut borrow, same as opts.
     let base_ns = store.base_ns().to_string();
@@ -376,7 +376,7 @@ pub struct PreparedEpisode {
 /// The same refusals [`tool_episode`] gives before it writes.
 pub fn tool_episode_prepare(store: &Store, input: &JsonValue) -> Result<Option<PreparedEpisode>> {
     crate::time::check_request_deadline()?;
-    let opts = episode::IngestResolutionOpts::from_config(store.resolution_config());
+    let opts = super::episode_admission::options(store, input)?;
     if !opts.enabled || opts.strict_mode {
         return Ok(None);
     }

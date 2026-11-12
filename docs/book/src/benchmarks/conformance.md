@@ -37,8 +37,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `61eba8bf8b17e2d80463ec769f4cc83346d89c91` |
-| Quipu revision (syntax) | `61eba8bf8b17e2d80463ec769f4cc83346d89c91` |
+| Quipu revision (evaluation) | `cd86223bd2afdce9ce616cdaa90825b6d23ab3ab` |
+| Quipu revision (syntax) | `cd86223bd2afdce9ce616cdaa90825b6d23ab3ab` |
 | Quipu version | `quipu 0.17.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -396,46 +396,47 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 
 ### Write-path conformance
 
-The same 98 Core cases are also written through the real `/knot` handler, whole and split across writes (subject halves, one write per subject, one write per triple, each in both orders). **90/98** agree with the W3C verdict under every split; **7** diverge under at least one; **1** could not be judged under at least one split (the write gate answered *cannot verify* instead of a SHACL verdict).
-A divergence is a case whose final graph violates (or conforms) while the write gate accepted (or refused) every write. These are known defects, listed in the ledger with the splits that expose them; the CI gate fails on any new divergence and on any entry that no longer diverges, so this number can only fall.
+The same 98 Core cases are also written through the real `/knot` handler. 97 cases exercise independent writes, whole and split across writes (subject halves, one write per subject, one write per triple, each in both orders). **90/97** agree with the W3C verdict under every split; **6** diverge under at least one; **1** could not be judged under at least one split (the write gate answered *cannot verify* instead of a SHACL verdict).
+**1 together-only document** uses the existing atomic `/knot` commit instead. The adapter stages each split as one complete document before submitting it; every atomic commit must match the W3C verdict. Independent-prefix refusals remain in the raw results as diagnostics, not over-refusal defects. Each independent write must be valid in its own post-state; a valid final union does not make an incomplete prefix valid. The component table includes the atomic contract in its Agree column.
+A divergence is a mismatch between the W3C verdict and the tested admission contract. An independent split conforms only when every write was accepted. These are known defects, listed in the ledger with the splits that expose them; the CI gate fails on any new divergence and on any entry that no longer diverges, so this number can only fall.
 
 | Constraint component | Cases using it | Agree | Diverge | Unjudged |
 |---|---:|---:|---:|---:|
-| `sh:and` | 4 | 3 | 1 | 0 |
-| `sh:class` | 19 | 13 | 6 | 0 |
-| `sh:closed` | 4 | 3 | 1 | 0 |
-| `sh:datatype` | 28 | 27 | 1 | 0 |
-| `sh:disjoint` | 3 | 2 | 1 | 0 |
-| `sh:equals` | 3 | 2 | 1 | 0 |
-| `sh:hasValue` | 5 | 4 | 1 | 0 |
-| `sh:in` | 5 | 3 | 2 | 0 |
-| `sh:languageIn` | 3 | 2 | 1 | 0 |
-| `sh:lessThan` | 3 | 2 | 1 | 0 |
-| `sh:lessThanOrEquals` | 2 | 1 | 1 | 0 |
-| `sh:maxCount` | 13 | 11 | 1 | 1 |
-| `sh:maxExclusive` | 3 | 2 | 1 | 0 |
-| `sh:maxInclusive` | 3 | 2 | 1 | 0 |
-| `sh:maxLength` | 3 | 2 | 1 | 0 |
-| `sh:minCount` | 20 | 19 | 1 | 0 |
-| `sh:minExclusive` | 4 | 3 | 1 | 0 |
-| `sh:minInclusive` | 4 | 3 | 1 | 0 |
-| `sh:minLength` | 3 | 2 | 1 | 0 |
-| `sh:node` | 5 | 4 | 1 | 0 |
-| `sh:nodeKind` | 6 | 4 | 1 | 1 |
-| `sh:not` | 4 | 3 | 1 | 0 |
-| `sh:or` | 5 | 4 | 1 | 0 |
-| `sh:pattern` | 6 | 5 | 1 | 0 |
-| `sh:property` | 55 | 51 | 3 | 1 |
-| `sh:qualifiedValueShape` | 4 | 3 | 1 | 0 |
-| `sh:uniqueLang` | 3 | 2 | 1 | 0 |
-| `sh:xone` | 3 | 2 | 1 | 0 |
+| `sh:and` | 4 | 4 | 0 | 0 |
+| `sh:class` | 19 | 14 | 5 | 0 |
+| `sh:closed` | 4 | 4 | 0 | 0 |
+| `sh:datatype` | 28 | 28 | 0 | 0 |
+| `sh:disjoint` | 3 | 3 | 0 | 0 |
+| `sh:equals` | 3 | 3 | 0 | 0 |
+| `sh:hasValue` | 5 | 5 | 0 | 0 |
+| `sh:in` | 5 | 4 | 1 | 0 |
+| `sh:languageIn` | 3 | 3 | 0 | 0 |
+| `sh:lessThan` | 3 | 3 | 0 | 0 |
+| `sh:lessThanOrEquals` | 2 | 2 | 0 | 0 |
+| `sh:maxCount` | 13 | 12 | 0 | 1 |
+| `sh:maxExclusive` | 3 | 3 | 0 | 0 |
+| `sh:maxInclusive` | 3 | 3 | 0 | 0 |
+| `sh:maxLength` | 3 | 3 | 0 | 0 |
+| `sh:minCount` | 20 | 20 | 0 | 0 |
+| `sh:minExclusive` | 4 | 4 | 0 | 0 |
+| `sh:minInclusive` | 4 | 4 | 0 | 0 |
+| `sh:minLength` | 3 | 3 | 0 | 0 |
+| `sh:node` | 5 | 5 | 0 | 0 |
+| `sh:nodeKind` | 6 | 5 | 0 | 1 |
+| `sh:not` | 4 | 4 | 0 | 0 |
+| `sh:or` | 5 | 5 | 0 | 0 |
+| `sh:pattern` | 6 | 6 | 0 | 0 |
+| `sh:property` | 55 | 52 | 2 | 1 |
+| `sh:qualifiedValueShape` | 4 | 4 | 0 | 0 |
+| `sh:uniqueLang` | 3 | 3 | 0 | 0 |
+| `sh:xone` | 3 | 3 | 0 | 0 |
 
 Ledger: [`shacl-write-path.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/shacl-write-path.json).
 
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-11-08T03:43:57Z by [CI run](https://github.com/intigraph/quipu/actions/runs/42443088282), from quipu `61eba8bf8b17`.
+Ledger re-derived 2026-11-10T03:22:39Z by [CI run](https://github.com/intigraph/quipu/actions/runs/42748227370), from quipu `cd86223bd2af`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.

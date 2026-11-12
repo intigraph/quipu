@@ -108,7 +108,7 @@ Constrained by the novelty ruling, and the constraint is not cosmetic:
 ## October research update
 
 [ARM-E-F-RESULTS.md](ARM-E-F-RESULTS.md) is the generated schema-evolution
-results note. The paper builds to 15 pages and includes the datatype conflict
+results note. The paper builds to 17 pages and includes the datatype conflict
 detector miss caught by
 post-merge validation. Regenerate it with `just bench merge-note`; its counts
 come from the published shape fixtures and results. The submission abstract

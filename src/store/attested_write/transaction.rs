@@ -16,6 +16,7 @@
 //! Deliberate differences: the read model is dropped rather than patched
 //! (conservative), and per-commit write-count telemetry is not recorded.
 
+use super::census_observer::{Completion, Stage};
 use super::*;
 
 impl Store {
@@ -30,16 +31,26 @@ impl Store {
         }
         self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_attest")?;
-        let ts = crate::time::now_iso();
+        let ts = census_observer::write_time();
         self.set_write_in_progress(true);
         // Set once a write reaches the graph gates, so a refusal there keeps
         // its normal audit (refusal event and denial verdicts) after rollback.
         let mut audit: Option<(i64, String)> = None;
+        let mut observation = None;
+        let mut native_tx = None;
         let result = (|| {
             // Acquire SQLite writer ownership BEFORE any state is read.
             self.conn
                 .execute("UPDATE attest_switch SET enabled=enabled WHERE id=1", [])?;
             let (value, write) = body(self, &ts)?;
+            #[cfg(test)]
+            census_observer::tests::maybe_select(self);
+            observation = Some(Stage::capture(
+                census_observer::current(),
+                write.as_ref().map_or(0, |(_, _, datums)| datums.len()),
+            ));
+            #[cfg(test)]
+            super::census_fixture::capture(self, write.is_some(), &ts)?;
             let Some((graph_iri, actor, datums)) = write else {
                 return Ok((value, None));
             };
@@ -55,6 +66,7 @@ impl Store {
             // admit against the loaded shapes, as conditional writes do.
             // `stage_and_guard` opened this write's transaction; it is the latest.
             let tx = self.latest_tx_id()?;
+            native_tx = Some(tx);
             self.enforce_shacl_poststate(&datums, graph, tx, true)
                 .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
             crate::promotion_control::claim_commit(Some(SOURCE))?;
@@ -68,9 +80,15 @@ impl Store {
                     let _ = crate::store::release::rollback_release(&self.conn, "quipu_attest");
                     self.set_write_in_progress(false);
                     self.term_cache.borrow_mut().clear_persistent();
+                    if let Some(stage) = observation.take() {
+                        stage.finish(Completion::Unknown);
+                    }
                     return Err(error.into());
                 }
                 self.set_write_in_progress(false);
+                if let Some(stage) = observation.take() {
+                    stage.finish(native_tx.map_or(Completion::NoData, Completion::NativeRelease));
+                }
                 if let Some((datums, staged, graph, actor)) = written {
                     self.invalidate_read_model();
                     // A post-commit hook error is indeterminate to the caller;
@@ -101,6 +119,15 @@ impl Store {
                     }
                 } else {
                     self.pending_verdicts.clear();
+                }
+                if let Some(stage) = observation.take() {
+                    stage.finish(if rollback.is_ok() {
+                        Completion::RolledBack
+                    } else {
+                        Completion::Unknown
+                    });
+                } else {
+                    census_observer::before_handoff();
                 }
                 rollback?;
                 Err(error)

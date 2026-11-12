@@ -1,4 +1,6 @@
 //! Real HTTP adapters, synthetic credentials and disposable stores only.
+#[path = "scoped_writer_mint_tests.rs"]
+mod mint;
 use std::{collections::BTreeSet, sync::Arc};
 
 use axum::{Router, middleware, response::IntoResponse, routing::post};
@@ -34,6 +36,7 @@ fn grant(store: &Store, who: &str, graph: &str) -> WriteGrant {
         valid_until: quipu::time::epoch_secs() + 3600,
         revision: 1,
         revoked: false,
+        mint_scope: None,
     }
 }
 
@@ -58,6 +61,7 @@ fn request_with_write_id(
     let mut request = ureq::post(&format!("http://{address}{path}"))
         .set("authorization", &format!("Bearer fixture-{who}"))
         .set("content-type", content_type)
+        .set("x-quipu-client", "agent-adhoc")
         .set("x-quipu-agent", "urn:writer:bob")
         .set("x-quipu-principal", "urn:writer:bob");
     if let Some(write_id) = write_id {
@@ -70,6 +74,7 @@ fn request_with_write_id(
     };
     let status = response.status();
     let text = response.into_string().unwrap();
+    println!("fixture request: principal={who}; path={path}; status={status}");
     (
         status,
         serde_json::from_str(&text).unwrap_or(json!({"text":text})),

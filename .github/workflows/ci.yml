@@ -92,6 +92,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: bundled-runtime
+      - name: Prepare checksum-pinned CI runtime
+        uses: ./.github/actions/pinned-ci-onnx
+        with:
+          mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
       - name: Load the native bundle and refuse corrupt cache or bad explicit override
         run: cargo test --locked --test bundled_runtime
 
@@ -300,6 +304,10 @@ jobs:
           key: ${{ runner.os }}-cargo-extended-sources-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-extended-sources-v2-
+      - name: Prepare checksum-pinned CI runtime
+        uses: ./.github/actions/pinned-ci-onnx
+        with:
+          mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
       - name: Disk before build
         run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
       - run: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
@@ -386,6 +394,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Mirror acquisition controls
+        run: python scripts/test-ci-asset-mirror.py
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
@@ -396,6 +406,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+      - name: Prepare checksum-pinned CI runtime
+        uses: ./.github/actions/pinned-ci-onnx
+        with:
+          mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
       - run: cargo build
       # This is executable documentation, not a second hand-written example:
       # the checked transcript embedded by the sharing chapter must equal a
@@ -424,6 +438,10 @@ jobs:
           key: ${{ runner.os }}-cargo-full-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-full-
+      - name: Prepare checksum-pinned CI runtime
+        uses: ./.github/actions/pinned-ci-onnx
+        with:
+          mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
       - run: cargo build --locked --features full --bin quipu --bin quipu-server
 
   # The wasm32 target and browser harness (docs/design/wasm-support.md;
@@ -540,6 +558,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -597,6 +617,10 @@ jobs:
           tool: git-cliff
       - name: Prove the changelog guard, pre-cut gate and freshness check
         run: ./scripts/test-verify-changelog.sh
+      - name: Prove changelog-check scope (release-plz PRs only; still fails a bad one)
+        run: python3 scripts/test_changelog_check_scope.py
+      - name: Check current release-window coverage
+        run: python3 scripts/check-release-window.py
 
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
@@ -685,6 +709,10 @@ jobs:
           python-version: "3.12"
       - name: Harness self-test
         run: scripts/quipu-load-test.py --self-test
+      - name: Prepare checksum-pinned CI runtime
+        uses: ./.github/actions/pinned-ci-onnx
+        with:
+          mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
       - name: Build server
         run: cargo build --locked --features full --bin quipu-server
       - name: Run mixed load ratchet
@@ -748,6 +776,10 @@ jobs:
         run: |
           python3 scripts/ci/test-query-perf.py
           python3 scripts/ci/test-load-string-filters.py
+      - name: Prepare checksum-pinned CI runtime
+        uses: ./.github/actions/pinned-ci-onnx
+        with:
+          mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
       - name: Build release binaries
         run: cargo build --release --locked --features full --bin quipu --bin quipu-server
       - name: Restore generated query fixture

@@ -183,6 +183,7 @@ a:WidgetShape a sh:NodeShape ; sh:targetClass a:Widget ; q:onViolation "emit" ;
             replace_snapshot: false,
             nodes: vec![Node {
                 name: "widget".into(),
+                iri: None,
                 node_type: Some("Widget".into()),
                 description: Some("fixture".into()),
                 properties: None,

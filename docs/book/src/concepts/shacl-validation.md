@@ -17,6 +17,38 @@ hw:korimako a hw:Host .            # Missing required hostname
 With SHACL shapes loaded, Quipu catches these problems before they enter
 the fact log.
 
+## Atomic documents and independent writes
+
+Each independent write must be valid in its own post-state. For example, a
+new node with a required name cannot be committed with only its type and
+completed by a later write. The first write is missing a required value even
+if the proposed final graph would be valid. Existing-context refusals are a
+different problem: a value already in the destination graph must be considered
+under the write path's documented context rules.
+
+For data that is valid only together, stage a complete RDF document on the
+client, then submit it once. The existing `POST /knot` / `quipu_knot` operation
+accepts the completed document as `turtle`; it validates and commits its data
+atomically. No new staging graph or admission bypass is needed. The CLI also
+accepts a complete file:
+
+```bash
+# These are chunks of ONE RDF document, with shared prefixes/base and labels.
+cat document.part1.ttl document.part2.ttl > complete.ttl
+quipu knot complete.ttl --shapes contract.ttl --db graph.db
+```
+
+Do not submit the parts separately or use chunked `quipu ingest` as an atomic
+commit: each ingest chunk is a separate transaction. Preserve the original
+document's blank-node identity while assembling it; labels from unrelated RDF
+documents do not identify the same node. An invalid completed document is still
+refused without committing its data. A refusal audit record may be retained.
+
+The W3C `shacl-shacl` fixture is a together-only document: it describes shapes
+and lists that refer to definitions later in the same document. The write-path
+harness tests its staged atomic commits and retains independent-prefix
+refusals separately, including the violated component, path and focus node.
+
 ## Class targets and subclasses
 
 A `sh:targetClass` selects instances of that class and of its subclasses,

@@ -69,8 +69,11 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand asof-rdf 'Convert one retained as-of share into bounded coherent RDF chunks offline'
             cand acquire 'Measure the bounded scope of a direct-main graph acquisition'
             cand migrate-vectors 'Move stored vectors between backends (lancedb feature)'
+            cand git-mergetool 'Interactively resolve a pendant or declared DataBook using the standard merge layout'
             cand git-merge 'Merge pendants from Git snapshots and stop before committing'
             cand merge-driver 'Low-level Git merge driver for pendant files'
+            cand databook-merge-driver 'Low-level Git merge driver for declared DataBook files'
+            cand databook-check 'Verify an immutable DataBook merge result and its decisions'
             cand pendant-resolve 'Record a resolution choice for one pendant merge conflict'
             cand pendant-check 'Check a pendant merge result in CI without a merge driver'
             cand diff-textconv 'Render a pack with labels for git diff textconv'
@@ -581,6 +584,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --shapes 'Shapes used for validation or packaging'
             cand --queries 'Stored queries to include'
+            cand --competency 'Verbatim competency.toml to compile and seal with the share'
             cand --alignments 'Reviewed SSSOM/RDF alignment file to carry'
             cand --parent-share 'Parent share for a delta export'
             cand --since 'Starting share or transaction for incremental output'
@@ -790,6 +794,12 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'quipu;git-mergetool'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --by 'Identity recording a resolution'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'quipu;git-merge'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
@@ -811,6 +821,16 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --help 'Print help'
         }
         &'quipu;merge-driver'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;databook-merge-driver'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;databook-check'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
@@ -1286,6 +1306,8 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand writer-instance 'Read a local committed graph instance pin for owner enrollment'
+            cand writer-grant 'Apply an owner-local scoped writer grant revision or revocation'
             cand create 'Register a committed named graph'
             cand label 'Declare lattice labels on a registered graph'
             cand list 'List registered named graphs'
@@ -1295,6 +1317,16 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand overlay-create 'Create an overlay graph bound to a committed parent'
             cand overlay-write 'Assert, retract or tombstone a triple in an overlay'
             cand overlay-compose 'Resolve an overlay''s composed view over its parent'
+        }
+        &'quipu;graph;writer-instance'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;graph;writer-grant'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'quipu;graph;create'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'

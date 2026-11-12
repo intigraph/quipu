@@ -245,7 +245,10 @@ impl StoreHandle {
         // no-op. A refusal is recorded on the request, and the store then
         // refuses to open a transaction for it (aegis-bys8d1).
         if let Some(pending) = quipu::transaction_auth::current_attestation() {
-            let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
+            let _refusal_is_recorded_on_the_request = quipu::write_observation::observe(
+                quipu::write_observation::Stage::Attestation,
+                || guard.settle_attestation(&pending),
+            );
         }
         guard
     }

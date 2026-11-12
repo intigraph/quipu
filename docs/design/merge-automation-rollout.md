@@ -128,6 +128,32 @@ actual merge, and the normal deployment smoke. Then admit the remaining eligible
 PRs. Keep one observed main-tip watch and attribute a real failure before
 reverting. Do not count cancelled or missing runs as green.
 
+### Observed merge-group behavior
+
+Two trial runs against a temporary queue on a scratch branch, with the same
+required contexts as main, established these facts before the queue was
+enabled on main:
+
+- The queue builds one squash commit per entry on top of the queue base. Its
+  subject ends with the entry's `(#N)` suffix, and its ref is
+  `gh-readonly-queue/<base>/pr-<N>-<base-sha>`.
+- `ci.yml` runs on `merge_group` and reports all seven required CI contexts on
+  the group commit.
+- The pendant merge check must handle the `merge_group` event. Without that
+  handling it refused the event, failing Test (shacl) and Release correctness
+  and ejecting the entry (#1183 added it).
+- After all required contexts passed, the queue merged exactly the verified
+  group commit: the branch tip equals the group SHA.
+- With squash, a group commit has one parent, so the pendant check verifies
+  the queue base against the queued content but replays no two-parent merge.
+  The pull request path still replays the synthetic merge before enqueue.
+
+`review/approved` is required on main, so each group commit needs it too. It is
+published on the group commit only when every queued entry's head carries an
+accepted non-author receipt and a successful status. Otherwise a failure is
+published and the entry is ejected. Entries whose approval comes from the
+ledger-only exemption are refused under the queue until that path is designed.
+
 ## Rollback and measurements
 
 Disable only the newly enabled auto-merge admissions if their head/review binding

@@ -150,8 +150,14 @@ pub fn configure_transient_import(store: &mut Store) {
 /// Apply the same provider policy to explicitly transient import stores.
 pub fn configure_embeddings(store: &mut Store) {
     match quipu::embedding_runtime::configure_provider(store, &config().embedding) {
-        // A fresh local store has no model; saying so on every command buried
-        // real output (aegis-4pbw). Semantic calls still refuse on their own.
+        // Automatic embedding was requested, but there is no provider. Refuse
+        // before a write can be mistaken for successful semantic indexing.
+        Ok(quipu::embedding_runtime::ProviderStatus::Unconfigured)
+            if config().embedding.auto_embed_explicit =>
+        {
+            eprintln!("{}", quipu::embedding::NO_PROVIDER_HELP);
+            std::process::exit(1);
+        }
         Ok(quipu::embedding_runtime::ProviderStatus::Unconfigured) => {}
         Ok(status) => eprintln!("{status}"),
         Err(error) => {

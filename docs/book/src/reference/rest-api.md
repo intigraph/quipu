@@ -433,14 +433,31 @@ curl localhost:3030/stats
 Response:
 
 ```json
-{"facts": 1234, "entities": 56, "predicates": 12,
+{"facts": 1234, "root_live_triples": 1234, "entities": 56, "predicates": 12,
+ "counts_scope": {"graph": "ROOT", "population": "live_assertions",
+                  "unit": "distinct_subject_predicate_term_key",
+                  "facts_alias_for": "root_live_triples"},
  "store_id": "urn:uuid:...", "counts_as_of_tx": 9876, "counts_stale": false}
 ```
 
-`store_id` is always current. The counts are computed on a read connection, never
-the writer, and cached until the next write. `counts_as_of_tx` is the transaction
-they describe; `counts_stale` is `true` only when another request was already
-recomputing them and an earlier aggregate was returned instead of a second scan.
+`root_live_triples` counts distinct visible ROOT triples, deduplicating repeated
+assertions and equivalent value encodings by `(subject, predicate, term_key)`.
+`facts` is a compatibility alias for that count. Closed/retracted rows and all
+named graphs are excluded. Entities and predicates are distinct members of that
+same visible triple population. The MCP `quipu_stats` transport uses this route.
+
+`store_id` is always current. Counts use a read connection, never the writer.
+They are cached until a write changes the transaction generation, with aggregate
+recomputation spaced at least five minutes apart. `counts_as_of_tx` identifies
+the cached generation. `counts_stale` is true when a newer generation exists,
+including during that minimum interval or another request's recomputation.
+
+The metrics endpoint counts a different unit: physical live ROOT assertion
+rows. Repeated assertions count separately there. For one unchanged snapshot,
+`root_live_triples <= quipu_root_live_assertion_rows`; equality holds when there
+are no repeated/equivalently encoded live assertions. Separate cache generations
+and refresh times mean independently collected live responses cannot be used
+as an exact same-snapshot inequality check.
 
 ### `GET /query` and `POST /query`
 
@@ -2124,6 +2141,14 @@ background task scans the live root graph at startup and again five minutes
 after each refresh completes. Scrapes neither acquire database connections nor
 trigger scans. WAL size still comes from a current filesystem metadata read.
 
+`quipu_root_live_assertion_rows` counts physical assertion rows in ROOT with
+`op=1 AND valid_to IS NULL`. It includes repeated assertions, excludes closed
+or retracted rows and all named graphs, and does not deduplicate equivalent
+term encodings. `quipu_graph_facts` remains an equal-valued compatibility alias
+with explicit HELP text. Neither is the distinct-triple count returned by
+`GET /stats` as `root_live_triples` (legacy `facts`). Existing dashboards can
+keep the alias while migrating to the metric that names its unit.
+
 `quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
 including pending requests, cancelled requests and metrics scrapes. It has no
 labels and resets when the process restarts. Use it to measure arrival rate:
@@ -2404,6 +2429,22 @@ semantic batch digest receipt in the local `owl_batch_receipts` table commits
 atomically with the assertions. Lost acknowledgements reconcile that receipt
 before advancing the scratch cursor. Final freshness has its own atomic receipt.
 These local receipts and scratch tables are excluded from graph sharing.
+
+Each publication page is resolved and digested in the private store before
+writer admission. The live store mutex covers revalidation, term remapping and
+the normal atomic transaction; private cursor acknowledgement follows after
+that mutex is released. Write admission remains owned through acknowledgement
+and deferred work. Final publication checks the exact contiguous receipt names
+and digests for cumulative output from every pass before publishing freshness.
+
+Payload-free `write_stage_start`, `write_stage_end` and summary log records
+correlate `/knot` and OWL publication stages with the server request ID when
+available. Durations include admission, blocking dispatch, store wait and held
+time, private preparation and acknowledgement, and transaction stages. Store
+wait includes any signed-request attestation settlement, which has its own
+stage. Totals overlap and must not be added together. An interrupted stage or
+missing summary is incomplete evidence. These records neither enable scheduled
+materialisation nor establish a production latency bound.
 
 The next scheduled invocation resumes a compatible unfinished job, including an
 unfinished pass whose private transaction rolled back. Identity, ontology or

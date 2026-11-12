@@ -64,6 +64,7 @@ mod cli_follow;
 mod cli_fork;
 mod cli_gate;
 mod cli_git_merge;
+mod cli_git_mergetool;
 mod cli_graph;
 mod cli_hooks;
 mod cli_ingest;
@@ -127,10 +128,13 @@ fn main() {
     match args[1].as_str() {
         "competency" => return cli_competency::run(&args),
         "install-alias" => return cli_alias::run(&args),
-        "git-merge" => return cli_git_merge::run(&args),
-        "merge-driver" => return cli_git_merge::run(&args),
-        "pendant-resolve" => return cli_git_merge::run(&args),
-        "pendant-check" => return cli_git_merge::run(&args),
+        "git-mergetool" => return cli_git_mergetool::run(&args),
+        "git-merge" | "merge-driver" | "pendant-resolve" | "pendant-check" => {
+            return cli_git_merge::run(&args);
+        }
+        "databook-merge-driver" | "databook-check" => {
+            return cli_git_merge::run(&args);
+        }
         // Store-free pack readers: no config, no database (aegis-fxpbys.1).
         "diff-textconv" => return cli_share_diff::cmd_textconv(&args),
         // Hooks are store-free and config-free: a Stop hook must not load a
@@ -503,8 +507,11 @@ COMMANDS:
     qp merge <share-dir> [--actor <id>] [--db <path>]
     qp merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]
     qp merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
-    qp git-merge <ref>   merge pendants from Git snapshots, stop before commit
+    qp git-merge <ref>   merge pendants and declared DataBooks from Git snapshots, stop before commit
     qp merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
+    qp databook-merge-driver <base-file> <ours-file> <theirs-file> <path>   DataBook Git driver
+    qp databook-check <base-ref> <ours-ref> <theirs-ref> <result-ref> <path>   immutable DataBook check
+    qp git-mergetool <pendant>/export.nt|<book>.databook.md --by <who>   interactively resolve Git decisions
     qp pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
     qp pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
     qp share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
