@@ -272,13 +272,15 @@ def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
             raise LedgerError(f"{sparql12_path} scores triple-term case {row.get('id')} as run; "
                               "Quipu has no RDF 1.2 support")
 
+    ledger_code_digests = {}
+    for name in (SYNTAX_LEDGER, EVALUATION_LEDGER, ENTAILMENT_LEDGER,
+                 SHACL_LEDGER, FEDERATED_LEDGER, RDF11_SYNTAX_LEDGER,
+                 SPARQL10_LEDGER, SPARQL12_LEDGER):
+        measured = json.loads((results_dir / name).read_text())
+        if "code_digest" in measured:
+            ledger_code_digests[name] = measured["code_digest"]
     return {
-        "ledger_code_digests": {
-            name: json.loads((results_dir / name).read_text()).get("code_digest")
-            for name in (SYNTAX_LEDGER, EVALUATION_LEDGER, ENTAILMENT_LEDGER,
-                         SHACL_LEDGER, FEDERATED_LEDGER, RDF11_SYNTAX_LEDGER,
-                         SPARQL10_LEDGER, SPARQL12_LEDGER)
-        },
+        "ledger_code_digests": ledger_code_digests,
         "classes": classes,
         "sparql10": {"rows": sparql10_rows, "counts": tally(sparql10_rows)},
         "sparql12": {"rows": sparql12_rows, "counts": tally(sparql12_rows)},
@@ -1064,13 +1066,15 @@ def ledger_provenance(data: dict, pr_base: str | None = None) -> tuple[int, list
       was wrong", which is the direction that lets drift through (aegis-9bgp).
     """
     digests = data.get("ledger_code_digests", {})
-    if any(digests.values()):
-        from ledger_snapshot import code_digest
+    if digests:
+        from ledger_snapshot import code_digest, LEDGERS
         try:
             measured = code_digest()
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             return 2, [f"code inputs UNVERIFIED: {error}"]
-        missing = [name for name, value in digests.items() if not value]
+        missing = [name for name in LEDGERS
+                   if not isinstance(digests.get(name), str)
+                   or not re.fullmatch(r"sha256:[0-9a-f]{64}", digests[name])]
         if missing:
             return 2, ["missing code digest: " + ", ".join(missing)]
         drift = [name for name, value in digests.items() if value != measured]
@@ -1256,7 +1260,7 @@ def main(argv: list[str] | None = None) -> int:
         base = None
         if args.pr_base:
             base = args.pr_base if "/" in args.pr_base else f"origin/{args.pr_base}"
-        arm = f"PR mode (base {base})" if base else "STRICT mode (ledger revision must be HEAD)"
+        arm = f"PR mode (base {base})" if base else "STRICT mode (measured code inputs must match)"
         print(f"conformance_report: provenance arm = {arm}")
         code, messages = ledger_provenance(data, base)
         if args.report_stale and code in (0, 1):

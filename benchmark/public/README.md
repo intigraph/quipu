@@ -108,3 +108,31 @@ relative graph IRI in a `CONSTRUCT FROM` query
 (`syntax-construct-where-02.rq`). The JSON report carries the complete 86-case
 ledger. This number says nothing about query-result correctness; evaluation
 manifests are deliberately excluded.
+
+
+## Updating committed conformance ledgers
+
+Required CI validates the ledgers on each source PR and queue candidate.
+A stale ledger fails provenance; CI still measures the candidate and publishes
+a complete stable artifact for the author to adopt in the same PR:
+
+```sh
+gh run download <run-id> --name conformance-ledgers-<measured-merge-sha> --dir /tmp/stable-ledgers
+python3 benchmark/public/ledger_snapshot.py --source /tmp/stable-ledgers --output benchmark/public/results
+python3 benchmark/public/conformance_report.py
+git diff -- benchmark/public/results docs/book/src/benchmarks
+```
+
+Inspect and commit that update, then wait for fresh CI. Outcome changes must be
+reviewed with the source change; the queue remeasures independently. No bot
+commits ledger repairs after merge.
+
+The stable artifact omits wall-clock timestamps, run URLs and per-case durations.
+The separate `conformance-run-<measured-merge-sha>` artifact retains those raw
+details. Stable ledgers retain the measured revision for reference and a SHA-256
+digest of the tracked code inputs for provenance across squash and queue commits.
+Missing or mixed digests fail verification.
+
+The workflow uses `ledger_snapshot.py --record-code` only after measuring a clean
+checkout; every raw ledger must name that checkout's HEAD. Do not use this flag
+to relabel old evidence. Importing an existing artifact does not restamp it.
