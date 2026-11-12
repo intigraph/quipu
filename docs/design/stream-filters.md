@@ -78,9 +78,33 @@ once per commit, not per subscriber:
 4. Catch-up from the store computes the same set for the page with the same
    helper, so ring and store pages stay equal (extend the parity test).
 
-A condition is identified by its normalized `(predicate, value)` text, and a
+A condition is identified by its normalized `(graph, predicate, value)`, and a
 subscription refused if the hub already tracks 64 distinct conditions (a
 bounded per-commit cost; the refusal names the limit).
+
+**Graph scope.** A condition is evaluated in one graph, never across graphs:
+
+- with `graph=X`, in X only, so a fact in another graph can never admit a
+  subject the subscriber would not otherwise see;
+- without `graph`, in the graph of the record being matched (ROOT for ROOT
+  records): a record in graph G is admitted only by membership facts in G.
+
+**Value matching.** The value is one RDF term in N-Triples syntax, matched as
+an exact term: `<iri>`, `"alice"` (an `xsd:string`), `"5"^^<datatype>`, or
+`"x"@lang`. `"alice"` does not match `"alice"^^<other>` or `"alice"@en`. No
+case folding, trimming or numeric equivalence (`"5"^^xsd:int` is not
+`"5.0"^^xsd:decimal`). The WebSocket takes the same string in a `member`
+field. A test holds the typed-literal negative control.
+
+**Catch-up cost.** Predicate and subject filters push down into the store
+page (the page query and `records_for_tx` add `a IN (...)` / `e IN (...)` on
+term ids), so non-matching transactions are skipped in SQL, as `graph` is.
+`member` cannot be pushed down. On the store path it runs on the page the
+pushed-down filters already narrowed, with the same batched helper as the hub:
+per page (one transaction) at most two indexed reads (before and after) over that
+transaction's distinct subjects, chunked at 500 ids. So a far-behind `member`
+subscriber costs at most one page read plus two bounded reads per transaction
+it walks; it never scans the graph.
 
 ## 4. Errors and limits
 
@@ -93,6 +117,10 @@ bounded per-commit cost; the refusal names the limit).
 
 ## 5. Tests
 
+- Graph scope: a membership fact in graph Y does not admit a subject for a
+  subscriber with `graph=X`, nor for a record in graph X without `graph`.
+- Value matching: `member=<assignee> "alice"` does not match an item whose
+  assignee is `"alice"^^<other>`.
 - Positive and negative control for the acceptance: two items, assignees A and
   B; a subscriber with `predicate=<status>` and `member=<assignee> "A"` gets
   the status change on A's item and nothing for B's. Then reassign A's item to
