@@ -17,6 +17,14 @@ pub(super) fn json_to_value(store: &Store, v: &JsonValue) -> Result<Value> {
         return Ok(Value::Str(s.to_string()));
     }
     if let Some(o) = v.as_object() {
+        if let Some(triple) = o.get("triple") {
+            if o.len() != 1 {
+                return Err(Error::InvalidValue("ambiguous triple object".into()));
+            }
+            return serde_json::from_value(triple.clone())
+                .map(Value::Triple)
+                .map_err(|e| Error::InvalidValue(format!("invalid triple object: {e}")));
+        }
         if let Some(iri) = o.get("iri").and_then(JsonValue::as_str) {
             return Ok(Value::Ref(store.intern(iri)?));
         }
@@ -98,6 +106,7 @@ fn value_to_json_mode(
         Value::Int(n) => serde_json::json!(n),
         Value::Float(f) => serde_json::json!(f),
         Value::Bool(b) => JsonValue::Bool(*b),
+        Value::Triple(t) => serde_json::json!({"triple":t}),
         Value::Bytes(b) => JsonValue::String(format!("<{} bytes>", b.len())),
     }
 }

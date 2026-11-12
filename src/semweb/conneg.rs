@@ -51,6 +51,11 @@ pub fn entity_json_ld_mode(store: &Store, iri: &str, expanded: bool) -> Result<J
                 Value::Int(i) => json!(i),
                 Value::Float(f) => json!(f),
                 Value::Bool(b) => json!(b),
+                Value::Triple(_) => {
+                    return Err(Error::InvalidValue(
+                        "JSON-LD triple terms not supported".into(),
+                    ));
+                }
                 Value::Bytes(_) => json!("[binary]"),
             };
             match props.get_mut(&property) {
@@ -137,6 +142,7 @@ fn value_to_rdf_term(store: &Store, value: &Value) -> Result<oxrdf::Term> {
             b.to_string(),
             oxrdf::NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#boolean"),
         )),
+        Value::Triple(_) => return crate::rdf::value_to_term(store, value),
         Value::Bytes(_) => return Err(Error::InvalidValue("cannot serialize bytes to RDF".into())),
     })
 }
@@ -193,6 +199,7 @@ pub fn preview_card(store: &Store, iri: &str) -> Result<String> {
             Value::Int(i) => i.to_string(),
             Value::Float(f) => format!("{f:.2}"),
             Value::Bool(b) => b.to_string(),
+            Value::Triple(_) => "[RDF triple term]".to_string(),
             Value::Bytes(_) => "[binary]".to_string(),
         };
         properties.push((pred_short, val_str));

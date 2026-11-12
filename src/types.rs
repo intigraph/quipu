@@ -45,6 +45,8 @@ pub enum Value {
     Bool(bool),
     /// Raw bytes.
     Bytes(Vec<u8>),
+    /// First-class bounded RDF 1.2 projection triple term.
+    Triple(Box<crate::rdf_triple::TripleValue>),
     /// Language-tagged literal (`rdf:langString`): the LEXICAL value and the
     /// BCP47 tag, stored separately.
     ///
@@ -89,6 +91,7 @@ const TAG_BOOL: u8 = 4;
 const TAG_BYTES: u8 = 5;
 const TAG_LANG: u8 = 6;
 const TAG_TYPED: u8 = 7;
+const TAG_TRIPLE: u8 = 8;
 
 /// Encode `{prefix, lexical}` as `[u16 LE prefix len][prefix][lexical]`.
 ///
@@ -157,6 +160,11 @@ impl Value {
             }
             Self::Lang { lexical, lang } => encode_prefixed(TAG_LANG, lang, lexical),
             Self::Typed { lexical, datatype } => encode_prefixed(TAG_TYPED, datatype, lexical),
+            Self::Triple(triple) => {
+                let mut bytes = vec![TAG_TRIPLE];
+                bytes.extend(triple.encode());
+                bytes
+            }
         }
     }
 
@@ -198,6 +206,9 @@ impl Value {
                 Ok(Self::Bool(payload[0] != 0))
             }
             TAG_BYTES => Ok(Self::Bytes(payload.to_vec())),
+            TAG_TRIPLE => {
+                crate::rdf_triple::TripleValue::decode(payload).map(|t| Self::Triple(Box::new(t)))
+            }
             TAG_LANG => {
                 let (lang, lexical) = decode_prefixed(payload, "lang")?;
                 Ok(Self::Lang { lexical, lang })
