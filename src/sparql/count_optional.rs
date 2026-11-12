@@ -311,7 +311,8 @@ pub(super) fn visit(
                         Some(Value::Ref(id)) => {
                             // `allowed` proved the object is not bound yet:
                             // bind it in place for each value, then unbind.
-                            for value in table.get(id).map(Vec::as_slice).unwrap_or_default() {
+                            for value in table.get(id).map_or_else(Default::default, Vec::as_slice)
+                            {
                                 parent.insert(object.as_str().to_owned(), value.clone());
                                 let result = accept(parent);
                                 parent.remove(object.as_str());

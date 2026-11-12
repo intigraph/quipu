@@ -378,6 +378,7 @@ changelog-verify *args:
 changelog-verify-test:
     ./scripts/test-verify-changelog.sh
     python3 scripts/test_changelog_scrub.py
+    python3 scripts/test_changelog_check_scope.py
 
 # Repository contributor graph: generate, prove the receiver, or build the release share.
 contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":

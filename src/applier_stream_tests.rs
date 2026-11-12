@@ -89,7 +89,7 @@ impl<'a> Producer<'a> {
 
     fn coverage(&mut self, watermark: i64, nonce: Option<[u8; 16]>) -> (&'static str, String) {
         let seq = self.next();
-        let nonce = nonce.map(hex::encode).unwrap_or_default();
+        let nonce = nonce.map_or_else(Default::default, hex::encode);
         let source = self.source();
         let signed = Signed::Coverage {
             session: &self.session,

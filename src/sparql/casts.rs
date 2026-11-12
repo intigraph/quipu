@@ -89,7 +89,7 @@ fn source(store: &Store, value: Value) -> Option<Source> {
             _ => return None,
         },
         // A language-tagged string is not a cast source (SPARQL 17.5 table).
-        Value::Lang { .. } | Value::Bytes(_) => return None,
+        Value::Lang { .. } | Value::Bytes(_) | Value::Triple(_) => return None,
     })
 }
 

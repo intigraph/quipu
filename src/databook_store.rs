@@ -443,6 +443,22 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
 
     // A graph's id is its IRI's term id; register the graphs only once every
     // block has converted, so a refused document leaves none behind.
+    // Databook block admission remains RDF 1.1 even when the shared native
+    // adapter supports qualified projection terms. Refuse before interning
+    // destination graph names or admitting any part of the document.
+    #[cfg(feature = "shacl")]
+    for (iri, groups) in &per_graph {
+        for (_, block, triples) in groups {
+            if triples
+                .iter()
+                .any(|t| matches!(t.object, oxrdf::Term::Triple(_)))
+            {
+                return Err(invalid(format!(
+                    "{block} cannot be stored in graph {iri}: RDF 1.2 triple terms are not admitted by Databook"
+                )));
+            }
+        }
+    }
     let mut batches = Vec::new();
     let mut names = BTreeMap::new();
     for (iri, groups) in &per_graph {

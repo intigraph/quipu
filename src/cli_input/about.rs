@@ -161,6 +161,8 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("trust-root challenge", "Issue the proof-of-possession challenge for a first verifier key"),
     ("trust-root bootstrap", "Enroll the first verifier key with its signed challenge"),
     ("trust-root status", "Show the root-of-trust state"),
+    ("graph writer-instance", "Read a local committed graph instance pin for owner enrollment"),
+    ("graph writer-grant", "Apply an owner-local scoped writer grant revision or revocation"),
     ("graph create", "Register a committed named graph"),
     ("graph label", "Declare lattice labels on a registered graph"),
     ("graph list", "List registered named graphs"),
