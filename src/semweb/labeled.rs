@@ -33,9 +33,7 @@ pub fn fetch_labeled_entities_until(
         if deadline.is_some_and(|d| d.passed()) {
             Err(Error::QueryTimeout {
                 elapsed_ms: started.elapsed_ms(),
-                limit_ms: deadline
-                    .map(|d| d.millis_from(&started))
-                    .unwrap_or_default(),
+                limit_ms: deadline.map_or_else(Default::default, |d| d.millis_from(&started)),
             })
         } else {
             Ok(())

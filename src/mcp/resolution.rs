@@ -21,12 +21,11 @@ pub fn tool_resolve_entity(store: &Store, input: &JsonValue) -> Result<JsonValue
     let properties: Vec<(String, String)> = input
         .get("properties")
         .and_then(|v| v.as_object())
-        .map(|obj| {
+        .map_or_else(Default::default, |obj| {
             obj.iter()
                 .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
 
     // Defaults come from `[quipu.resolution]` config, not inline literals
     // (hq-uye), so the explicit-resolve tool and the ingest path agree.
