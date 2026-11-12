@@ -101,7 +101,25 @@ impl Hub {
     /// The next page for a subscriber at `cursor` with an optional graph IRI.
     /// `scanned` is how far this subscriber has already searched the ring for
     /// its graph, so transactions of other graphs never push it into catch-up.
+    #[cfg(test)]
     pub(crate) fn serve(&self, cursor: i64, graph: Option<&str>, scanned: &mut i64) -> Serve {
+        self.serve_filtered(
+            cursor,
+            &RecordFilter {
+                graph,
+                ..RecordFilter::default()
+            },
+            scanned,
+        )
+    }
+
+    /// [`Hub::serve`] with a full [`RecordFilter`] (aegis-n0wc.3).
+    pub(crate) fn serve_filtered(
+        &self,
+        cursor: i64,
+        filter: &RecordFilter<'_>,
+        scanned: &mut i64,
+    ) -> Serve {
         let Ok(ring) = self.ring.lock() else {
             return Serve::CatchUp;
         };
@@ -110,19 +128,20 @@ impl Hub {
             return Serve::CatchUp;
         }
         for entry in ring.entries.iter().filter(|e| e.tx > from) {
-            let records: Vec<Value> = match graph {
-                None => entry.records.as_ref().clone(),
-                Some(iri) => entry
+            let records: Vec<Value> = if filter.is_unfiltered() {
+                entry.records.as_ref().clone()
+            } else {
+                entry
                     .records
                     .iter()
-                    .filter(|r| r["graph"].as_str() == Some(iri))
+                    .filter(|r| filter.matches(r))
                     .enumerate()
                     .map(|(sequence, r)| {
                         let mut r = r.clone();
                         r["sequence"] = json!(sequence);
                         r
                     })
-                    .collect(),
+                    .collect()
             };
             if records.is_empty() {
                 continue;
@@ -139,6 +158,34 @@ impl Hub {
         }
         *scanned = ring.head;
         Serve::Wait
+    }
+}
+
+/// Which records of a transaction one change subscriber receives: all of
+/// graph, predicates and subjects that are set must match (aegis-n0wc.3). The
+/// store's catch-up page applies the same filter in SQL, so a ring page and a
+/// store page stay equal.
+#[derive(Debug, Default)]
+pub(crate) struct RecordFilter<'a> {
+    pub(crate) graph: Option<&'a str>,
+    pub(crate) predicates: Option<std::collections::HashSet<&'a str>>,
+    pub(crate) subjects: Option<std::collections::HashSet<&'a str>>,
+}
+
+impl RecordFilter<'_> {
+    fn is_unfiltered(&self) -> bool {
+        self.graph.is_none() && self.predicates.is_none() && self.subjects.is_none()
+    }
+
+    fn matches(&self, record: &Value) -> bool {
+        let field_in = |key: &str, set: &Option<std::collections::HashSet<&str>>| {
+            set.as_ref()
+                .is_none_or(|set| record[key].as_str().is_some_and(|v| set.contains(v)))
+        };
+        self.graph
+            .is_none_or(|iri| record["graph"].as_str() == Some(iri))
+            && field_in("attribute", &self.predicates)
+            && field_in("entity", &self.subjects)
     }
 }
 

@@ -48,6 +48,25 @@ pub(crate) struct Params {
     types: Option<String>,
     group: Option<String>,
     graph: Option<String>,
+    /// Comma-separated predicate IRIs (change stream only, aegis-n0wc.3).
+    predicate: Option<String>,
+    /// Comma-separated subject IRIs (change stream only, aegis-n0wc.3).
+    subject: Option<String>,
+}
+
+impl Params {
+    /// The in-memory record filter the hub applies for this change stream.
+    pub(crate) fn record_filter(&self) -> feed_hub::RecordFilter<'_> {
+        fn set(list: Option<&str>) -> Option<std::collections::HashSet<&str>> {
+            list.and_then(feed::term_list)
+                .map(|items| items.into_iter().collect())
+        }
+        feed_hub::RecordFilter {
+            graph: self.graph.as_deref(),
+            predicates: set(self.predicate.as_deref()),
+            subjects: set(self.subject.as_deref()),
+        }
+    }
 }
 
 pub(crate) struct Cursor {
@@ -117,10 +136,19 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         .into_response()
 }
 
-/// Whether a stream may serve this scope: a change feed takes only a graph,
-/// and no filter is empty or oversized.
+/// Whether a stream may serve this scope: a change feed takes a graph,
+/// predicates and subjects; an event feed takes types, a group and a graph.
+/// No filter is empty or oversized, and a term list holds 1 to
+/// [`feed::MAX_TERM_LIST`] IRIs.
 pub(crate) fn scope_ok(params: &Params, changes: bool) -> bool {
+    let term_list_bad = |list: &Option<String>| {
+        list.as_ref()
+            .is_some_and(|s| s.len() > 2048 || feed::term_list(s).is_none())
+    };
     !(changes && (params.types.is_some() || params.group.is_some())
+        || !changes && (params.predicate.is_some() || params.subject.is_some())
+        || term_list_bad(&params.predicate)
+        || term_list_bad(&params.subject)
         || params
             .graph
             .as_ref()
@@ -208,7 +236,7 @@ impl Cursor {
             }
             let served = match &self.hub {
                 Some((hub, _)) if self.changes => {
-                    hub.serve(self.offset, self.params.graph.as_deref(), &mut self.scanned)
+                    hub.serve_filtered(self.offset, &self.params.record_filter(), &mut self.scanned)
                 }
                 _ => feed_hub::Serve::CatchUp,
             };
@@ -223,7 +251,7 @@ impl Cursor {
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
                 let params = serde_json::from_value(
-                    json!({"since": self.offset, "limit": 1, "capture": "old_and_new_values", "graph": self.params.graph}),
+                    json!({"since": self.offset, "limit": 1, "capture": "old_and_new_values", "graph": self.params.graph, "predicate": self.params.predicate, "subject": self.params.subject}),
                 );
                 match params {
                     Ok(params) => {

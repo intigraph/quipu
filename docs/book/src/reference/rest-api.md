@@ -2661,7 +2661,13 @@ Event streams accept `types`, `group` and `graph` (one registered committed
 named graph, read from its own log as on `/events/graph`; a server that
 predates named-graph events refuses `graph` on an event stream with HTTP
 400); change streams accept `graph`, including a
-registered named graph. Unrelated filter kinds and invalid resume
+registered named graph, plus `predicate` and `subject`: each a
+comma-separated list of 1 to 64 IRIs. A change frame then carries only the
+records whose predicate (`attribute`) and subject (`entity`) are in the lists,
+renumbered from 0; a transaction with no such record sends no frame. Lists are
+OR within a parameter and AND across parameters and with `graph`. An IRI the
+store has never seen matches nothing. The same `predicate` and `subject`
+parameters narrow `GET /changes`. Unrelated filter kinds and invalid resume
 cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
 
 Delivery does not acknowledge a consumer. Commit applied data and its cursor
@@ -2724,7 +2730,8 @@ From the server:
   the SSE data as a string, not parsed, because the part digests of a chunked
   transaction (`quipu.changes.begin`/`.part`/`.commit`) hash those exact bytes.
 - A subscription takes the same scope as its SSE stream: change subscriptions
-  take `graph`; event subscriptions take `types` (a list), `group` and `graph`.
+  take `graph`, `predicate` and `subject` (lists of IRIs without commas);
+  event subscriptions take `types` (a list), `group` and `graph`.
   An invalid scope, an unknown `feed`, a duplicate `sub`, a subscription over a
   limit and an unknown `op` are each answered with `quipu.error` for that
   message. The connection stays open.

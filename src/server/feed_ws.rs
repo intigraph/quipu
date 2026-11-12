@@ -211,6 +211,26 @@ fn subscribe(
         }
         _ => return fail("types must be a list"),
     };
+    // Predicate and subject IRI lists (aegis-n0wc.3), sent as JSON arrays.
+    // Joined for the shared `Params`, which re-splits them; an IRI holding a
+    // comma would split wrongly, so it is refused here.
+    let iri_list = |key: &str| -> Result<Option<String>, &'static str> {
+        match &message[key] {
+            Value::Null => Ok(None),
+            Value::Array(list) => {
+                let iris: Option<Vec<&str>> = list.iter().map(Value::as_str).collect();
+                match iris {
+                    Some(iris) if iris.iter().all(|i| !i.contains(',')) => Ok(Some(iris.join(","))),
+                    _ => Err("predicate and subject must be lists of IRIs without commas"),
+                }
+            }
+            _ => Err("predicate and subject must be lists"),
+        }
+    };
+    let (predicate, subject) = match (iri_list("predicate"), iri_list("subject")) {
+        (Ok(p), Ok(s)) => (p, s),
+        (Err(reason), _) | (_, Err(reason)) => return fail(reason),
+    };
     let since = match &message["since"] {
         Value::Null => None,
         value => match value.as_i64() {
@@ -221,6 +241,7 @@ fn subscribe(
     let params: Params = match serde_json::from_value(json!({
         "since": since, "types": types,
         "group": message.get("group"), "graph": message.get("graph"),
+        "predicate": predicate, "subject": subject,
     })) {
         Ok(params) => params,
         Err(_) => return fail("unsupported feed scope"),

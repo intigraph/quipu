@@ -140,6 +140,47 @@ fn page_sql(graph: bool) -> &'static str {
     }
 }
 
+/// Record filters beyond the graph (aegis-n0wc.3): the predicates and
+/// subjects a change subscriber asked for, as term ids. `None` is no filter;
+/// `Some(empty)` matches nothing (every requested IRI is unknown to the store).
+#[derive(Debug, Default, Clone)]
+pub struct TermScope {
+    /// Attribute (predicate) term ids.
+    pub attributes: Option<Vec<i64>>,
+    /// Entity (subject) term ids.
+    pub entities: Option<Vec<i64>>,
+}
+
+impl TermScope {
+    /// Whether this scope filters anything.
+    pub fn is_unscoped(&self) -> bool {
+        self.attributes.is_none() && self.entities.is_none()
+    }
+
+    /// The SQL conjuncts for this scope. `+` keeps them out of index
+    /// selection, for the reason [`page_sql`] gives for `+g`.
+    fn sql(&self) -> String {
+        let mut out = String::new();
+        if let Some(a) = &self.attributes {
+            out.push_str(&format!(" AND +a IN ({})", id_list(a)));
+        }
+        if let Some(e) = &self.entities {
+            out.push_str(&format!(" AND +e IN ({})", id_list(e)));
+        }
+        out
+    }
+}
+
+/// [`page_sql`] with a [`TermScope`]: the transactions after the cursor that
+/// wrote a row in scope.
+fn scoped_page_sql(graph: bool, scope: &TermScope) -> String {
+    format!(
+        "SELECT DISTINCT tx FROM facts WHERE tx > ?1{}{} ORDER BY tx LIMIT ?2",
+        if graph { " AND +g = ?3" } else { "" },
+        scope.sql()
+    )
+}
+
 /// Graph ids as an SQL list. An empty set matches nothing.
 /// JSON's worst case: a control character escapes to six bytes (`\u0000`).
 pub const ESCAPE_FACTOR: u64 = 6;
@@ -169,10 +210,29 @@ impl Store {
         capture: Capture,
         graph: Option<i64>,
     ) -> Result<ChangePage> {
+        self.changes_after_scoped(since_tx, max_txs, capture, graph, &TermScope::default())
+    }
+
+    /// [`Store::changes_after`] narrowed to the predicates and subjects in
+    /// `scope` (aegis-n0wc.3): only transactions with a record in scope, each
+    /// with only those records, renumbered from 0 as the stream's hub does.
+    pub fn changes_after_scoped(
+        &self,
+        since_tx: i64,
+        max_txs: usize,
+        capture: Capture,
+        graph: Option<i64>,
+        scope: &TermScope,
+    ) -> Result<ChangePage> {
         // The page's transactions: those that wrote a row in scope. Retracts
         // insert an op=0 row at their own tx, so `tx > since` alone sees them.
         let (watermark_tx, watermark_timestamp) = self.latest_transaction()?;
-        let mut stmt = self.conn.prepare(page_sql(graph.is_some()))?;
+        let sql = if scope.is_unscoped() {
+            page_sql(graph.is_some()).to_string()
+        } else {
+            scoped_page_sql(graph.is_some(), scope)
+        };
+        let mut stmt = self.conn.prepare(&sql)?;
         let tx_ids: Vec<i64> = match graph {
             Some(g) => stmt
                 .query_map(params![since_tx, max_txs as i64, g], |r| r.get(0))?
@@ -188,6 +248,7 @@ impl Store {
                 *tx,
                 capture,
                 graph.as_ref().map(std::slice::from_ref),
+                scope,
                 &mut records,
             )?;
         }
@@ -229,7 +290,13 @@ impl Store {
             .collect::<std::result::Result<_, _>>()?;
         let mut records = Vec::new();
         for tx in &tx_ids {
-            self.records_for_tx(*tx, capture, Some(graphs), &mut records)?;
+            self.records_for_tx(
+                *tx,
+                capture,
+                Some(graphs),
+                &TermScope::default(),
+                &mut records,
+            )?;
         }
         Ok(ChangePage {
             records,
@@ -372,6 +439,7 @@ impl Store {
         tx: i64,
         capture: Capture,
         graphs: Option<&[i64]>,
+        scope: &TermScope,
         out: &mut Vec<Json>,
     ) -> Result<()> {
         let (timestamp, actor, source) = self
@@ -397,6 +465,7 @@ impl Store {
         if let Some(graphs) = graphs {
             sql.push_str(&format!(" AND g IN ({})", id_list(graphs)));
         }
+        sql.push_str(&scope.sql());
         // rowid is the write order inside the transaction — the per-entity
         // ordering promise rides on it.
         sql.push_str(" ORDER BY rowid");
