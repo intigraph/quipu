@@ -17,13 +17,53 @@ just fmt             # Format code
 
 1. Install [just](https://github.com/casey/just)
 2. Install [pre-commit](https://pre-commit.com/)
-3. Install doc tooling: `cargo install mdbook mdbook-mermaid`
-4. Run `just setup` to install git hooks
+3. Install doc tooling: `cargo install --locked mdbook mdbook-mermaid`
+4. Run `just docs preflight` to verify both tools are runnable on your PATH
+5. Run `just setup` to install git hooks
 
 **Canonical hook installation:** `just setup` runs `pre-commit install`, which
 writes `.git/hooks/pre-commit`. This is the supported path. The `.githooks/`
 directory exists only as a fallback for environments without the `pre-commit`
 binary — do not use `git config core.hooksPath .githooks` as a primary method.
+
+## Documentation prerequisites
+
+The book uses Mermaid diagrams, so **both** `mdbook` and `mdbook-mermaid`
+are required for `just check`. CI installs both; a contributor machine must too.
+The preflight checks availability and `--version` without installing anything or
+changing PATH. A missing or unusable tool fails before the full hook suite:
+
+```bash
+just docs preflight
+```
+
+On macOS, run this in the same terminal used for `just check`. Cargo installs
+executables under `${CARGO_HOME:-$HOME/.cargo}/bin`; if that directory is absent
+from PATH, an installed preprocessor still looks missing. Expose it for the
+current shell, then check again:
+
+```bash
+export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
+just docs preflight
+```
+
+Persist the export in your shell's startup file if needed (for the usual macOS
+zsh login shell, `~/.zprofile`), then open a new terminal. If either tool is not
+installed, use the supported Cargo setup command:
+
+```bash
+cargo install --locked mdbook mdbook-mermaid
+just docs preflight
+just docs build
+just check
+```
+
+If a tool is found but cannot execute `--version`, reinstall that named tool for
+the machine with `cargo install --locked --force <tool>`. Preflight success proves
+only that the executables run: `just docs build` and the `mdbook-build` hook still
+render the actual book through the required Mermaid preprocessor. Do not remove
+`[preprocessor.mermaid]`, skip hooks, or rerun `mdbook-mermaid install` as a PATH
+repair; the repository already includes its renderer assets and patched initializer.
 
 ## Pre-Commit Hooks
 

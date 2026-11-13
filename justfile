@@ -12,6 +12,7 @@ default:
 
 # Install pre-commit hooks and verify dependencies
 setup:
+    ./scripts/preflight-doc-tools.sh
     pre-commit install
     @echo "Setup complete."
 
@@ -19,6 +20,7 @@ setup:
 
 # Run all quality checks (pre-push gate)
 check:
+    ./scripts/preflight-doc-tools.sh
     pre-commit run --all-files
 
 # Query performance gate controls (offline; no fixture or server required).
@@ -246,7 +248,7 @@ ingest-repos +repos="../quipu ../yupana ../NeuralAmplifier ../thinker":
 # === Documentation ===
 
 # Documentation management: just docs <cmd>
-# Commands: build, serve, lint, fix, fmt, vale, check
+# Commands: preflight, build, serve, lint, fix, fmt, vale, check
 
 # Stage the 3D Datalinks demo's runtime assets into the book source.
 # COPIED, not committed twice: ui/ owns these files and the demo is a second
@@ -334,8 +336,10 @@ docs cmd="build":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{cmd}}" in
-        build)    just docs-assets && mdbook build docs/book ;;
-        serve)    just docs-assets && mdbook serve docs/book --open ;;
+        preflight) ./scripts/preflight-doc-tools.sh ;;
+        preflight-test) python3 scripts/test-doc-tools.py ;;
+        build)    just docs preflight && just docs-assets && mdbook build docs/book ;;
+        serve)    just docs preflight && just docs-assets && mdbook serve docs/book --open ;;
         lint)     npx markdownlint-cli2 "docs/book/src/**/*.md" "README.md" "CONTRIBUTING.md" ;;
         fix)      npx markdownlint-cli2 --fix "docs/book/src/**/*.md" "README.md" "CONTRIBUTING.md" ;;
         fmt)      npx prettier --write "docs/book/src/**/*.md" --prose-wrap preserve ;;
@@ -344,7 +348,7 @@ docs cmd="build":
         generate) cargo run --locked --features docgen --bin quipu-docgen ;;
         generated-check) cargo run --locked --features docgen --bin quipu-docgen -- --check ;;
         references-test) python3 scripts/test-repository-knowledge.py ;;
-        *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check generate generated-check references-test" ;;
+        *)        echo "Unknown: {{cmd}}. Try: preflight preflight-test build serve lint fix fmt vale check generate generated-check references-test" ;;
     esac
 
 # === Public benchmarks ===

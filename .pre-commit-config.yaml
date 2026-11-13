@@ -148,6 +148,13 @@ repos:
         pass_filenames: false
         files: ^\.github/(workflows/(ci|release)\.yml|actions/wasm-explorer-.*)$
 
+      - id: doc-tool-preflight-controls
+        name: documentation prerequisite controls
+        entry: python3 scripts/test-doc-tools.py
+        language: system
+        pass_filenames: false
+        files: ^(justfile|scripts/(preflight-doc-tools\.sh|precommit-mdbook\.sh|test-doc-tools\.py))$
+
       - id: mdbook-build
         name: mdbook build
         entry: scripts/precommit-mdbook.sh
