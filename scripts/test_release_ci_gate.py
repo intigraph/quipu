@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 import os
 import re
+import runpy
 import subprocess
 import tempfile
 import yaml
@@ -149,14 +150,20 @@ assert set(fresh_on["pull_request"]["types"]) >= {"opened", "synchronize", "reop
 assert fresh_doc["permissions"] == {}
 # A pending main-push verdict must never be replaced by a pull_request run, or the
 # release PR keeps a stale success (#910 review). Keyed by event and head ref, no
-# cancel-in-progress, and no job-level group that would re-share one queue.
+# cancel-in-progress. The PR-only runner budget must give every non-PR job a
+# distinct run/attempt key, so it cannot re-share the PR queue at job level.
 fresh_group = fresh_doc["concurrency"]["group"]
 assert "${{ github.event_name }}" in fresh_group, "freshness group must be keyed by event"
 assert "github.event.pull_request.head.ref || github.ref" in fresh_group, \
     "freshness group must be keyed by head ref"
 assert fresh_doc["concurrency"].get("cancel-in-progress") is False
 fresh = fresh_doc["jobs"]["release-pr-freshness"]
-assert "concurrency" not in fresh, "a job-level group would re-share one queue"
+budget_contract = runpy.run_path(str(Path(__file__).with_name("check-pr-runner-budget.py")))
+fresh_budget = fresh.get("concurrency", {})
+assert budget_contract["budget_slot"](fresh_budget.get("group"), "release-pr-freshness") is not None, \
+    "freshness may share PR slots only; every non-PR run needs its own job group"
+assert fresh_budget.get("queue") == "max", "retain pending PR freshness checks"
+assert fresh_budget.get("cancel-in-progress") is False, "a PR slot must never cancel another verdict"
 # No job-level `if:`: a job skipped on every ordinary PR leaves a skipped check the
 # merge gate cannot prove (#910 review). The scope test is the first step and gates
 # every later step, so out of scope the job is green having done nothing.
