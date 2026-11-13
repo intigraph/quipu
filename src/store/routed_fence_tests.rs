@@ -63,6 +63,9 @@ fn inventory_classifies_every_graph_bearing_column() {
             ("dataset_members", "graph_iri", FenceClass::Reference),
             ("denial_quarantine", "graph", FenceClass::WritesOnly),
             ("facts", "g", FenceClass::All),
+            ("fluent_config_receipts", "g", FenceClass::All),
+            ("fluent_origin_receipts", "g", FenceClass::All),
+            ("fluent_write_permits", "g", FenceClass::WritesOnly),
             ("forks", "g", FenceClass::All),
             ("frozen_packs", "graph_iri", FenceClass::All),
             ("graph_consumers", "graph", FenceClass::WritesOnly),
@@ -73,6 +76,108 @@ fn inventory_classifies_every_graph_bearing_column() {
             ("writer_graph_instances", "g", FenceClass::All),
         ]
     );
+}
+
+#[test]
+fn fluent_receipts_stay_fenced_while_native_permit_cleanup_runs() {
+    let (_dir, path, store) = legacy();
+    let routed = store.intern(ROUTED).unwrap();
+    let other = store.intern(OTHER).unwrap();
+    for (graph, entity) in [(routed, 11), (routed, 13), (other, 12)] {
+        store
+            .conn
+            .execute(
+                "INSERT INTO fluent_write_permits(tx,g,e) VALUES(7,?1,?2)",
+                [graph, entity],
+            )
+            .unwrap();
+    }
+    // Seed real receipt rows through their existing native-permit triggers.
+    for (table, payload) in [
+        ("fluent_config_receipts", "request,approval"),
+        ("fluent_origin_receipts", "proof"),
+    ] {
+        let blobs = if payload == "proof" {
+            "X'01'"
+        } else {
+            "X'01',X'02'"
+        };
+        store
+            .conn
+            .execute_batch(&format!(
+                "INSERT INTO {table}(g,e,tx,{payload}) VALUES({routed},11,7,{blobs});"
+            ))
+            .unwrap();
+    }
+    store.fence_routed_graph(ROUTED, 7, 4).unwrap();
+    let independent = rusqlite::Connection::open(&path).unwrap();
+    for (table, payload) in [
+        ("fluent_config_receipts", "request,approval"),
+        ("fluent_origin_receipts", "proof"),
+    ] {
+        let blobs = if payload == "proof" {
+            "X'01'"
+        } else {
+            "X'01',X'02'"
+        };
+        // The permit already exists: a missing routed trigger would admit this.
+        for sql in [
+            format!("INSERT INTO {table}(g,e,tx,{payload}) VALUES({routed},13,7,{blobs})"),
+            format!("UPDATE {table} SET tx=8 WHERE g={routed} AND e=11"),
+            format!("DELETE FROM {table} WHERE g={routed} AND e=11"),
+        ] {
+            assert_fenced(independent.execute_batch(&sql).map_err(Error::from), table);
+        }
+        // The same real receipt admission still works for the unrouted graph.
+        independent
+            .execute_batch(&format!(
+                "INSERT INTO {table}(g,e,tx,{payload}) VALUES({other},12,7,{blobs})"
+            ))
+            .unwrap();
+        assert_eq!(count(&store, &format!("SELECT count(*) FROM {table}")), 2);
+    }
+    for sql in [
+        format!("INSERT INTO fluent_write_permits(tx,g,e) VALUES(8,{routed},14)"),
+        format!("UPDATE fluent_write_permits SET g={routed} WHERE g={other}"),
+        format!("UPDATE fluent_write_permits SET g={other} WHERE g={routed}"),
+    ] {
+        assert_fenced(
+            independent.execute_batch(&sql).map_err(Error::from),
+            "permit write",
+        );
+    }
+    assert_eq!(
+        independent
+            .execute("DELETE FROM fluent_write_permits WHERE g=?1", [routed])
+            .unwrap(),
+        2,
+        "native transaction cleanup remains allowed"
+    );
+    store.verify_routed_fence().unwrap();
+    for (table, operations) in [
+        (
+            "fluent_config_receipts",
+            &["insert", "update", "delete"][..],
+        ),
+        (
+            "fluent_origin_receipts",
+            &["insert", "update", "delete"][..],
+        ),
+        ("fluent_write_permits", &["insert", "update"][..]),
+    ] {
+        for operation in operations {
+            independent
+                .execute_batch(&format!(
+                    "DROP TRIGGER quipu_routed_fence_{table}_g_{operation}"
+                ))
+                .unwrap();
+            assert!(
+                store.verify_routed_fence().is_err(),
+                "missing {table} {operation}"
+            );
+            store.fence_routed_graph(ROUTED, 7, 4).unwrap();
+        }
+    }
 }
 
 #[test]

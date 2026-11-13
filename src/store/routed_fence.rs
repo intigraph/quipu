@@ -39,6 +39,10 @@ pub enum FenceClass {
 /// The reviewed classification of every graph-bearing column in the schema.
 const CLASSES: &[(&str, &str, FenceClass)] = &[
     ("facts", "g", FenceClass::All),
+    ("fluent_config_receipts", "g", FenceClass::All),
+    ("fluent_origin_receipts", "g", FenceClass::All),
+    // Native append removes these transaction-local permits on completion.
+    ("fluent_write_permits", "g", FenceClass::WritesOnly),
     ("graphs", "g", FenceClass::All),
     ("forks", "g", FenceClass::All),
     ("writer_graph_instances", "g", FenceClass::All),
