@@ -152,6 +152,20 @@ jobs:
       - name: Require the validated default store and build-pinned proof
         run: node scripts/prepare-explorer-default.mjs docs/book/src/explore
 
+      - name: Stage the latest release conformance report
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+          TAG=$(gh release view --json tagName --jq .tagName)
+          gh release download "$TAG" --pattern conformance-report.tar.gz --pattern conformance-report.tar.gz.sha256 --dir "$TMP"
+          (cd "$TMP" && sha256sum -c conformance-report.tar.gz.sha256)
+          python3 scripts/stage-conformance-release.py "$TMP/conformance-report.tar.gz" docs/book/src/benchmarks --tag "$TAG"
+
       - name: Build book
         run: mdbook build docs/book
 

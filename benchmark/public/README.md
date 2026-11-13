@@ -3,6 +3,29 @@
 This directory runs version-pinned, public benchmark material against an
 ephemeral Quipu store. It does not use a production graph.
 
+## CI expectations and release reports
+
+`expected-results.json` is the stable regression contract: exact suite pins,
+test identities, and expected pass or known failure. CI re-runs the suites and
+fails on regressions, unexpected passes, missing/extra cases, or unknown result
+states. An intentional behaviour change updates expectations in its reviewed
+PR. CI never regenerates that file automatically. Review an explicit author
+update with `python3 benchmark/public/expected_results.py --results-dir PATH --write`.
+
+Measured results, source revisions, timestamps and timings are retained in the
+`conformance-run-SHA` CI artifact. Release runs publish the report and its
+checksum as `conformance-report.tar.gz` release assets. Public docs stage the
+latest release's verified report and refuse a missing or wrong-tag report;
+the release job rebuilds docs after publishing the assets. PR previews retain
+the committed historical page. The committed `results/` files are historical
+fixtures for renderer and expectation tests, not per-commit freshness claims.
+Competitor ledgers remain pinned, committed data.
+
+The stamp-provenance CI job and bot artifact contract are retired by this
+workflow. Deployment still must retire the old bot, its cron and helper
+admission exceptions through the normal reviewed paths. A source change alone
+does not prove that retirement or the required seven days without chore PRs.
+
 ## SPARQL 1.1 syntax
 
 The first executable slice scores the W3C RDF Tests SPARQL 1.1 query-syntax
