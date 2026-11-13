@@ -1,8 +1,8 @@
 //! Native compatibility controls, using real root-signed registrations.
 use super::*;
 
-const CANONICAL: &str = "https://w3id.org/intigraph/camayoc/core/ns#signature";
-const LEGACY: &str = "http://aegis.gastown.local/ontology/signature";
+const CANONICAL: &str = include_str!("../../tests/fixtures/dual-witness/signature.iri");
+const LEGACY: &str = include_str!("../../tests/fixtures/dual-witness/legacy-signature.iri");
 const VERDICT: &str = "http://ex/verdict/dual-witness";
 const REG: &str = "http://ex/reg/dual-witness";
 
@@ -200,9 +200,11 @@ fn canonical_registration_terms_are_not_silently_promoted_to_authority() {
     let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::governance::trust_root::test_support::ensure_root(&mut store);
     let kp = keypair();
-    let core = "https://w3id.org/intigraph/camayoc/core/ns#";
+    let core = include_str!("../../tests/fixtures/dual-witness/core.iri");
     let class = store
-        .intern("https://w3id.org/intigraph/quipu/ns#VerifierRegistration")
+        .intern(include_str!(
+            "../../tests/fixtures/dual-witness/registration-class.iri"
+        ))
         .unwrap();
     let mut datums = vec![datum(
         &store,
