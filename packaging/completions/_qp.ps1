@@ -45,7 +45,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('episode', 'episode', [CompletionResultType]::ParameterValue, 'Ingest a structured episode of nodes and edges from JSON')
             [CompletionResult]::new('retract', 'retract', [CompletionResultType]::ParameterValue, 'Retract an entity''s facts, optionally one predicate; history is kept')
             [CompletionResult]::new('shapes', 'shapes', [CompletionResultType]::ParameterValue, 'Load, list or remove the SHACL shapes that guard writes')
-            [CompletionResult]::new('namespaces', 'namespaces', [CompletionResultType]::ParameterValue, 'List or apply the owner namespace registry')
+            [CompletionResult]::new('namespaces', 'namespaces', [CompletionResultType]::ParameterValue, 'List, apply or conditionally remove owner namespace policy')
             [CompletionResult]::new('entity-ref', 'entity-ref', [CompletionResultType]::ParameterValue, 'Mint or resolve stable entity references')
             [CompletionResult]::new('ontology', 'ontology', [CompletionResultType]::ParameterValue, 'Load, list or remove OWL ontologies (owl feature)')
             [CompletionResult]::new('validate', 'validate', [CompletionResultType]::ParameterValue, 'Validate a data file against a shapes file without writing')
@@ -342,8 +342,10 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List the effective owner namespace registry')
+            [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List the effective owner namespace registry and predecessor hash')
             [CompletionResult]::new('apply', 'apply', [CompletionResultType]::ParameterValue, 'Apply the configured owner namespace registry to the store')
+            [CompletionResult]::new('remove', 'remove', [CompletionResultType]::ParameterValue, 'Conditionally retract an exact unused owner-local namespace declaration')
+            [CompletionResult]::new('apply-if', 'apply-if', [CompletionResultType]::ParameterValue, 'Conditionally apply an exact configured owner-local namespace declaration')
             break
         }
         'qp;namespaces;list' {
@@ -353,6 +355,18 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             break
         }
         'qp;namespaces;apply' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;namespaces;remove' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;namespaces;apply-if' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

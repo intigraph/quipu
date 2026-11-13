@@ -42,7 +42,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand episode 'Ingest a structured episode of nodes and edges from JSON'
             cand retract 'Retract an entity''s facts, optionally one predicate; history is kept'
             cand shapes 'Load, list or remove the SHACL shapes that guard writes'
-            cand namespaces 'List or apply the owner namespace registry'
+            cand namespaces 'List, apply or conditionally remove owner namespace policy'
             cand entity-ref 'Mint or resolve stable entity references'
             cand ontology 'Load, list or remove OWL ontologies (owl feature)'
             cand validate 'Validate a data file against a shapes file without writing'
@@ -310,8 +310,10 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
-            cand list 'List the effective owner namespace registry'
+            cand list 'List the effective owner namespace registry and predecessor hash'
             cand apply 'Apply the configured owner namespace registry to the store'
+            cand remove 'Conditionally retract an exact unused owner-local namespace declaration'
+            cand apply-if 'Conditionally apply an exact configured owner-local namespace declaration'
         }
         &'quipu;namespaces;list'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -319,6 +321,16 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --help 'Print help'
         }
         &'quipu;namespaces;apply'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;namespaces;remove'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;namespaces;apply-if'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'

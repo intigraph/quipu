@@ -47,7 +47,7 @@ complete -c qp -n "__fish_qp_needs_command" -f -a "demotions" -d 'Read preserved
 complete -c qp -n "__fish_qp_needs_command" -f -a "episode" -d 'Ingest a structured episode of nodes and edges from JSON'
 complete -c qp -n "__fish_qp_needs_command" -f -a "retract" -d 'Retract an entity\'s facts, optionally one predicate; history is kept'
 complete -c qp -n "__fish_qp_needs_command" -f -a "shapes" -d 'Load, list or remove the SHACL shapes that guard writes'
-complete -c qp -n "__fish_qp_needs_command" -f -a "namespaces" -d 'List or apply the owner namespace registry'
+complete -c qp -n "__fish_qp_needs_command" -f -a "namespaces" -d 'List, apply or conditionally remove owner namespace policy'
 complete -c qp -n "__fish_qp_needs_command" -f -a "entity-ref" -d 'Mint or resolve stable entity references'
 complete -c qp -n "__fish_qp_needs_command" -f -a "ontology" -d 'Load, list or remove OWL ontologies (owl feature)'
 complete -c qp -n "__fish_qp_needs_command" -f -a "validate" -d 'Validate a data file against a shapes file without writing'
@@ -226,14 +226,20 @@ complete -c qp -n "__fish_qp_using_subcommand shapes; and __fish_seen_subcommand
 complete -c qp -n "__fish_qp_using_subcommand shapes; and __fish_seen_subcommand_from load" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand shapes; and __fish_seen_subcommand_from remove" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand shapes; and __fish_seen_subcommand_from remove" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply" -f -a "list" -d 'List the effective owner namespace registry'
-complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply" -f -a "apply" -d 'Apply the configured owner namespace registry to the store'
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply remove apply-if" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply remove apply-if" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply remove apply-if" -f -a "list" -d 'List the effective owner namespace registry and predecessor hash'
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply remove apply-if" -f -a "apply" -d 'Apply the configured owner namespace registry to the store'
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply remove apply-if" -f -a "remove" -d 'Conditionally retract an exact unused owner-local namespace declaration'
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and not __fish_seen_subcommand_from list apply remove apply-if" -f -a "apply-if" -d 'Conditionally apply an exact configured owner-local namespace declaration'
 complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from list" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from apply" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from apply" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from remove" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from remove" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from apply-if" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from apply-if" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -f -a "mint" -d 'Mint a typed stable entity reference from a JSON request'

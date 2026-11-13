@@ -472,8 +472,14 @@ _quipu() {
             quipu__subcmd__namespaces,apply)
                 cmd="quipu__subcmd__namespaces__subcmd__apply"
                 ;;
+            quipu__subcmd__namespaces,apply-if)
+                cmd="quipu__subcmd__namespaces__subcmd__apply__subcmd__if"
+                ;;
             quipu__subcmd__namespaces,list)
                 cmd="quipu__subcmd__namespaces__subcmd__list"
+                ;;
+            quipu__subcmd__namespaces,remove)
+                cmd="quipu__subcmd__namespaces__subcmd__remove"
                 ;;
             quipu__subcmd__ontology,list)
                 cmd="quipu__subcmd__ontology__subcmd__list"
@@ -3486,7 +3492,7 @@ _quipu() {
             return 0
             ;;
         quipu__subcmd__namespaces)
-            opts="-h --db --help list apply"
+            opts="-h --db --help list apply remove apply-if"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -3521,7 +3527,43 @@ _quipu() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        quipu__subcmd__namespaces__subcmd__apply__subcmd__if)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         quipu__subcmd__namespaces__subcmd__list)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        quipu__subcmd__namespaces__subcmd__remove)
             opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

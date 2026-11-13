@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH QUIPU-NAMESPACES 1 "" quipu "Quipu Manual"
 .SH NAME
-quipu\-namespaces \- List or apply the owner namespace registry
+quipu\-namespaces \- List, apply or conditionally remove owner namespace policy
 .SH SYNOPSIS
 \fBquipu namespaces\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
 .SH DESCRIPTION
-List or apply the owner namespace registry
+List, apply or conditionally remove owner namespace policy
 .SH OPTIONS
 .TP
 \fB\-\-db\fR \fI<PATH>\fR
@@ -17,10 +17,16 @@ Print help
 .SH SUBCOMMANDS
 .TP
 quipu\-namespaces\-list(1)
-List the effective owner namespace registry
+List the effective owner namespace registry and predecessor hash
 .TP
 quipu\-namespaces\-apply(1)
 Apply the configured owner namespace registry to the store
+.TP
+quipu\-namespaces\-remove(1)
+Conditionally retract an exact unused owner\-local namespace declaration
+.TP
+quipu\-namespaces\-apply\-if(1)
+Conditionally apply an exact configured owner\-local namespace declaration
 .TP
 quipu\-namespaces\-help(1)
 Print this message or the help of the given subcommand(s)

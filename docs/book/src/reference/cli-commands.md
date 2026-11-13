@@ -352,7 +352,7 @@ qp shapes remove <name>
 
 ## `qp namespaces`
 
-List or apply the owner namespace registry.
+List, apply or conditionally remove owner namespace policy.
 
 ```text
 qp namespaces
@@ -360,7 +360,7 @@ qp namespaces
 
 ### `qp namespaces list`
 
-List the effective owner namespace registry.
+List the effective owner namespace registry and predecessor hash.
 
 ```text
 qp namespaces list
@@ -372,6 +372,22 @@ Apply the configured owner namespace registry to the store.
 
 ```text
 qp namespaces apply
+```
+
+### `qp namespaces remove`
+
+Conditionally retract an exact unused owner-local namespace declaration.
+
+```text
+qp namespaces remove <request.json>
+```
+
+### `qp namespaces apply-if`
+
+Conditionally apply an exact configured owner-local namespace declaration.
+
+```text
+qp namespaces apply-if <request.json>
 ```
 
 ### `qp entity-ref mint`

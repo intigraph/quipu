@@ -368,6 +368,22 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
+(apply-if)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -2281,7 +2297,7 @@ _qp_commands() {
 'episode:Ingest a structured episode of nodes and edges from JSON' \
 'retract:Retract an entity'\''s facts, optionally one predicate; history is kept' \
 'shapes:Load, list or remove the SHACL shapes that guard writes' \
-'namespaces:List or apply the owner namespace registry' \
+'namespaces:List, apply or conditionally remove owner namespace policy' \
 'entity-ref:Mint or resolve stable entity references' \
 'ontology:Load, list or remove OWL ontologies (owl feature)' \
 'validate:Validate a data file against a shapes file without writing' \
@@ -3035,8 +3051,10 @@ _qp__subcmd__model__subcmd__install_commands() {
 (( $+functions[_qp__subcmd__namespaces_commands] )) ||
 _qp__subcmd__namespaces_commands() {
     local commands; commands=(
-'list:List the effective owner namespace registry' \
+'list:List the effective owner namespace registry and predecessor hash' \
 'apply:Apply the configured owner namespace registry to the store' \
+'remove:Conditionally retract an exact unused owner-local namespace declaration' \
+'apply-if:Conditionally apply an exact configured owner-local namespace declaration' \
     )
     _describe -t commands 'qp namespaces commands' commands "$@"
 }
@@ -3045,10 +3063,20 @@ _qp__subcmd__namespaces__subcmd__apply_commands() {
     local commands; commands=()
     _describe -t commands 'qp namespaces apply commands' commands "$@"
 }
+(( $+functions[_qp__subcmd__namespaces__subcmd__apply-if_commands] )) ||
+_qp__subcmd__namespaces__subcmd__apply-if_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp namespaces apply-if commands' commands "$@"
+}
 (( $+functions[_qp__subcmd__namespaces__subcmd__list_commands] )) ||
 _qp__subcmd__namespaces__subcmd__list_commands() {
     local commands; commands=()
     _describe -t commands 'qp namespaces list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__namespaces__subcmd__remove_commands] )) ||
+_qp__subcmd__namespaces__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp namespaces remove commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__ontology_commands] )) ||
 _qp__subcmd__ontology_commands() {
