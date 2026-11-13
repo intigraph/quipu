@@ -115,6 +115,11 @@ fn tool_knot_bound(
     ticket: Option<&crate::store::knot_completion::Ticket>,
 ) -> Result<JsonValue> {
     if let Some(ticket) = ticket {
+        if !store.conn.is_autocommit() {
+            return Err(Error::InvalidValue(
+                "knot completion: bound write requires an outermost commit boundary".into(),
+            ));
+        }
         ticket.check_request(input)?;
     }
     crate::promotion_control::check()?;

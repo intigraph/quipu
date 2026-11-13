@@ -314,3 +314,27 @@ fn reopened_receiver_can_seal_and_exclude_a_stale_live_ticket() {
         assert!(reopened.admit_knot_attempt(binding).is_err());
     });
 }
+
+#[test]
+fn bound_write_refuses_an_existing_outer_savepoint() {
+    crate::transaction_auth::with_identity(Some(identity()), || {
+        let mut s = Store::open_in_memory().unwrap();
+        let b = binding(14);
+        let t = s.admit_knot_attempt(b.clone()).unwrap();
+        s.conn.execute_batch("SAVEPOINT caller_outer").unwrap();
+        let error = crate::mcp::knot::tool_knot_with_completion(&mut s, &input(), &t).unwrap_err();
+        assert!(error.to_string().contains("outermost commit boundary"));
+        assert!(!s.conn.is_autocommit());
+        let count: i64 = s
+            .conn
+            .query_row("SELECT COUNT(*) FROM facts", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(s.knot_attempt_status(&b).unwrap()["state"], "admitted");
+        s.conn.execute_batch("RELEASE caller_outer").unwrap();
+        assert!(s.conn.is_autocommit());
+        let result = write(&mut s, &t);
+        assert_eq!(s.knot_attempt_status(&b).unwrap()["state"], "committed");
+        s.finish_knot_attempt(&t, Some(&result)).unwrap();
+    });
+}
