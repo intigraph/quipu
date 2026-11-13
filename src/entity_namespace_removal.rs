@@ -109,19 +109,39 @@ fn owner_change(
             "namespace removal is owner-local only".into(),
         ));
     }
+    with_registry_lock(store, work)
+}
+
+/// Serialize policy consumption (mint) with policy removal. Scoped writers
+/// already hold an outer reservation; ordinary local/HTTP mints need one too.
+pub(crate) fn with_registry_lock(
+    store: &mut Store,
+    work: impl FnOnce(&mut Store) -> Result<serde_json::Value>,
+) -> Result<serde_json::Value> {
     store.ensure_ownership_writable()?;
+    if !store.conn.is_autocommit() {
+        store
+            .conn
+            .execute("UPDATE transactions SET id=id WHERE 0", [])?;
+        return work(store);
+    }
     store.conn.execute_batch("BEGIN IMMEDIATE")?;
-    let result = work(store).and_then(|value| {
-        crate::store::release::settle(&store.conn, store.conn.execute_batch("COMMIT"))?;
-        Ok(value)
-    });
-    if result.is_err() {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        work(store).and_then(|value| {
+            crate::store::release::settle(&store.conn, store.conn.execute_batch("COMMIT"))?;
+            Ok(value)
+        })
+    }));
+    if !matches!(&result, Ok(Ok(_))) {
         let _ = store.conn.execute_batch("ROLLBACK");
         store.term_cache.borrow_mut().clear_persistent();
         store.read_model.borrow_mut().clear();
         store.clear_pending_write_events();
     }
-    result
+    match result {
+        Ok(value) => value,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
 }
 
 fn remove_locked(store: &mut Store, request: &RemovalRequest) -> Result<serde_json::Value> {

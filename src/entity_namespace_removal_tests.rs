@@ -330,3 +330,47 @@ fn request_requires_complete_selectors_and_refuses_unknown_fields() {
     json["force"] = serde_json::json!(true);
     assert!(serde_json::from_value::<RemovalRequest>(json).is_err());
 }
+
+#[test]
+fn registry_reservation_excludes_removal_during_policy_consumption() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mint-race.db");
+    let mut writer = Store::open(path.to_str().unwrap()).unwrap();
+    writer.set_base_ns(crate::namespace::DEFAULT_BASE_NS);
+    let mut config = crate::QuipuConfig::default();
+    config.namespaces.push(Namespace {
+        prefix: "fixture".into(),
+        base_iri: "https://example.test/race/".into(),
+        ..Namespace::default()
+    });
+    configure(&mut writer, &config).unwrap();
+    apply(&mut writer).unwrap();
+    let mut remover = Store::open(path.to_str().unwrap()).unwrap();
+    remover
+        .conn
+        .busy_timeout(std::time::Duration::ZERO)
+        .unwrap();
+    let request = RemovalRequest {
+        expected_registry_hash: registry_hash(&remover).unwrap(),
+        namespace: config.namespaces[0].clone(),
+        max_reference_facts: 100_000,
+    };
+    with_registry_lock(&mut writer, |writer| {
+        super::super::require_registered(writer, &request.namespace)?;
+        assert!(matches!(
+            remove(&mut remover, &request),
+            Err(Error::Sqlite(_))
+        ));
+        crate::entity_reference::tool_entity_ref(
+            writer,
+            &serde_json::json!({"action":"mint", "namespace":"fixture", "type":"urn:example:Host"}),
+        )
+    })
+    .unwrap();
+    let fresh = RemovalRequest {
+        expected_registry_hash: registry_hash(&remover).unwrap(),
+        ..request
+    };
+    assert!(remove(&mut remover, &fresh).is_err());
+    assert_eq!(list(&remover).unwrap(), config.namespaces);
+}

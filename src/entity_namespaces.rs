@@ -13,6 +13,7 @@ const RECORD: &str = "https://w3id.org/intigraph/vocab/namespaceDeclaration";
 
 #[path = "entity_namespace_removal.rs"]
 mod removal;
+pub(crate) use removal::with_registry_lock;
 pub use removal::{RemovalRequest, apply_if, registry_hash, remove};
 
 /// A namespace's immutable identity and publication policy.
