@@ -11,6 +11,10 @@ use crate::{Error, Result, Store};
 pub const REGISTRY_GRAPH: &str = "urn:quipu:graph:namespaces";
 const RECORD: &str = "https://w3id.org/intigraph/vocab/namespaceDeclaration";
 
+#[path = "entity_namespace_removal.rs"]
+mod removal;
+pub use removal::{RemovalRequest, apply_if, registry_hash, remove};
+
 /// A namespace's immutable identity and publication policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]

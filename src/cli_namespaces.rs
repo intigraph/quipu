@@ -9,6 +9,21 @@ pub fn run(args: &[String], db_path: &str) {
                 quipu::entity_reference::tool_namespaces(&store, &serde_json::json!({}))
             }
             ("namespaces", "apply") => quipu::entity_namespaces::apply(&mut store),
+            ("namespaces", "remove" | "apply-if") => {
+                let path = args.get(3).ok_or_else(|| {
+                    quipu::Error::InvalidValue("namespaces remove|apply-if needs a request JSON file".into())
+                })?;
+                let text = std::fs::read_to_string(path).map_err(|e| {
+                    quipu::Error::InvalidValue(format!("cannot read request file: {e}"))
+                })?;
+                let request = serde_json::from_str(&text)
+                    .map_err(|e| quipu::Error::InvalidValue(format!("namespace removal: {e}")))?;
+                if action == "apply-if" {
+                    quipu::entity_namespaces::apply_if(&mut store, &request)
+                } else {
+                    quipu::entity_namespaces::remove(&mut store, &request)
+                }
+            }
             ("entity-ref", "mint" | "resolve" | "verify") => {
                 let path = args.get(3).ok_or_else(|| {
                     quipu::Error::InvalidValue(
@@ -32,7 +47,7 @@ pub fn run(args: &[String], db_path: &str) {
                 quipu::entity_reference::tool_entity_ref(&mut store, &input)
             }
             _ => Err(quipu::Error::InvalidValue(
-                "use namespaces list|apply or entity-ref mint|resolve|verify <file.json>".into(),
+                "use namespaces list|apply or namespaces remove|apply-if <file.json> or entity-ref mint|resolve|verify <file.json>".into(),
             )),
         }
     })();
