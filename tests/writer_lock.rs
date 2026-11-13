@@ -209,3 +209,19 @@ fn real_server_and_binding_refuse_each_other_and_exit_releases_lock() {
     drop(server);
     child(&path, "open");
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_hard_links_share_ownership_without_growing_the_database() {
+    let _serial = PROCESS_TESTS.lock().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("owner.db");
+    let guard = WriterLock::acquire(path.to_str().unwrap()).unwrap();
+    assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
+    let alias = dir.path().join("alias.db");
+    std::fs::hard_link(&path, &alias).unwrap();
+    child(&alias, "refuse");
+    assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
+    drop(guard);
+    child(&alias, "open");
+}

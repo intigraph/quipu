@@ -74,6 +74,23 @@ jobs:
           components: rustfmt
       - run: cargo fmt --check
 
+  writer-ownership:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: Writer ownership (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: writer-ownership
+      - name: SQLite transactions, process contention, alias and lifetime controls
+        run: cargo test --locked --no-default-features --test writer_lock
+
   bundled-runtime:
     if: ${{ github.event_name != 'push' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     name: Bundled ONNX runtime (${{ matrix.os }})

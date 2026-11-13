@@ -38,7 +38,7 @@ impl WriterLock {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn try_lock(file: &File) -> std::result::Result<(), std::fs::TryLockError> {
     file.try_lock()
 }
@@ -65,6 +65,29 @@ fn try_lock(file: &File) -> std::io::Result<()> {
     #[allow(unsafe_code)] // Narrow FFI boundary; the safety argument is above.
     let status = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_OFD_SETLK, &lock) };
     if status == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn try_lock(file: &File) -> std::io::Result<()> {
+    use std::{ffi::c_void, os::windows::io::AsRawHandle};
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn LockFile(handle: *mut c_void, low: u32, high: u32, len_low: u32, len_high: u32) -> i32;
+    }
+    // Windows byte locks deny I/O even through another handle in this process.
+    // Reserve one byte at i64::MAX - 1, beyond SQLite's maximum database size
+    // (281 TB) and transaction-lock bytes. Never lock the header or payload.
+    // LockFile is nonblocking and permits ranges beyond EOF without growing it.
+    // The handle owns the lock; unrelated SQLite closes cannot release it.
+    // SAFETY: file owns a live handle; this call retains no Rust references.
+    #[allow(unsafe_code)] // Narrow Win32 boundary; see safety argument above.
+    let status = unsafe { LockFile(file.as_raw_handle(), 0xffff_fffe, 0x7fff_ffff, 1, 0) };
+    if status == 0 {
         Err(std::io::Error::last_os_error())
     } else {
         Ok(())

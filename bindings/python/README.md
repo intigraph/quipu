@@ -66,3 +66,10 @@ with quipu.Store.open("kg.db") as store:          # or quipu.Store.memory()
 
 This first slice covers query, export, entity history, knot, episode, set,
 retract and shapes. It does not claim full parity with the native tool set.
+
+On Windows, the cooperative ownership guard locks one byte beyond SQLite's
+maximum database range, rather than the whole file. This keeps SQLite's own
+handle free to read, write, and commit in both DELETE and WAL journal modes.
+The guard follows the database file identity, including hard links, and remains
+held until the owning engine is dropped; closing an unrelated SQLite connection
+does not release it. Unsupported locking filesystems fail closed.
