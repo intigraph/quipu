@@ -9,6 +9,17 @@ impl Store {
     /// Missing events mean unknown, never attribution to a later caller.
     /// The additive migration is atomic and is never run on read-only opens.
     pub(super) fn migrate_graph_creators_v1(conn: &Connection) -> Result<()> {
+        let installed: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='graph_creators')",
+            [],
+            |r| r.get(0),
+        )?;
+        if installed {
+            // Backfill is an upgrade, not a mutation on every writer open.
+            // Later overlay/import registrations may intentionally have no
+            // explicit creator record; preserve their portable logical cut.
+            return require_registry(conn, "main");
+        }
         conn.execute_batch("SAVEPOINT quipu_graph_creators_v1")?;
         let result = (|| {
             conn.execute_batch(

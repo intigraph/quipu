@@ -239,3 +239,95 @@ fn frozen_broad_listing_never_borrows_the_mutable_original_actor() {
         metadata["creation"]
     );
 }
+
+#[test]
+fn reopen_preserves_the_creator_cut_for_later_nonrecorded_registrations() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("store.db");
+    let before;
+    {
+        let s = Store::open(path.to_str().unwrap()).unwrap();
+        s.graph_create_recorded(GRAPH, TIME, Some("original"))
+            .unwrap();
+        s.overlay_create("urn:fixture:later-overlay", 0).unwrap();
+        before = s
+            .conn
+            .query_row("SELECT COUNT(*) FROM graph_creators", [], |r| {
+                r.get::<_, i64>(0)
+            })
+            .unwrap();
+    }
+    let s = Store::open(path.to_str().unwrap()).unwrap();
+    let after = s
+        .conn
+        .query_row("SELECT COUNT(*) FROM graph_creators", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap();
+    assert_eq!(
+        after, before,
+        "opening must preserve the portable creator cut"
+    );
+    assert_eq!(
+        s.graph_metadata(GRAPH).unwrap().unwrap()["creation"]["actor"],
+        "original"
+    );
+}
+
+#[test]
+fn durable_creator_is_logical_snapshot_and_journal_content() {
+    let s = Store::open_in_memory().unwrap();
+    crate::store_stream::initialize(&s).unwrap();
+    s.graph_create_recorded(GRAPH, TIME, Some("declared-original"))
+        .unwrap();
+    s.prune_events(CUTOFF).unwrap();
+    let batch = crate::store_stream::read_revision(&s, 0, 1000).unwrap();
+    assert!(
+        batch
+            .changes
+            .iter()
+            .any(|change| change.table == "graph_creators" && change.operation == "put")
+    );
+    let mut bytes = Vec::new();
+    let receipt = crate::store_stream::write_snapshot(&s, &mut bytes, 1024 * 1024).unwrap();
+    assert!(
+        receipt
+            .header
+            .catalog
+            .iter()
+            .any(|table| table.name == "graph_creators")
+    );
+    assert!(
+        !receipt
+            .header
+            .catalog
+            .iter()
+            .any(|table| table.name == "transaction_auth")
+    );
+    let rows: Vec<serde_json::Value> = bytes
+        .split(|b| *b == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice(line).unwrap())
+        .collect();
+    let creators: Vec<_> = rows
+        .iter()
+        .filter(|row| row.get("table").and_then(|v| v.as_str()) == Some("graph_creators"))
+        .collect();
+    // ROOT may also have a durable unknown row from the upgrade. Assert the
+    // actual graph's declared actor once, rather than assuming no other graph.
+    let declared: Vec<_> = creators
+        .iter()
+        .filter(|row| {
+            row["cells"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|cell| cell["kind"] == "text" && cell["value"] == "declared-original")
+        })
+        .collect();
+    assert_eq!(
+        declared.len(),
+        1,
+        "the pruned graph retains its creator row"
+    );
+}
