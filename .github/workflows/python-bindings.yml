@@ -50,6 +50,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Select wheel platforms
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-platforms-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     outputs:
       wheels: ${{ steps.select.outputs.wheels }}
       tests: ${{ steps.select.outputs.tests }}
@@ -73,6 +77,10 @@ jobs:
     needs: platforms
     name: Wheels (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-wheels-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -111,6 +119,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Sdist
     runs-on: ubuntu-24.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-sdist-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       # release-plz bumps only the root crate. Sync the binding's version and
@@ -133,6 +145,10 @@ jobs:
     name: Test wheel (${{ matrix.name }}, py${{ matrix.python }})
     needs: [platforms, wheels]
     runs-on: ${{ matrix.runner }}
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-test-wheels-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.platforms.outputs.tests) }}
@@ -165,6 +181,10 @@ jobs:
     name: Test sdist (build wheel from sdist)
     needs: sdist
     runs-on: ubuntu-24.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-test-sdist-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -194,6 +214,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Binding crate fmt + clippy
     runs-on: ubuntu-24.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-lint-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

@@ -68,6 +68,10 @@ jobs:
     name: Published results match the ledgers
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push') }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-published-matches-ledger-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       # fetch-depth: 0 is REQUIRED, not tidiness — the sibling provenance job
       # needs each ledger's own revision present to diff against HEAD, and this
@@ -112,6 +116,10 @@ jobs:
     name: Ledgers were derived from the code they ship with
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push') }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-ledger-provenance-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     outputs:
       stale: ${{ steps.provenance.outputs.stale }}
     steps:
@@ -153,6 +161,10 @@ jobs:
         needs.ledger-provenance.outputs.stale == 'true'
       ) }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-re-run-conformance-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

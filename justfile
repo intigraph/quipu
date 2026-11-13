@@ -461,3 +461,13 @@ signing command:
         package-controls) python3 scripts/ci/test_signing_package.py ;;
         *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
     esac
+
+# Offline PR-runner budget policy and mutation controls.
+ci-pr-budget command:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(command)}} in
+        check) python3 scripts/check-pr-runner-budget.py ;;
+        test) python3 scripts/test-pr-runner-budget.py ;;
+        *) echo 'usage: just ci-pr-budget check|test' >&2; exit 2 ;;
+    esac
