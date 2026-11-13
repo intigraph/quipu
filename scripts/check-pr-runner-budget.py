@@ -32,13 +32,28 @@ def budget_slot(group, job):
 
 def audit(documents):
     errors, slots, count = [], set(), 0
+    reachable = {name for name, workflow in documents.items()
+                 if "pull_request" in workflow.get("on", {})}
+    while True:
+        called = {config.get("uses", "").removeprefix("./.github/workflows/")
+                  for name in reachable for config in documents[name].get("jobs", {}).values()
+                  if config.get("uses", "").startswith("./.github/workflows/")}
+        expanded = reachable | (called & documents.keys())
+        if expanded == reachable:
+            break
+        reachable = expanded
     for name, workflow in documents.items():
         events = workflow.get("on", {})
-        if "pull_request" not in events:
+        if name not in reachable:
             continue
         for job, config in workflow.get("jobs", {}).items():
             label = f"{name}:{job}"
             if "runs-on" not in config:
+                target = config.get("uses", "").removeprefix("./.github/workflows/")
+                if (config.get("uses", "").startswith("./.github/workflows/")
+                        and target in documents
+                        and "workflow_call" in documents[target].get("on", {})):
+                    continue
                 errors.append(label + ": reusable/unknown runner placement needs an explicit budget audit")
                 continue
             count += 1

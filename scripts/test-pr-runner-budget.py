@@ -59,15 +59,28 @@ class RunnerBudget(unittest.TestCase):
     def test_every_real_runner_job_rejects_budget_escape(self):
         tested = 0
         for name, workflow in self.actual.items():
-            if "pull_request" not in workflow.get("on", {}):
+            if "pull_request" not in workflow.get("on", {}) and name != "conformance.yml":
                 continue
-            for job in workflow["jobs"]:
+            for job, config in workflow["jobs"].items():
+                if "runs-on" not in config:
+                    continue
                 doc = copy.deepcopy(self.actual)
                 doc[name]["jobs"][job].pop("concurrency", None)
                 with self.subTest(workflow=name, job=job):
                     self.assertTrue(budget.audit(doc)[0])
                 tested += 1
         self.assertGreater(tested, 30)
+
+    def test_reusable_conformance_cannot_escape_or_lose_required_dependency(self):
+        self.assertEqual(self.actual["conformance.yml"]["jobs"]["re-run-conformance"]["needs"], "expected-controls")
+        self.assertIn("conformance", self.actual["ci.yml"]["jobs"]["release-correctness"]["needs"])
+        for job in ["expected-controls", "re-run-conformance"]:
+            doc = copy.deepcopy(self.actual)
+            doc["conformance.yml"]["jobs"][job].pop("concurrency")
+            self.assertTrue(budget.audit(doc)[0])
+        doc = copy.deepcopy(self.actual)
+        doc["ci.yml"]["jobs"]["conformance"]["uses"] = "./.github/workflows/missing.yml"
+        self.assertTrue(budget.audit(doc)[0])
 
     def test_pending_and_active_jobs_must_not_be_canceled_by_budget(self):
         for mutation in ["single", "missing", "cancel"]:
@@ -114,7 +127,7 @@ class RunnerBudget(unittest.TestCase):
     def test_always_jobs_cannot_survive_pr_supersession(self):
         tested = 0
         for name, workflow in self.actual.items():
-            if "pull_request" not in workflow.get("on", {}):
+            if "pull_request" not in workflow.get("on", {}) and name != "conformance.yml":
                 continue
             for job, config in workflow["jobs"].items():
                 if "always()" not in config.get("if", ""):
