@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 pub struct ScopedReadConfig {
     pub policy_path: String,
     pub owner: String,
+    /// Dedicated HWH topology: only owner-bound memory read/export is exposed.
+    #[serde(default)]
+    pub memory_rpc: Option<crate::config::MemoryFilesConfig>,
 }
 
 impl ScopedReadConfig {
@@ -35,6 +38,13 @@ impl ScopedReadConfig {
             || config.crew_credentials_file.is_none()
         {
             return Err(denied());
+        }
+        if let Some(memory) = &self.memory_rpc {
+            memory.check(&crate::memory_files::Owner {
+                deployment: memory.deployment.clone(),
+                project: memory.project.clone(),
+                crew: self.owner.clone(),
+            })?;
         }
         self.open_policy()?;
         let path = config.crew_credentials_file.as_deref().ok_or_else(denied)?;
@@ -99,6 +109,7 @@ mod tests {
         let profile = ScopedReadConfig {
             policy_path: policy_path.to_string_lossy().into(),
             owner: "urn:owner".into(),
+            memory_rpc: None,
         };
         let config = crate::config::ServerConfig {
             read_only: true,

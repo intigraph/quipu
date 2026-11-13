@@ -9,6 +9,13 @@ use axum::{
 use quipu::read_authorization::{ReadIdentity, ReadOperation, profile::ScopedReadConfig};
 use serde::Deserialize;
 use std::collections::BTreeSet;
+type PublishedBuffer = (
+    String,
+    Vec<u8>,
+    quipu::read_authorization::publication::PublicationPermit,
+    (u64, u64),
+);
+
 fn unavailable() -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
@@ -126,6 +133,9 @@ pub(super) async fn handle(
         return axum::Json(serde_json::json!({"service":"quipu","profile":"scoped-current/v1"}))
             .into_response();
     }
+    if profile.memory_rpc.is_some() {
+        return memory_handle(profile, registry, source, req).await;
+    }
     let quipu::read_authorization::routes::RouteClass::Scoped(operation) = class else {
         return denied();
     };
@@ -159,7 +169,7 @@ pub(super) async fn handle(
     }
     // Owned evidence and capability cross the blocking boundary. No global
     // current principal, graph union or source Store is handed to computations.
-    let result = super::base::spawn_tracked(move || -> quipu::Result<(String, Vec<u8>)> {
+    let result = super::base::spawn_tracked(move || -> quipu::Result<PublishedBuffer> {
         let refuse = || quipu::Error::PolicyDenied("scoped read denied".into());
         let now = quipu::time::epoch_secs();
         let reader = source.read();
@@ -193,8 +203,11 @@ pub(super) async fn handle(
             ),
             ReadOperation::Replicate => return Err(refuse()),
         };
-        // Fresh-policy check for buffered output. Streaming, offline leases and
-        // a serialized revocation/publication permit remain separate R3 work.
+        // Acquire before the final recheck and keep the permit in the response
+        // body: owner mutation cannot ACK while old buffered output is held.
+        let permit = quipu::read_authorization::publication::PublicationPermit::acquire(
+            &profile.policy_path,
+        )?;
         let current = profile
             .open_policy()
             .and_then(|policy| policy.snapshot())
@@ -204,21 +217,13 @@ pub(super) async fn handle(
         let identity = current_identity(&reader, &evidence, &registry, header.as_deref(), now)?;
         view.recheck_source(&reader)?;
         view.recheck(&current, &identity, now)?;
-        Ok(output)
+        Ok((output.0, output.1, permit, view.publication_window()))
     })
     .await;
     match result {
-        Ok(Ok((content_type, bytes))) => (
-            [
-                (axum::http::header::CONTENT_TYPE, content_type),
-                (
-                    axum::http::header::CACHE_CONTROL,
-                    "private, no-store".into(),
-                ),
-            ],
-            bytes,
-        )
-            .into_response(),
+        Ok(Ok((content_type, bytes, permit, window))) => {
+            protected_body(content_type, bytes, permit, window)
+        }
         Ok(Err(quipu::Error::PolicyDenied(_) | quipu::Error::InvalidValue(_))) => denied(),
         _ => unavailable(),
     }
@@ -266,4 +271,118 @@ fn current_identity(
         return Err(refuse());
     }
     ReadIdentity::from_verified_request(evidence, binding.expires_at_epoch)
+}
+
+/// The permit is owned by the body stream, including a response abandoned before
+/// its first poll. EOF or cancellation drops it; it is never response metadata.
+fn protected_body(
+    content_type: String,
+    bytes: Vec<u8>,
+    permit: quipu::read_authorization::publication::PublicationPermit,
+    window: (u64, u64),
+) -> Response {
+    let stream = futures::stream::unfold(Some((bytes, permit)), move |state| async move {
+        state.map(|(bytes, permit)| {
+            (
+                if (window.0..window.1).contains(&quipu::time::epoch_secs()) {
+                    Ok(axum::body::Bytes::from(bytes))
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "read publication expired",
+                    ))
+                },
+                Some((Vec::new(), permit)),
+            )
+        })
+    });
+    // One buffered frame, followed by EOF. The retained state owns the permit
+    // through the first frame's handoff, rather than dropping it before yield.
+    use futures::StreamExt;
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, content_type),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "private, no-store".into(),
+            ),
+        ],
+        axum::body::Body::from_stream(stream.take(1)),
+    )
+        .into_response()
+}
+
+async fn memory_handle(
+    profile: ScopedReadConfig,
+    registry: String,
+    source: super::SharedStore,
+    req: Request,
+) -> Response {
+    let path = req.uri().path();
+    if req.method() != axum::http::Method::POST
+        || !matches!(path, "/memory/read" | "/memory/export")
+        || req.uri().query().is_some()
+    {
+        return denied();
+    }
+    let export = path == "/memory/export";
+    let Some(evidence) = super::auth::request_identity() else {
+        return denied();
+    };
+    let header = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let Ok(bytes) = axum::body::to_bytes(req.into_body(), 64 * 1024).await else {
+        return denied();
+    };
+    let Ok(owner) = serde_json::from_slice::<quipu::memory_files::Owner>(&bytes) else {
+        return denied();
+    };
+    // Root/admin is an exact principal, still requiring the ordinary explicit
+    // Export grant. Shared/write-only credentials never become read authority.
+    // Attested sessions revoke through the source store, outside this policy
+    // inode barrier. They remain unsupported in the private HWH topology.
+    if evidence.auth_class != "named_bearer"
+        || (evidence.principal != owner.crew && evidence.principal != profile.owner)
+    {
+        return denied();
+    }
+    let result = super::base::spawn_tracked(move || -> quipu::Result<_> {
+        let config = profile
+            .memory_rpc
+            .as_ref()
+            .ok_or_else(|| quipu::Error::PolicyDenied("memory topology required".into()))?;
+        config.check(&owner)?;
+        let now = quipu::time::epoch_secs();
+        let reader = source.read();
+        let identity = current_identity(&reader, &evidence, &registry, header.as_deref(), now)?;
+        let policy = profile.open_policy()?;
+        let requested = [config.graph.clone()].into_iter().collect();
+        let view = policy
+            .snapshot()?
+            .authorize(&identity, ReadOperation::Export, Some(&requested), now)?
+            .open(&reader, now)?;
+        drop(reader);
+        let bytes = view.memory_response(&owner, &config.graph, export, now)?;
+        let permit = quipu::read_authorization::publication::PublicationPermit::acquire(
+            &profile.policy_path,
+        )?;
+        let current = profile.open_policy()?.snapshot()?;
+        let now = quipu::time::epoch_secs();
+        let reader = source.read();
+        let identity = current_identity(&reader, &evidence, &registry, header.as_deref(), now)?;
+        view.recheck_source(&reader)?;
+        view.recheck(&current, &identity, now)?;
+        Ok((bytes, permit, view.publication_window()))
+    })
+    .await;
+    match result {
+        Ok(Ok((bytes, permit, window))) => {
+            protected_body("application/json".into(), bytes, permit, window)
+        }
+        Ok(Err(quipu::Error::PolicyDenied(_) | quipu::Error::InvalidValue(_))) => denied(),
+        _ => unavailable(),
+    }
 }

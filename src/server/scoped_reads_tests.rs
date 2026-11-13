@@ -165,6 +165,7 @@ impl Fixture {
         }
         Self {
             profile: ScopedReadConfig {
+                memory_rpc: None,
                 policy_path: path.to_string_lossy().into(),
                 owner: "urn:owner".into(),
             },
@@ -836,3 +837,6 @@ async fn scoped_reads_guard_covers_the_real_assembled_route_table() {
         "{graphs}"
     );
 }
+
+#[path = "scoped_memory_tests.rs"]
+mod private_memory;

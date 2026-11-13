@@ -14,6 +14,7 @@ use crate::{Error, Result, Store};
 
 pub(crate) mod mutants;
 pub mod profile;
+pub mod publication;
 pub mod routes;
 mod view;
 pub use view::ReadView;
@@ -155,6 +156,7 @@ impl ReadIdentity {
 pub struct OwnerReadPolicy {
     store: Store,
     owner: String,
+    publication_path: Option<String>,
 }
 
 impl OwnerReadPolicy {
@@ -168,6 +170,7 @@ impl OwnerReadPolicy {
         let policy = Self {
             store,
             owner: owner.into(),
+            publication_path: (path != ":memory:").then(|| path.to_owned()),
         };
         policy.snapshot()?;
         Ok(policy)
@@ -183,6 +186,7 @@ impl OwnerReadPolicy {
         let policy = Self {
             store: Store::open_read_only(path)?,
             owner: owner.into(),
+            publication_path: (path != ":memory:").then(|| path.to_owned()),
         };
         policy.snapshot()?;
         Ok(policy)
@@ -192,6 +196,17 @@ impl OwnerReadPolicy {
     /// transaction. The committed transaction id is the persistent generation;
     /// there is no independently written counter that could lag a revocation.
     pub fn apply(&mut self, grant: &ReadGrant, provenance: &str) -> Result<u64> {
+        // The owner cannot acknowledge a revision while a response holds the
+        // shared publication permit. Contention is explicit, never a false ACK.
+        let _publication = self
+            .publication_path
+            .as_deref()
+            // Scoped HTTP profiles already refuse non-Unix platforms. Preserve
+            // the existing local-only owner API there; no R3 publication can
+            // be admitted because PublicationPermit::acquire fails closed.
+            .filter(|_| cfg!(unix))
+            .map(publication::PolicyMutationPermit::acquire)
+            .transpose()?;
         grant.validate(&self.owner)?;
         if provenance.is_empty() || provenance.len() > 2048 {
             return Err(denied());

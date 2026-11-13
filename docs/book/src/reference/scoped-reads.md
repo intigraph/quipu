@@ -96,3 +96,42 @@ source/config identity, operator admission, allowed/denied production smokes,
 rollback and natural acceptance. No runtime transition follows from R1/R2 source
 delivery. Rollback of an eventual scoped listener stops that listener; it never
 turns a tenant listener into open reads.
+
+### Dedicated HWH memory topology (source-only)
+
+An optional `memory_rpc` object within `server.scoped_reads` selects a dedicated
+memory-only topology. It has the existing file-memory fields `enabled`, `graph`,
+`deployment`, and `project`. This mode admits only POST `/memory/read` and
+`/memory/export`, besides minimal health/version. Generic query/export, metadata,
+projection, writes, native MCP, streams, caches/resume and unknown routes remain
+denied. Do not expose an unguarded listener against the same private corpus.
+
+The dedicated memory mode accepts verified ordinary named credentials only.
+Attested sessions have a separate revocation authority and remain denied here
+until that authority participates in the publication barrier. Existing generic
+scoped-query behavior is unchanged.
+
+The authenticated principal must match the requested owner crew, or exactly the
+configured policy owner (admin). Both still need an existing 44r Export grant
+for the configured graph; write credentials and a shared bearer supply no read
+authority. Responses are computed from a bounded request-owned graph view and
+contain only the selected owner records. Deployment/project mismatches deny.
+
+The final policy recheck holds a shared publication permit on the existing
+policy inode. The buffered body retains that permit through frame handoff or
+cancellation. Owner `OwnerReadPolicy::apply` needs an exclusive permit and refuses
+with UNKNOWN/busy before mutation if a body is still held. A successful revision
+ACK therefore cannot precede release of an older response. The finite grant
+window is checked again when the body frame is polled; expired/backward-clock
+buffers produce a body error without a private frame. This is a buffered HTTP
+publication boundary, not a promise to erase bytes already handed to a client.
+
+Use the owner API for policy mutation. File replacement, raw SQL/RDF changes,
+registry replacement as an instantaneous revocation API, offline leases and
+streaming are unsupported. Missing/symlinked policy authority fails closed;
+no serving operation initializes a policy or copies credentials. Unix file-lock
+support is required for this barrier. A stalled client can make mutation refuse;
+no successful revoke is reported in that case.
+
+Selecting this profile requires synthetic qualification, peer review and managed
+topology admission. A source change alone does not activate private uploads.

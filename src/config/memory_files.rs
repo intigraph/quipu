@@ -1,7 +1,7 @@
 //! Opt-in file-memory RPC scope, not a per-owner read-secrecy policy.
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct MemoryFilesConfig {
     pub enabled: bool,

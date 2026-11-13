@@ -187,6 +187,35 @@ impl ReadView {
         self.authorization.recheck(policy, identity, now)
     }
 
+    /// Owner-bound adapter over the same bounded, graph-authorized view.
+    /// No raw Store escapes to an HTTP handler; no alternate graph is consulted.
+    pub fn memory_response(
+        &self,
+        owner: &crate::memory_files::Owner,
+        graph: &str,
+        export: bool,
+        now: u64,
+    ) -> Result<Vec<u8>> {
+        self.require(ReadOperation::Export, now)?;
+        if self.authorization.graphs.len() != 1 || !self.authorization.graphs.contains(graph) {
+            return Err(denied());
+        }
+        let graph = self.store.registered_graph_id(graph)?.ok_or_else(denied)?;
+        let value = if export {
+            serde_json::to_value(crate::memory_files::export(&self.store, graph, owner)?)
+                .map_err(|_| denied())?
+        } else {
+            serde_json::json!({"coverage":"this_repository_owner_records",
+                "snapshot":crate::memory_files::read(&self.store, graph, owner)?})
+        };
+        serde_json::to_vec(&value).map_err(|_| denied())
+    }
+
+    /// Finite publication interval for adapters retaining buffered output.
+    pub fn publication_window(&self) -> (u64, u64) {
+        (self.authorization.authorized_at, self.authorization.expiry)
+    }
+
     /// Execute only after preflighting every GRAPH/FROM/SERVICE occurrence,
     /// including scopes hidden in EXISTS, subqueries and skipped branches.
     /// Caller execution context, stored datasets, inference and attachments
