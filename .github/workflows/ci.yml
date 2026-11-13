@@ -899,10 +899,14 @@ jobs:
           path: /tmp/shacl-write-path.json
           if-no-files-found: warn
 
+  conformance:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    uses: ./.github/workflows/conformance.yml
+
   release-correctness:
     name: Release correctness
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
-    needs: [clippy, test, build, check, shacl-write-path, generated-docs]
+    needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass

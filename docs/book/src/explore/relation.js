@@ -40,7 +40,9 @@ export async function showHistory(card, subject, { factHistory, short, current }
 
 export async function showRelation(card, edge, { query, short, navigate, factHistory, current }) {
   card.replaceChildren(); card.setAttribute("aria-busy", "true");
-  add(card, "h3", "Relation details");
+  const heading = add(card, "h3", "Relation details");
+  heading.tabIndex = -1;
+  heading.focus({ preventScroll: true });
   const dl = document.createElement("dl"); card.append(dl);
   for (const [label, iri] of [["Subject", edge.from], ["Predicate", edge.rel], ["Object", edge.to]]) {
     entityIri(iri); add(dl, "dt", label);
