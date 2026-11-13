@@ -787,6 +787,27 @@ jobs:
   # It verifies against the RELEASED x86_64 archive, downloaded and checksummed,
   # not a fresh build, because the provenance receipt binds the binary's sha256.
   # A re-run of this job therefore needs no rebuild and cannot clobber an asset.
+  conformance-report:
+    name: Dispatch release conformance report
+    needs: [release-plz, artifacts]
+    if: >-
+      always() && needs.artifacts.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' ||
+       needs.release-plz.outputs.releases_created == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Measure the published tag through the explicit dispatch lane
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.artifacts.outputs.tag }}
+        run: |
+          test -n "$TAG"
+          gh workflow run conformance.yml --ref main -f "release_tag=$TAG"
+
   repository-share:
     name: Trusted repository share
     needs: [release-plz, artifacts]

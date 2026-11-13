@@ -1,0 +1,44 @@
+name: Publish release conformance
+
+# Privileged publication never runs in the reusable PR/merge-group gate.
+on:
+  workflow_run:
+    workflows: [Conformance]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'workflow_dispatch' &&
+          github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+          github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-conformance-report
+          path: report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify release/source binding, publish report, and rebuild docs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          (cd report && sha256sum -c conformance-report.tar.gz.sha256)
+          TAG=$(python3 -c 'import tarfile,json; t=tarfile.open("report/conformance-report.tar.gz"); print(json.load(t.extractfile("./provenance.json"))["release_tag"])')
+          python3 scripts/stage-conformance-release.py report/conformance-report.tar.gz /tmp/verified-report --tag "$TAG"
+          EXPECTED_REVISION=$(python3 -c 'import json; print(json.load(open("/tmp/verified-report/provenance.json"))["revision"])')
+          REF=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$TAG")
+          test "$(gh api "repos/$GH_REPO/commits/$REF" --jq .sha)" = "$EXPECTED_REVISION"
+          gh release upload "$TAG" report/conformance-report.tar.gz report/conformance-report.tar.gz.sha256 --clobber
+          gh workflow run docs.yml --ref main

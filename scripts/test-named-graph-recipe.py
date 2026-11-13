@@ -138,6 +138,12 @@ if __name__ == '__main__':
     with tempfile.TemporaryDirectory(prefix='quipu-named-graph-recipe-') as directory:
         root = Path(directory)
         (root / 'home').mkdir()
+        # This private fixture verifies the book's fixed example provenance,
+        # not background event retention. Keep those historical events for
+        # both server sessions; never alter the user's or server's config.
+        # Durable creator storage across pruning is a separate store control.
+        (root / '.bobbin').mkdir()
+        (root / '.bobbin/config.toml').write_text('[quipu.events]\nretention_days = 0\n')
         session(server, root, True)
         session(server, root, False)
         cli_control(server, root)
