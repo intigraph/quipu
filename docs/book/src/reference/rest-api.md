@@ -2367,6 +2367,34 @@ An explicit local reassertion can restore a fact. Source-graph membership remain
 available as provenance even when a ROOT fact was removed. Foreign transaction
 anchors are never compared with local transaction IDs.
 
+### `POST /import/promote/conditional` and `POST /import/promote/rollback`
+
+The conditional pair requires an authenticated principal even on a server with
+open ordinary writes. It does not grant writer authority or bypass normal
+review, governance, SHACL, ownership or deadline checks.
+
+Conditional input is `{"store_id":"...","expected_head":123,"share_id":"sha256:..."}`.
+The writer is reserved before checking the store identity and exact transaction
+head. Only a real ROOT promotion is supported: no actor override, graph move,
+preview or stored-query installation. The result contains `promotion` and an
+identifier `receipt` with `store_id`, `share_id` and `promotion_tx`. The receipt
+is not a credential. A promotion without a single-transaction fact-only inverse
+is rolled back rather than advertised as reversible.
+
+Rollback takes exactly that receipt, under the same authenticated principal.
+It reserves the writer before validating that the promotion remains the latest
+transaction and that its authenticated actor and exact share source match.
+It also requires the exact server-issued paired-receipt event; ordinary historical
+promotions are refused because they may have installed queries. Missing or pruned
+receipt evidence refuses. It retracts only that transaction's ROOT claims from that source through the
+normal retraction pipeline. Other producers' identical claims and the staging
+graph survive. It emits an `import.promotion_retracted` event, but does not reset
+the review or permit automatic repromotion. A second rollback, another writer,
+a different store/share/principal or an absent inverse refuses. On a timeout,
+retain the receipt and reconcile the actual transaction; never assume no commit
+or retry promotion automatically. The ordinary `/import/promote` contract is
+unchanged.
+
 ## Registries
 
 These mirror their MCP tools (see the [MCP reference](./mcp-tools.md)) —

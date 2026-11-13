@@ -2,9 +2,90 @@
 use std::sync::Arc;
 
 use axum::{Router, routing::post};
+use quipu::KnowledgeVectorStore;
 use serde_json::json;
 
 const CLIENT: &str = "wlf0-write-time";
+
+struct DeferredFixtureProvider {
+    fail: bool,
+}
+
+impl quipu::embedding::EmbeddingProvider for DeferredFixtureProvider {
+    fn embed_text(&self, _text: &str) -> quipu::Result<Vec<f32>> {
+        if self.fail {
+            Err(quipu::Error::InvalidValue(
+                "fixture inference failure".into(),
+            ))
+        } else {
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+    }
+
+    fn dimension(&self) -> usize {
+        3
+    }
+}
+
+#[test]
+fn deferred_embedding_observes_each_taken_writer_window() {
+    for fail in [false, true] {
+        let mut store = quipu::Store::open_in_memory().unwrap();
+        store.shacl_config_mut().validate_on_write = false;
+        store.embedding_config_mut().auto_embed = true;
+        store.set_embedding_provider(Arc::new(DeferredFixtureProvider { fail }));
+        store.set_defer_auto_embed(true);
+        let entity = store.intern("urn:test:deferred-observer").unwrap();
+        let label = store
+            .intern("http://www.w3.org/2000/01/rdf-schema#label")
+            .unwrap();
+        store
+            .transact(
+                &[quipu::Datum {
+                    entity,
+                    attribute: label,
+                    value: quipu::Value::Str("nonempty embedding work".into()),
+                    valid_from: "2026-01-01T00:00:00Z".into(),
+                    valid_to: None,
+                    op: quipu::Op::Assert,
+                }],
+                "2026-01-01T00:00:00Z",
+                None,
+                None,
+            )
+            .unwrap();
+        let work = store.take_deferred_embed().unwrap();
+        assert!(!work.is_empty(), "the fixture must exercise deferred locks");
+        let state = Arc::new(crate::StoreHandle::writer_only(store));
+        let mut vector_counts = Vec::new();
+        let result = super::finish_deferred_embed_observing(
+            &state,
+            &work,
+            |store, wait, acquired, ok, profile| {
+                assert!(ok);
+                vector_counts.push(store.vector_count().unwrap());
+                super::observe_write(
+                    store,
+                    "bpl-deferred-observer",
+                    "/import/promote",
+                    wait,
+                    acquired,
+                    ok,
+                    profile,
+                );
+            },
+        );
+        if fail {
+            assert!(result.is_err());
+            assert_eq!(vector_counts, vec![0]);
+            assert_eq!(state.lock().vector_count().unwrap(), 0);
+        } else {
+            result.unwrap();
+            assert_eq!(vector_counts, vec![0, 1]);
+            assert_eq!(state.lock().vector_count().unwrap(), 1);
+        }
+    }
+}
 
 fn rendered_line(metric: &str, endpoint: &str) -> Option<f64> {
     let key = format!("{metric}{{client=\"{CLIENT}\",endpoint=\"{endpoint}\"}} ");
@@ -74,4 +155,49 @@ async fn routed_writes_record_store_time_by_route_template() {
         !rendered.lines().any(|line| line.starts_with(&count)),
         "writer time leaked into the held histogram"
     );
+}
+
+#[tokio::test]
+async fn promotion_records_primary_writer_time_on_success_and_refusal() {
+    // A request timer includes admission and lock-free work; these counters
+    // must be emitted by the actual promotion lock scope, including errors.
+    let share = format!("sha256:{}", "a".repeat(64));
+    let mut store = quipu::Store::open_in_memory().unwrap();
+    store.embedding_config_mut().auto_embed = false;
+    let graph = store
+        .graph_create(&format!("urn:quipu:import:staging:{}", &share[7..]))
+        .unwrap();
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut store,
+        b"<urn:bpl:entity> <urn:bpl:value> \"promoted\" .".as_slice(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-11-05T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let state = Arc::new(crate::StoreHandle::writer_only(store));
+    let endpoint = "/import/promote";
+    let before = rendered_line("quipu_store_held_seconds_total", endpoint).unwrap_or(0.0);
+    for (share_id, succeeds) in [(share, true), (format!("sha256:{}", "b".repeat(64)), false)] {
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("x-quipu-client", CLIENT.parse().unwrap());
+        let request = serde_json::from_value(json!({"share_id": share_id})).unwrap();
+        let previous = rendered_line("quipu_store_held_seconds_total", endpoint).unwrap_or(0.0);
+        let result = crate::publication::promote_import(
+            axum::extract::State(state.clone()),
+            headers,
+            None,
+            axum::Json(request),
+        )
+        .await;
+        assert_eq!(result.is_ok(), succeeds);
+        assert_eq!(state.lock().current_facts().unwrap().len(), 1);
+        let held = rendered_line("quipu_store_held_seconds_total", endpoint)
+            .expect("promotion must expose actual writer hold, including refusal");
+        assert!(held > previous && held > before);
+        assert!(rendered_line("quipu_store_wait_seconds_total", endpoint).is_some());
+    }
 }

@@ -227,9 +227,11 @@ pub(crate) async fn import_share(
 
 pub(crate) async fn promote_import(
     State(store): State<SharedStore>,
+    headers: axum::http::HeaderMap,
     principal: Option<axum::Extension<quipu::http_auth::AuthenticatedPrincipal>>,
     axum::Json(input): axum::Json<quipu::share_import::PromoteImportRequest>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
+    let client = super::query_usage::client(&headers);
     let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
     // Promotion copies a whole staged graph into ROOT under the writer, so it
     // takes the same deadline as `/import`: past it, the promotion rolls back
@@ -237,18 +239,43 @@ pub(crate) async fn promote_import(
     let (started, deadline) = super::admission::import_budget();
     super::admission::write_blocking_until(started, deadline, move || {
         let (result, work) = {
+            let waiting = std::time::Instant::now();
             let mut st = store.write_lock()?;
-            quipu::transaction_auth::refuse_if_refused()?;
-            let result = quipu::share_import::promote_import(
-                &mut st,
-                &input,
-                &quipu::time::now_iso(),
-                actor.as_deref(),
-            )?;
-            (result, st.take_deferred_embed())
+            let wait = waiting.elapsed().as_secs_f64();
+            let acquired = std::time::Instant::now();
+            let (result, profile) = st.observe_poststate(|st| {
+                quipu::transaction_auth::refuse_if_refused()
+                    .map_err(AppError::from)
+                    .and_then(|()| {
+                        quipu::share_import::promote_import(
+                            st,
+                            &input,
+                            &quipu::time::now_iso(),
+                            actor.as_deref(),
+                        )
+                        .map_err(AppError::from)
+                    })
+            });
+            // Match the tool-writer observation boundary: include refusals,
+            // record while the guard is alive, and exclude lock-free embedding.
+            super::tools::observe_write(
+                &st,
+                &client,
+                "/import/promote",
+                wait,
+                acquired,
+                result.is_ok(),
+                profile,
+            );
+            (result?, st.take_deferred_embed())
         };
         if let Some(work) = work {
-            finish_deferred_embed(&store, &work)?;
+            super::tools::finish_deferred_embed_observed(
+                &store,
+                &work,
+                &client,
+                "/import/promote",
+            )?;
         }
         Ok(axum::Json(serde_json::to_value(result).map_err(|e| {
             quipu::Error::Serialization(format!("promotion response: {e}"))

@@ -81,6 +81,8 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/episode",
     "/import",
     "/import/promote",
+    "/import/promote/conditional",
+    "/import/promote/rollback",
     "/episodes/complete",
     // aegis-blh.2: present stores a challenge; attest settles a decision.
     "/deck/present",

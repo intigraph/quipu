@@ -87,6 +87,8 @@ const CENSUS: &[&str] = &[
     "/impact",
     "/import",
     "/import/promote",
+    "/import/promote/conditional",
+    "/import/promote/rollback",
     "/knot",
     "/knot/cancel",
     "/knot/promote",

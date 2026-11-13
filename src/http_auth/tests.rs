@@ -366,6 +366,7 @@ fn routes_in_server_source() -> Vec<String> {
     // module that server.rs declares must either be scanned above or be
     // listed as route-free.
     const NO_ROUTES: &[&str] = &[
+        "server/promotion_control.rs",
         "server/memory_files.rs", // handlers only; routes registered in server.rs
         "server/background.rs",   // primary worker startup, no route registration
         "server/replica.rs",      // handlers/middleware; route is registered in server.rs

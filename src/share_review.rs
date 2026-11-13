@@ -7,6 +7,9 @@ use crate::{Error, Result, Store};
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
+#[path = "share_promotion_control.rs"]
+pub mod control;
+
 fn atomic<T>(store: &mut Store, run: impl FnOnce(&mut Store) -> Result<T>) -> Result<T> {
     store.ensure_ownership_writable()?;
     store
@@ -173,23 +176,77 @@ pub fn promote_import(
         return crate::share_import::promote_inner(store, request, timestamp, actor);
     }
     atomic(store, |store| {
-        open(store, &request.share_id)?;
-        let result = crate::share_import::promote_inner(store, request, timestamp, actor)?;
-        transition(
-            store,
-            &request.share_id,
-            "promoted",
-            "import.promoted",
-            timestamp,
-            &json!({"share_id":request.share_id,"actor":actor,"claimed_actor":request.actor,"triples":result.triples}),
-        )?;
-        // As for staging: a promotion that overran its deadline rolls back whole
-        // instead of landing in ROOT after its caller was told it timed out.
-        #[cfg(test)]
-        crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::Promoted);
-        crate::time::check_request_deadline()?;
-        Ok(result)
+        promote_transition(store, request, timestamp, actor)
     })
+}
+
+/// Promote a staged share to ROOT only while the transaction head still matches.
+///
+/// The head check and the normal promotion/review transition share one SQLite
+/// writer reservation. This is a library building block for a controller, not
+/// an HTTP precondition, a rollback receipt, or authorization to promote.
+/// Existing ownership, import-review, validation and deadline gates still apply.
+///
+/// # Errors
+/// Refuses a stale/negative head, previews and graph moves, or any refusal from
+/// the normal ROOT promotion. A refusal rolls back the complete savepoint.
+pub fn promote_import_at_head(
+    store: &mut Store,
+    request: &PromoteImportRequest,
+    expected_head: i64,
+    timestamp: &str,
+    actor: Option<&str>,
+) -> Result<PromoteImportResult> {
+    if expected_head < 0
+        || request.dry_run
+        || request.target_graph.is_some()
+        || request.retire_from.is_some()
+    {
+        return Err(Error::InvalidValue(
+            "conditional promotion requires a nonnegative head and a real ROOT promotion".into(),
+        ));
+    }
+    atomic(store, |store| {
+        // Like Store::check_expected: a SAVEPOINT alone is deferred and is not
+        // a writer reservation. Reserve BEFORE reading the head or staged data.
+        store
+            .conn
+            .execute("UPDATE transactions SET id=id WHERE 0", [])?;
+        #[cfg(test)]
+        crate::share_import::test_hooks::at(
+            crate::share_import::test_hooks::Boundary::PromotionReserved,
+        );
+        if store.latest_tx_id()? != expected_head {
+            return Err(Error::InvalidValue(
+                "promotion transaction head changed".into(),
+            ));
+        }
+        promote_transition(store, request, timestamp, actor)
+    })
+}
+
+fn promote_transition(
+    store: &mut Store,
+    request: &PromoteImportRequest,
+    timestamp: &str,
+    actor: Option<&str>,
+) -> Result<PromoteImportResult> {
+    open(store, &request.share_id)?;
+    let result = crate::share_import::promote_inner(store, request, timestamp, actor)?;
+    transition(
+        store,
+        &request.share_id,
+        "promoted",
+        "import.promoted",
+        timestamp,
+        &json!({"share_id":request.share_id,"actor":actor,"claimed_actor":request.actor,"triples":result.triples}),
+    )?;
+    // As for staging: a promotion that overran its deadline rolls back whole
+    // instead of landing in ROOT after its caller was told it timed out.
+    #[cfg(test)]
+    crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::Promoted);
+    crate::time::check_request_deadline()?;
+    Ok(result)
 }
 /// Bounded pending-review page. Read-only, including on WAL reader connections.
 /// Cursor is the last share ID, not an event offset; state survives log retention.

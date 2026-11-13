@@ -89,11 +89,19 @@ use super::{
 #[path = "merge_decisions.rs"]
 mod merge_decisions;
 
+#[path = "promotion_control.rs"]
+mod promotion_control;
+
 pub(crate) fn routes() -> Router<SharedStore> {
     Router::new()
         .merge(merge_decisions::routes())
         .route("/import", post(super::publication::import_share))
         .route("/import/promote", post(super::publication::promote_import))
+        .route(
+            "/import/promote/conditional",
+            post(promotion_control::promote),
+        )
+        .route("/import/promote/rollback", post(promotion_control::retract))
         .route("/knot", post(super::publication::knot))
         .route("/knot/status", post(super::knot_completion::status))
         .route("/knot/stage", post(stage_part))

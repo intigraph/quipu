@@ -9,6 +9,8 @@ pub(crate) enum Boundary {
     Staged,
     /// The promotion is written; the savepoint is open.
     Promoted,
+    /// Conditional promotion owns the writer, before reading the head.
+    PromotionReserved,
     /// A subject move has written its target graph (aegis-27l).
     TargetWritten,
     /// A subject move has written its retirement (aegis-27l).

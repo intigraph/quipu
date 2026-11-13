@@ -97,17 +97,49 @@ pub(crate) fn finish_deferred_embed(
     s: &SharedStore,
     work: &quipu::DeferredEmbed,
 ) -> Result<(), AppError> {
+    finish_deferred_embed_observing(s, work, |_, _, _, _, _| {})
+}
+
+/// Include both deferred writer windows in the original route's counters.
+/// Inference stays outside the writer lock and outside held-time accounting.
+pub(crate) fn finish_deferred_embed_observed(
+    s: &SharedStore,
+    work: &quipu::DeferredEmbed,
+    client: &str,
+    endpoint: &str,
+) -> Result<(), AppError> {
+    finish_deferred_embed_observing(s, work, |store, wait, acquired, ok, profile| {
+        observe_write(store, client, endpoint, wait, acquired, ok, profile);
+    })
+}
+
+fn finish_deferred_embed_observing(
+    s: &SharedStore,
+    work: &quipu::DeferredEmbed,
+    mut observe: impl FnMut(
+        &quipu::Store,
+        f64,
+        std::time::Instant,
+        bool,
+        quipu::store::PoststateProfile,
+    ),
+) -> Result<(), AppError> {
     if work.is_empty() {
         return Ok(());
     }
     // Brief lock: clone the Arc provider and read the batch bound, then DROP
     // the guard.
     let (provider, batch_size) = {
+        let waiting = std::time::Instant::now();
         let st = s.lock();
-        (
+        let wait = waiting.elapsed().as_secs_f64();
+        let acquired = std::time::Instant::now();
+        let provider_and_batch = (
             st.embedding_provider(),
             st.embedding_config().embed_batch_size,
-        )
+        );
+        observe(&st, wait, acquired, true, Default::default());
+        provider_and_batch
     };
     let Some(provider) = provider else {
         return Ok(());
@@ -142,7 +174,13 @@ pub(crate) fn finish_deferred_embed(
     }
     // apply_deferred_embed still receives every vector in item order, so its
     // per-entity staleness check is unchanged by the chunking.
-    s.lock().apply_deferred_embed(work, &embeddings)?;
+    let waiting = std::time::Instant::now();
+    let mut st = s.lock();
+    let wait = waiting.elapsed().as_secs_f64();
+    let acquired = std::time::Instant::now();
+    let (applied, profile) = st.observe_poststate(|st| st.apply_deferred_embed(work, &embeddings));
+    observe(&st, wait, acquired, applied.is_ok(), profile);
+    applied?;
     Ok(())
 }
 

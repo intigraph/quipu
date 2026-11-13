@@ -170,6 +170,12 @@
   "/import/promote": [
     "post"
   ],
+  "/import/promote/conditional": [
+    "post"
+  ],
+  "/import/promote/rollback": [
+    "post"
+  ],
   "/knot": [
     "post"
   ],

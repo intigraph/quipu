@@ -5,6 +5,100 @@ use crate::types::Value;
 const TS: &str = "2026-09-24T00:00:00Z";
 const SHARE: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
+// Private qualification fixture only, not an HTTP rollback controller. The
+// caller owns this Store for the complete check-and-retract operation.
+fn fixture_exact_inverse(
+    store: &mut Store,
+    before: &[crate::types::Fact],
+    promoted_tx: i64,
+) -> std::result::Result<(), String> {
+    if store.latest_tx_id().map_err(|e| e.to_string())? != promoted_tx {
+        return Err("intervening transaction: do not retract".into());
+    }
+    let after = store.current_facts().map_err(|e| e.to_string())?;
+    if before.iter().any(|fact| !after.contains(fact)) {
+        return Err("preexisting ROOT fact changed: do not retract".into());
+    }
+    let introduced: Vec<_> = after.iter().filter(|fact| !before.contains(fact)).collect();
+    if introduced.is_empty() || introduced.iter().any(|fact| fact.tx != promoted_tx) {
+        return Err("unattributable inverse: do not retract".into());
+    }
+    let inverse: Vec<_> = introduced
+        .into_iter()
+        .map(|fact| Datum {
+            entity: fact.entity,
+            attribute: fact.attribute,
+            value: fact.value.clone(),
+            valid_from: TS.into(),
+            valid_to: None,
+            op: Op::Retract,
+        })
+        .collect();
+    store
+        .transact(&inverse, TS, None, Some("private exact promotion inverse"))
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn committed_promotion_exact_inverse_preserves_root_and_staging() {
+    let (mut store, graph, e, a, request) = setup();
+    // One staged fact already exists in ROOT; the other is actually new.
+    // An unrelated Document/stub must also survive the inverse unchanged.
+    let document = store.intern("urn:bpl:existing-document").unwrap();
+    let preexisting = [(e, "old"), (document, "existing document link")].map(|(entity, v)| Datum {
+        entity,
+        attribute: a,
+        value: Value::Str(v.into()),
+        valid_from: TS.into(),
+        valid_to: None,
+        op: Op::Assert,
+    });
+    store.transact(&preexisting, TS, None, None).unwrap();
+    let before = store.current_facts().unwrap();
+    let staging = store.current_facts_in_graph(graph).unwrap();
+    let promoted = promote_import(&mut store, &request, TS, None).unwrap();
+    assert_eq!(store.current_facts().unwrap().len(), before.len() + 1);
+    fixture_exact_inverse(&mut store, &before, promoted.tx_id).unwrap();
+    let after = store.current_facts().unwrap();
+    assert_eq!(after.len(), before.len());
+    assert!(before.iter().all(|fact| after.contains(fact)));
+    assert_eq!(store.current_facts_in_graph(graph).unwrap(), staging);
+    // A successful inverse is a local retraction, not a reset of import state.
+    // A stale pack cannot silently reassert it: automatic retry is unsafe.
+    let repeated = promote_import(&mut store, &request, TS, None).unwrap();
+    assert_eq!(repeated.suppressed_retractions, 1);
+    assert_eq!(store.current_facts().unwrap(), after);
+}
+
+#[test]
+fn committed_promotion_inverse_refuses_an_intervening_writer() {
+    let (mut store, graph, e, a, request) = setup();
+    let before = store.current_facts().unwrap();
+    let promoted = promote_import(&mut store, &request, TS, None).unwrap();
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("later writer must survive".into()),
+                valid_from: TS.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    let after_writer = store.current_facts().unwrap();
+    let staging = store.current_facts_in_graph(graph).unwrap();
+    let error = fixture_exact_inverse(&mut store, &before, promoted.tx_id).unwrap_err();
+    assert!(error.contains("intervening transaction"));
+    assert_eq!(store.current_facts().unwrap(), after_writer);
+    assert_eq!(store.current_facts_in_graph(graph).unwrap(), staging);
+}
+
 fn setup() -> (Store, i64, i64, i64, PromoteImportRequest) {
     let mut store = Store::open_in_memory().unwrap();
     let graph = store
@@ -478,4 +572,277 @@ fn subject_move_that_drops_a_required_value_is_refused() {
         .count();
     assert_eq!(owners, 1, "nothing written");
     assert_eq!(promoted_reviews(&store), 0);
+}
+
+#[test]
+fn conditional_promotion_reserves_head_and_keeps_normal_review_transition() {
+    let (mut store, graph, _, _, request) = setup();
+    let head = store.latest_tx_id().unwrap();
+    let staging = store.current_facts_in_graph(graph).unwrap();
+    let result =
+        crate::share_review::promote_import_at_head(&mut store, &request, head, TS, None).unwrap();
+    assert!(result.tx_id > head);
+    assert_eq!(store.current_facts().unwrap().len(), 2);
+    assert_eq!(store.current_facts_in_graph(graph).unwrap(), staging);
+    assert_eq!(promoted_reviews(&store), 1);
+}
+
+#[test]
+fn conditional_promotion_stale_or_closed_review_writes_nothing() {
+    for closed in [false, true] {
+        let (mut store, graph, _, _, request) = setup();
+        if closed {
+            store.conn.execute("INSERT INTO import_reviews(share_id,state,first_seen,updated_at,payload) VALUES(?1,'rejected',?2,?2,'{}')", rusqlite::params![SHARE, TS]).unwrap();
+        }
+        let head = store.latest_tx_id().unwrap();
+        let before = store.current_facts().unwrap();
+        let staging = store.current_facts_in_graph(graph).unwrap();
+        let event_count = |store: &Store| {
+            store
+                .conn
+                .query_row("SELECT COUNT(*) FROM events", [], |r| r.get::<_, i64>(0))
+                .unwrap()
+        };
+        let events = event_count(&store);
+        let expected = if closed { head } else { head - 1 };
+        let error =
+            crate::share_review::promote_import_at_head(&mut store, &request, expected, TS, None)
+                .unwrap_err();
+        assert!(
+            error.to_string().contains(if closed {
+                "import review is closed"
+            } else {
+                "promotion transaction head changed"
+            }),
+            "{error}"
+        );
+        assert_eq!(store.latest_tx_id().unwrap(), head);
+        assert_eq!(store.current_facts().unwrap(), before);
+        assert_eq!(store.current_facts_in_graph(graph).unwrap(), staging);
+        assert_eq!(event_count(&store), events);
+        assert_eq!(promoted_reviews(&store), 0);
+    }
+}
+
+// The second handle is an independent SQLite connection, not another borrow
+// of the primary Store. Observe at the actual production reservation boundary.
+thread_local! {
+    static PROMOTION_RACE_PATH: std::cell::RefCell<Option<std::path::PathBuf>> = const {
+        std::cell::RefCell::new(None)
+    };
+    static PROMOTION_RACE_OBSERVED: std::cell::Cell<bool> = const {
+        std::cell::Cell::new(false)
+    };
+}
+
+fn independent_promotion_writer_must_be_busy() {
+    PROMOTION_RACE_PATH.with(|path| {
+        let path = path.borrow();
+        let conn = rusqlite::Connection::open(path.as_ref().unwrap()).unwrap();
+        conn.busy_timeout(std::time::Duration::ZERO).unwrap();
+        let error = conn
+            .execute("UPDATE transactions SET id=id WHERE 0", [])
+            .unwrap_err();
+        assert!(matches!(error, rusqlite::Error::SqliteFailure(e, _)
+            if e.code == rusqlite::ErrorCode::DatabaseBusy));
+    });
+    PROMOTION_RACE_OBSERVED.with(|seen| seen.set(true));
+}
+
+#[test]
+fn conditional_promotion_excludes_independent_writer_before_head_read() {
+    struct ClearHook;
+    impl Drop for ClearHook {
+        fn drop(&mut self) {
+            crate::share_import::test_hooks::set(None);
+            PROMOTION_RACE_PATH.with(|path| *path.borrow_mut() = None);
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("promotion.db");
+    let mut store = Store::open(path.to_str().unwrap()).unwrap();
+    let graph = store
+        .graph_create(&format!("urn:quipu:import:staging:{}", &SHARE[7..]))
+        .unwrap();
+    let entity = store.intern("urn:promotion-race:entity").unwrap();
+    let attribute = store.intern("urn:promotion-race:attribute").unwrap();
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity,
+                attribute,
+                value: Value::Str("staged".into()),
+                valid_from: TS.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            TS,
+            None,
+            Some("pack"),
+            graph,
+        )
+        .unwrap();
+    let second = rusqlite::Connection::open(&path).unwrap();
+    second.busy_timeout(std::time::Duration::ZERO).unwrap();
+    // Positive control: the second writer works before the reservation.
+    second
+        .execute("UPDATE transactions SET id=id WHERE 0", [])
+        .unwrap();
+    let head = store.latest_tx_id().unwrap();
+    let request = PromoteImportRequest {
+        share_id: SHARE.into(),
+        actor: None,
+        target_graph: None,
+        retire_from: None,
+        dry_run: false,
+    };
+    PROMOTION_RACE_PATH.with(|slot| *slot.borrow_mut() = Some(path));
+    let _clear = ClearHook;
+    crate::share_import::test_hooks::set(Some((
+        crate::share_import::test_hooks::Boundary::PromotionReserved,
+        independent_promotion_writer_must_be_busy,
+    )));
+    // Both successful release and refused rollback must release ownership.
+    for expected in [head - 1, head] {
+        PROMOTION_RACE_OBSERVED.with(|seen| seen.set(false));
+        let result =
+            crate::share_review::promote_import_at_head(&mut store, &request, expected, TS, None);
+        assert_eq!(result.is_ok(), expected == head);
+        assert!(PROMOTION_RACE_OBSERVED.with(std::cell::Cell::get));
+        assert!(store.conn.is_autocommit());
+        second
+            .execute("UPDATE transactions SET id=id WHERE 0", [])
+            .unwrap();
+    }
+}
+
+#[test]
+fn paired_promotion_source_inverse_preserves_other_claims_and_staging() {
+    let (mut store, graph, e, a, _) = setup();
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("old".into()),
+                valid_from: TS.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            TS,
+            None,
+            Some("preexisting-document"),
+        )
+        .unwrap();
+    let before = store.current_facts().unwrap();
+    let staged = store.current_facts_in_graph(graph).unwrap();
+    let input = crate::share_review::control::Promote {
+        store_id: store.store_id().unwrap(),
+        expected_head: store.latest_tx_id().unwrap(),
+        share_id: SHARE.into(),
+    };
+    let result =
+        crate::share_review::control::promote(&mut store, &input, "principal-a", TS).unwrap();
+    assert!(store.current_facts().unwrap().len() > before.len());
+    let inverse =
+        crate::share_review::control::retract(&mut store, &result.receipt, "principal-a", TS)
+            .unwrap();
+    assert!(inverse.claims > 0);
+    assert_eq!(store.current_facts().unwrap(), before);
+    assert_eq!(store.current_facts_in_graph(graph).unwrap(), staged);
+    assert!(
+        crate::share_review::control::retract(&mut store, &result.receipt, "principal-a", TS)
+            .is_err()
+    );
+}
+
+#[test]
+fn paired_promotion_inverse_refuses_foreign_receipts_and_later_writer() {
+    let (mut store, graph, e, a, _) = setup();
+    let input = crate::share_review::control::Promote {
+        store_id: store.store_id().unwrap(),
+        expected_head: store.latest_tx_id().unwrap(),
+        share_id: SHARE.into(),
+    };
+    let result =
+        crate::share_review::control::promote(&mut store, &input, "principal-a", TS).unwrap();
+    let before = store.current_facts().unwrap();
+    let staged = store.current_facts_in_graph(graph).unwrap();
+    let head = store.latest_tx_id().unwrap();
+    for variant in 0..4 {
+        let mut receipt = result.receipt.clone();
+        let principal = if variant == 0 {
+            "principal-b"
+        } else {
+            "principal-a"
+        };
+        match variant {
+            1 => receipt.store_id = "different-store".into(),
+            2 => receipt.share_id = format!("sha256:{}", "b".repeat(64)),
+            3 => receipt.promotion_tx -= 1,
+            _ => {}
+        }
+        assert!(
+            crate::share_review::control::retract(&mut store, &receipt, principal, TS).is_err()
+        );
+        assert_eq!(store.latest_tx_id().unwrap(), head);
+        assert_eq!(store.current_facts().unwrap(), before);
+        assert_eq!(store.current_facts_in_graph(graph).unwrap(), staged);
+    }
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("intervening".into()),
+                valid_from: TS.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    let later = store.current_facts().unwrap();
+    assert!(
+        crate::share_review::control::retract(&mut store, &result.receipt, "principal-a", TS)
+            .is_err()
+    );
+    assert_eq!(store.current_facts().unwrap(), later);
+}
+
+#[test]
+fn paired_promotion_refuses_unissued_receipt_and_stale_input() {
+    let (mut store, graph, _, _, request) = setup();
+    let identity = store.store_id().unwrap();
+    let head = store.latest_tx_id().unwrap();
+    let before = store.current_facts().unwrap();
+    let staged = store.current_facts_in_graph(graph).unwrap();
+    for (store_id, expected_head, principal) in [
+        (identity.clone(), head - 1, "principal-a"),
+        ("foreign".into(), head, "principal-a"),
+        (identity.clone(), head, ""),
+    ] {
+        let input = crate::share_review::control::Promote {
+            store_id,
+            expected_head,
+            share_id: SHARE.into(),
+        };
+        assert!(crate::share_review::control::promote(&mut store, &input, principal, TS).is_err());
+        assert_eq!(store.latest_tx_id().unwrap(), head);
+        assert_eq!(store.current_facts().unwrap(), before);
+        assert_eq!(store.current_facts_in_graph(graph).unwrap(), staged);
+    }
+    let normal = promote_import(&mut store, &request, TS, Some("principal-a")).unwrap();
+    let receipt = crate::share_review::control::Receipt {
+        store_id: identity,
+        share_id: SHARE.into(),
+        promotion_tx: normal.tx_id,
+    };
+    let after = store.current_facts().unwrap();
+    assert!(
+        crate::share_review::control::retract(&mut store, &receipt, "principal-a", TS).is_err()
+    );
+    assert_eq!(store.current_facts().unwrap(), after);
 }
