@@ -357,6 +357,11 @@ fn routes_in_server_source() -> Vec<String> {
             "server/knot_completion.rs",
             include_str!("../server/knot_completion.rs"),
         ),
+        // Durable completion adapter has handlers only; scan for future routes.
+        (
+            "server/knot_durable.rs",
+            include_str!("../server/knot_durable.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is

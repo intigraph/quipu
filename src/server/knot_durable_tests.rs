@@ -43,7 +43,7 @@ async fn call(app: Router, path: &str, body: Value, v2: bool, who: Option<&str>)
         serde_json::from_slice(&bytes).unwrap_or(Value::Null),
     )
 }
-fn status(request: Value) -> Value {
+fn status(request: &Value) -> Value {
     json!({"contract":crate::knot_durable::CONTRACT,"write_id":ID,"request":request})
 }
 
@@ -59,7 +59,7 @@ async fn durable_http_receipt_survives_store_reopen_and_refuses_legacy_downgrade
     let (code, proof) = call(
         reopened.clone(),
         "/knot/status",
-        status(input()),
+        status(&input()),
         false,
         Some("alice"),
     )
@@ -93,7 +93,7 @@ async fn durable_status_body_or_authenticated_owner_drift_is_unknown() {
     let (_, foreign) = call(
         app.clone(),
         "/knot/status",
-        status(input()),
+        status(&input()),
         false,
         Some("bob"),
     )
@@ -101,7 +101,7 @@ async fn durable_status_body_or_authenticated_owner_drift_is_unknown() {
     assert_eq!(foreign["state"], "unknown");
     assert!(foreign.get("receipt").is_none());
     let changed = json!({"turtle":"<urn:changed> <urn:p> <urn:o> ."});
-    let (_, drift) = call(app, "/knot/status", status(changed), false, Some("alice")).await;
+    let (_, drift) = call(app, "/knot/status", status(&changed), false, Some("alice")).await;
     assert_eq!(drift["state"], "unknown");
     assert!(drift.get("receipt").is_none());
 }
@@ -110,7 +110,7 @@ async fn durable_status_body_or_authenticated_owner_drift_is_unknown() {
 async fn durable_admission_refuses_anonymous_identity_without_effect() {
     let app = app(quipu::Store::open_in_memory().unwrap());
     assert_eq!(call(app.clone(), "/knot", input(), true, None).await.0, 400);
-    let (_, unknown) = call(app, "/knot/status", status(input()), false, Some("alice")).await;
+    let (_, unknown) = call(app, "/knot/status", status(&input()), false, Some("alice")).await;
     assert_eq!(unknown["state"], "unknown");
 }
 
@@ -143,7 +143,7 @@ fn guarded(state: crate::SharedStore, read_only: bool) -> Router {
     )
     .with_state(state)
 }
-fn request(path: &str, body: Value, token: Option<&str>) -> Request<Body> {
+fn request(path: &str, body: &Value, token: Option<&str>) -> Request<Body> {
     let mut r = Request::post(path).header("content-type", "application/json");
     if let Some(token) = token {
         r = r.header("authorization", format!("Bearer {token}"));
@@ -165,7 +165,7 @@ async fn durable_real_bearer_and_read_only_middleware_remain_enforced() {
     assert_eq!(
         writer
             .clone()
-            .oneshot(request("/knot", input(), Some("fixture-alice")))
+            .oneshot(request("/knot", &input(), Some("fixture-alice")))
             .await
             .unwrap()
             .status(),
@@ -174,7 +174,7 @@ async fn durable_real_bearer_and_read_only_middleware_remain_enforced() {
     assert_eq!(
         writer
             .clone()
-            .oneshot(request("/knot/status", status(input()), None))
+            .oneshot(request("/knot/status", &status(&input()), None))
             .await
             .unwrap()
             .status(),
@@ -184,7 +184,7 @@ async fn durable_real_bearer_and_read_only_middleware_remain_enforced() {
         writer
             .oneshot(request(
                 "/knot/status",
-                status(input()),
+                &status(&input()),
                 Some("wrong-fixture")
             ))
             .await
@@ -197,7 +197,7 @@ async fn durable_real_bearer_and_read_only_middleware_remain_enforced() {
         .clone()
         .oneshot(request(
             "/knot/status",
-            status(input()),
+            &status(&input()),
             Some("fixture-alice"),
         ))
         .await
@@ -212,7 +212,7 @@ async fn durable_real_bearer_and_read_only_middleware_remain_enforced() {
     );
     assert_eq!(
         reader
-            .oneshot(request("/knot", input(), Some("fixture-alice")))
+            .oneshot(request("/knot", &input(), Some("fixture-alice")))
             .await
             .unwrap()
             .status(),
@@ -244,7 +244,7 @@ fn durable_process_child() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         let router = guarded(Arc::new(crate::StoreHandle::writer_only(store)), false);
         let response = router
-            .oneshot(request("/knot", input(), Some("fixture-alice")))
+            .oneshot(request("/knot", &input(), Some("fixture-alice")))
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
@@ -280,7 +280,7 @@ async fn durable_process_restart_preserves_lost_response_and_crash_gap_inverses(
         let (code, proof) = call(
             reopened.clone(),
             "/knot/status",
-            status(input()),
+            status(&input()),
             false,
             Some("alice"),
         )
@@ -351,7 +351,7 @@ async fn durable_http_cancellation_after_commit_does_not_fabricate_finished() {
     let (_, committed) = call(
         reader.clone(),
         "/knot/status",
-        status(input()),
+        status(&input()),
         false,
         Some("alice"),
     )
@@ -366,7 +366,7 @@ async fn durable_http_cancellation_after_commit_does_not_fabricate_finished() {
             let (_, proof) = call(
                 reader.clone(),
                 "/knot/status",
-                status(input()),
+                &status(&input()),
                 false,
                 Some("alice"),
             )
