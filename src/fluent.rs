@@ -20,6 +20,7 @@ mod shapes;
 #[allow(dead_code)]
 pub(crate) mod source_witness;
 mod targets;
+pub mod transport;
 mod valid_time;
 pub(crate) mod writer;
 pub use observable::{Observable, Registry};

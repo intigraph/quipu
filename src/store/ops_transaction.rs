@@ -102,8 +102,7 @@ impl Store {
         )
     }
 
-    /// Source-stage fluent entry: no HTTP/CLI adapter is admitted yet.
-    #[allow(dead_code)]
+    /// Fluent entry shared by the HTTP adapter and native library operations.
     pub(crate) fn append_fluent_native(
         &mut self,
         request: &crate::fluent::writer::Append,
