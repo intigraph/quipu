@@ -193,6 +193,7 @@ jobs:
           xvfb-run -a node scripts/test-explore-loading.cjs
           test -s docs/book/book/explore/default-store.db.gz
           node scripts/test-explore-default.cjs
+          node scripts/test-explore-cords.cjs
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'
