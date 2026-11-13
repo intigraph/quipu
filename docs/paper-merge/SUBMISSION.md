@@ -25,6 +25,8 @@ Revised 2026-11-04: the replay arm no longer claims to remove the oracle circula
 
 Revised 2026-11-11 after an independent referee read: section 3 now states the evaluated conflict rule (any declared cardinality bound, plus delete/modify), the Arm A outputs for the five seeds and an overlap sweep are committed under `benchmark/mergebench/results/`, per-seed and per-class tables were added, the Context Merge arm is named as a per-slot reimplementation, and the replay arm is described as scenarios built from recorded incidents. No Arm A number changed: the five seeds were rerun and reproduce the table. The rebuilt PDF is 17 pages; its abstract extracts to 1,885 characters including spaces. The abstract below was updated to match.
 
+Revised 2026-11-11 (second change): the artifact address in the title footnote and in the comments field below is now `github.com/intigraph/quipu`, the repository's current home (the old address redirects). No other text changed; still 17 pages and the abstract is unchanged.
+
 ---
 
 ## 1. Public-history decision — resolved 2026-09-24
@@ -78,7 +80,7 @@ about distribution.
 **Comments field** — suggested:
 
     17 pages. Artifact, benchmark and replay corpus at
-    https://github.com/scbrown/quipu ; every table names the command that
+    https://github.com/intigraph/quipu ; every table names the command that
     regenerates it.
 
 **License** — recommend `CC BY 4.0`. The artifact is already public; a
