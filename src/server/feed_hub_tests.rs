@@ -12,9 +12,9 @@ use serde_json::Value as Json;
 use super::{Hub, Serve};
 use crate::{SharedStore, StoreHandle};
 
-const T: &str = "2026-10-24T00:00:00Z";
-const BOARD: &str = "urn:graph:board";
-const OTHER: &str = "urn:graph:other";
+pub(super) const T: &str = "2026-10-24T00:00:00Z";
+pub(super) const BOARD: &str = "urn:graph:board";
+pub(super) const OTHER: &str = "urn:graph:other";
 
 fn write(shared: &SharedStore, graph: &str, entity: &str) {
     let mut store = shared.lock();
@@ -35,7 +35,7 @@ fn write(shared: &SharedStore, graph: &str, entity: &str) {
     store.transact_to_graph(&[datum], T, None, None, g).unwrap();
 }
 
-fn shared() -> SharedStore {
+pub(super) fn shared() -> SharedStore {
     let shared: SharedStore = Arc::new(StoreHandle::writer_only(Store::open_in_memory().unwrap()));
     write(&shared, BOARD, "urn:seed");
     write(&shared, OTHER, "urn:x:seed");
@@ -43,7 +43,7 @@ fn shared() -> SharedStore {
 }
 
 /// Wait until the hub's ring head reaches the store's latest transaction.
-async fn settled(shared: &SharedStore, hub: &Hub) {
+pub(super) async fn settled(shared: &SharedStore, hub: &Hub) {
     let latest = shared.read().latest_tx_id().unwrap();
     let mut head = hub.watch();
     for _ in 0..200 {
@@ -58,7 +58,7 @@ async fn settled(shared: &SharedStore, hub: &Hub) {
 /// Wait until the hub's reader has gone quiet: no read for 100 ms. A write can
 /// commit more than one transaction, and a late hint wakes one more (empty)
 /// read; measuring before it ends would charge it to the wrong step.
-async fn quiet(hub: &Hub) {
+pub(super) async fn quiet(hub: &Hub) {
     let reads = || hub.reads.load(std::sync::atomic::Ordering::Relaxed);
     let mut last = reads();
     loop {
@@ -72,7 +72,7 @@ async fn quiet(hub: &Hub) {
 }
 
 /// The page fields that do not depend on when the page was read.
-fn stable(page: &Json) -> Json {
+pub(super) fn stable(page: &Json) -> Json {
     serde_json::json!({
         "records": page["records"], "since": page["since"], "next_tx": page["next_tx"],
         "capture": page["capture"], "source": page["source"],
@@ -279,4 +279,147 @@ async fn a_quiet_graph_behind_the_ring_floor_stops_reading_the_store() {
         .expect("the BOARD commit never arrived")
         .unwrap();
     assert_eq!(frame, ("quipu.changes".to_string(), board_tx.to_string()));
+}
+
+/// One transaction with a title AND a status record for `entity`, so a
+/// predicate or subject filter has records to keep and to drop.
+fn write_two(shared: &SharedStore, graph: &str, entity: &str, status: &str) {
+    let mut store = shared.lock();
+    let e = store.intern(entity).unwrap();
+    let datum = |store: &mut Store, attribute: &str, value: String| Datum {
+        entity: e,
+        attribute: store.intern(attribute).unwrap(),
+        value: Value::Str(value),
+        valid_from: T.into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    let data = [
+        datum(&mut store, "urn:p:title", format!("title of {entity}")),
+        datum(&mut store, "urn:p:status", status.to_string()),
+    ];
+    let g = match store.registered_graph_id(graph).unwrap() {
+        Some(g) => g,
+        None => store.graph_create(graph).unwrap(),
+    };
+    store.transact_to_graph(&data, T, None, None, g).unwrap();
+}
+
+/// aegis-n0wc.3: predicate and subject filters give the same page from the
+/// ring as from the store, for every combination, including an IRI the store
+/// has never seen (matches nothing on both paths).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_ring_page_equals_the_store_page_for_predicate_and_subject_filters() {
+    let shared = shared();
+    let hub = Hub::of(&shared);
+    settled(&shared, &hub).await;
+    let start = shared.read().latest_tx_id().unwrap();
+    write_two(&shared, BOARD, "urn:item:1", "open");
+    write_two(&shared, OTHER, "urn:item:2", "open");
+    write(&shared, BOARD, "urn:item:3");
+    write_two(&shared, BOARD, "urn:item:2", "closed");
+    settled(&shared, &hub).await;
+    type Case = (
+        Option<&'static str>,
+        Option<&'static str>,
+        Option<&'static str>,
+    );
+    let cases: [Case; 6] = [
+        (None, Some("urn:p:status"), None),
+        (None, None, Some("urn:item:2")),
+        (Some(BOARD), Some("urn:p:status"), None),
+        (None, Some("urn:p:status"), Some("urn:item:1,urn:item:3")),
+        (None, Some("urn:p:never-written"), None),
+        (
+            Some(BOARD),
+            Some("urn:p:title,urn:p:status"),
+            Some("urn:item:3"),
+        ),
+    ];
+    for (graph, predicate, subject) in cases {
+        let filter = super::RecordFilter {
+            graph,
+            predicates: predicate.map(|p| p.split(',').collect()),
+            subjects: subject.map(|s| s.split(',').collect()),
+            member: None,
+        };
+        let mut cursor = start;
+        let mut scanned = 0;
+        let mut pages = 0;
+        loop {
+            let served = hub.serve_filtered(cursor, &filter, &mut scanned);
+            let store = shared.read();
+            let ids = |list: Option<&str>| {
+                list.map(|l| {
+                    l.split(',')
+                        .filter_map(|iri| store.lookup(iri).unwrap())
+                        .collect::<Vec<_>>()
+                })
+            };
+            let scope = quipu::store::changes::TermScope {
+                attributes: ids(predicate),
+                entities: ids(subject),
+            };
+            let g = graph.map(|iri| store.lookup(iri).unwrap().unwrap());
+            let want = store
+                .changes_after_scoped(cursor, 1, Capture::OldAndNewValues, g, &scope)
+                .unwrap()
+                .to_json();
+            let case = format!("{graph:?} {predicate:?} {subject:?} at {cursor}");
+            match served {
+                Serve::Page(page) => {
+                    assert_eq!(stable(&page), stable(&want), "{case}");
+                    cursor = page["next_tx"].as_i64().unwrap();
+                    pages += 1;
+                }
+                Serve::Wait => {
+                    assert!(want["records"].as_array().unwrap().is_empty(), "{case}");
+                    break;
+                }
+                Serve::CatchUp => panic!("a cursor inside the ring must not catch up"),
+            }
+        }
+        let expected_pages = match (graph, predicate, subject) {
+            (None, Some("urn:p:status"), None) => 3,
+            (None, None, Some("urn:item:2")) => 2,
+            (Some(BOARD), Some("urn:p:status"), None) => 2,
+            (None, Some("urn:p:status"), Some(_)) => 1,
+            (None, Some("urn:p:never-written"), None) => 0,
+            _ => 1,
+        };
+        assert_eq!(pages, expected_pages, "{graph:?} {predicate:?} {subject:?}");
+    }
+}
+
+/// aegis-n0wc.3 controls: a status filter keeps only status records, and a
+/// subject filter never carries another subject's records.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_predicate_filter_keeps_only_its_records_and_a_subject_filter_only_its_subject() {
+    let shared = shared();
+    let hub = Hub::of(&shared);
+    settled(&shared, &hub).await;
+    let start = shared.read().latest_tx_id().unwrap();
+    write_two(&shared, BOARD, "urn:item:a", "open");
+    write_two(&shared, BOARD, "urn:item:b", "open");
+    settled(&shared, &hub).await;
+    let status = super::RecordFilter {
+        predicates: Some(["urn:p:status"].into()),
+        subjects: Some(["urn:item:a"].into()),
+        ..super::RecordFilter::default()
+    };
+    let mut scanned = 0;
+    let Serve::Page(page) = hub.serve_filtered(start, &status, &mut scanned) else {
+        panic!("the item:a status change must be served");
+    };
+    let records = page["records"].as_array().unwrap();
+    assert_eq!(records.len(), 1, "only the status record: {records:?}");
+    assert_eq!(records[0]["attribute"], "urn:p:status");
+    assert_eq!(records[0]["entity"], "urn:item:a");
+    assert_eq!(records[0]["sequence"], 0, "renumbered from 0");
+    let after = page["next_tx"].as_i64().unwrap();
+    // Negative control: item:b's transaction is skipped, not served.
+    assert!(matches!(
+        hub.serve_filtered(after, &status, &mut scanned),
+        Serve::Wait
+    ));
 }
