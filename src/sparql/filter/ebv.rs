@@ -2,7 +2,7 @@
 use crate::{namespace, types::Value};
 
 /// SPARQL effective boolean value for a bound value used directly as a FILTER.
-pub(super) fn effective_boolean_value(v: &Value) -> Option<bool> {
+pub(in crate::sparql) fn effective_boolean_value(v: &Value) -> Option<bool> {
     match v {
         Value::Bool(b) => Some(*b),
         Value::Str(s) => Some(!s.is_empty()),
