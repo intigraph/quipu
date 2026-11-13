@@ -1,0 +1,30 @@
+Script started on 2026-11-13 14:50:10-05:00 [COMMAND="python3 docs/probes/pr-demos/doc-tool-preflight/run.py" <not executed on terminal>]
+Source fixture demonstration; no Cargo, package install or production service.
+BASE d649bcd1bb356175b97804b30e3f3e4609cd267f
+
+BEFORE: just check; mdbook present, mdbook-mermaid absent
+FULL HOOK SUITE STARTED (fixture)
+pre-commit run --all-files
+ERROR: mdbook-mermaid not found on PATH.
+The book uses Mermaid diagrams and will fail without the preprocessor.
+Install with: cargo install mdbook-mermaid
+error: Recipe `check` failed on line 22 with exit code 1
+Observed exit: 1
+
+AFTER (current checkout): just check; mdbook present, mdbook-mermaid absent
+./scripts/preflight-doc-tools.sh
+ERROR: mdbook-mermaid not found on PATH.
+The book requires both mdbook and the mdbook-mermaid preprocessor.
+If already installed with Cargo, expose its bin directory in this shell:
+  export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
+Otherwise install the required tools (also supported on macOS):
+  cargo install --locked mdbook mdbook-mermaid
+For a broken executable, reinstall the named tool for this machine with --force.
+Then rerun: just docs preflight
+See CONTRIBUTING.md (Documentation prerequisites). The book build is not skipped.
+error: Recipe `check` failed on line 23 with exit code 1
+Observed exit: 1
+
+PASS: same missing dependency; candidate refuses before the full hooks.
+
+Script done on 2026-11-13 14:50:10-05:00 [COMMAND_EXIT_CODE="0"]

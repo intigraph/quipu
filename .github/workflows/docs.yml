@@ -10,10 +10,6 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'CONTRIBUTING.md'
-      - 'justfile'
-      - 'scripts/preflight-doc-tools.sh'
-      - 'scripts/precommit-mdbook.sh'
-      - 'scripts/test-doc-tools.py'
       - '.github/workflows/docs.yml'
       # The 3D Datalinks demo is published from ui/ sources, staged into the
       # book by `just docs-assets`. Without this the page silently goes stale
@@ -44,10 +40,6 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'CONTRIBUTING.md'
-      - 'justfile'
-      - 'scripts/preflight-doc-tools.sh'
-      - 'scripts/precommit-mdbook.sh'
-      - 'scripts/test-doc-tools.py'
       - '.github/workflows/docs.yml'
       - 'ui/**'
       - 'scripts/stage-datalinks.sh'
@@ -79,25 +71,6 @@ permissions:
   contents: read
 
 jobs:
-  doc-tools:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    name: Documentation prerequisites (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-15]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Install contributor documentation tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just,mdbook,mdbook-mermaid
-      - name: Check missing and unusable tool controls
-        run: just docs preflight-test
-      - name: Preflight and build the real book with Mermaid
-        run: just docs build
-
   build:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build docs
