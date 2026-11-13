@@ -39,11 +39,40 @@ def expectations(directory: Path) -> dict:
         }
     if not suites:
         raise LedgerError("no suites")
+    return compact({"schema": "quipu-expected-results/v1", "suites": suites})
+
+
+def compact(document: dict) -> dict:
+    """Factor repeated class/manifest prefixes without changing any case."""
+    suites = {}
+    for name, suite in document["suites"].items():
+        groups = {}
+        for cls, manifest, identifier, status in suite["cases"]:
+            groups.setdefault(cls, {}).setdefault(manifest, {}).setdefault(status, []).append(identifier)
+        suites[name] = {"suite_revision": suite["suite_revision"], "groups": groups}
+    return {"schema": "quipu-expected-results/v2", "suites": suites}
+
+
+def expand(document: dict) -> dict:
+    """Accept legacy author fixtures and losslessly expand the compact contract."""
+    if document.get("schema") != "quipu-expected-results/v2":
+        return document
+    suites = {}
+    for name, suite in document["suites"].items():
+        cases = []
+        for cls, manifests in suite["groups"].items():
+            for manifest, outcomes in manifests.items():
+                for status, identifiers in outcomes.items():
+                    if status not in {"pass", "xfail"} or not isinstance(identifiers, list):
+                        raise LedgerError(f"{name}: malformed compact outcomes")
+                    cases.extend([cls, manifest, identifier, status] for identifier in identifiers)
+        suites[name] = {"suite_revision": suite["suite_revision"], "cases": sorted(cases)}
     return {"schema": "quipu-expected-results/v1", "suites": suites}
 
 
 def check(expected: dict, directory: Path) -> list[str]:
     """Both regressions and unexpected passes require reviewed expectation changes."""
+    expected = expand(expected)
     if expected.get("schema") != "quipu-expected-results/v1" or not isinstance(expected.get("suites"), dict) or not expected["suites"]:
         raise LedgerError("unsupported or empty expected-results document")
     failures = []

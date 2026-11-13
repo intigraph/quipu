@@ -12,6 +12,13 @@ states. An intentional behaviour change updates expectations in its reviewed
 PR. CI never regenerates that file automatically. Review an explicit author
 update with `python3 benchmark/public/expected_results.py --results-dir PATH --write`.
 
+The v2 file groups repeated class and manifest prefixes; each outcome list
+still contains every exact test ID. `prove_expected_compaction.py` independently
+expands it and checks the canonical v1 SHA-256, suite count and case count in
+CI. For the migration, `--legacy OLD.json` additionally checks literal equality
+with the archived v1 file from commit `1d3909ff`. Future intentional expectation
+changes must also review and update the proof anchor; no gate updates it.
+
 Measured results, source revisions, timestamps and timings are retained in the
 `conformance-run-SHA` CI artifact. Release publication and public-page staging
 are a separate follow-up; this CI contract does not change the public page.
