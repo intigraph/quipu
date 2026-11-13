@@ -68,6 +68,21 @@ pub fn registry_hash(store: &Store) -> Result<String> {
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
+/// Return policy and its predecessor receipt from one SQLite read snapshot.
+pub fn registry_receipt(store: &Store) -> Result<serde_json::Value> {
+    let snapshot = store
+        .conn
+        .is_autocommit()
+        .then(|| store.conn.unchecked_transaction())
+        .transpose()?;
+    let value =
+        serde_json::json!({"namespaces":list(store)?, "registry_hash":registry_hash(store)?});
+    if let Some(snapshot) = snapshot {
+        snapshot.commit()?;
+    }
+    Ok(value)
+}
+
 /// No HTTP/MCP or authenticated principal may enter this local-owner lane.
 /// Remove config first; retained policy remains effective until this succeeds.
 pub fn remove(store: &mut Store, request: &RemovalRequest) -> Result<serde_json::Value> {

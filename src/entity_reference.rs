@@ -41,8 +41,7 @@ pub fn tool_namespaces(store: &Store, input: &Value) -> Result<Value> {
             "namespaces supports only action=list".into(),
         ));
     }
-    Ok(json!({"namespaces":entity_namespaces::list(store)?,
-        "registry_hash":entity_namespaces::registry_hash(store)?}))
+    entity_namespaces::registry_receipt(store)
 }
 
 /// Registered identity write / resolution. HTTP uses the existing authenticated
