@@ -247,8 +247,10 @@ fn remove_locked(store: &mut Store, request: &RemovalRequest) -> Result<serde_js
         valid_to: None,
         op: Op::Retract,
     };
+    let datums = [datum];
+    store.enforce_retraction_shapes(&datums, graph, None, None, Some("namespace-owner-remove"))?;
     let tx = store.transact_to_graph(
-        &[datum],
+        &datums,
         &crate::time::now_iso(),
         None,
         Some("namespace-owner-remove"),
