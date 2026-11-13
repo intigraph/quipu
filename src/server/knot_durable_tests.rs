@@ -366,7 +366,7 @@ async fn durable_http_cancellation_after_commit_does_not_fabricate_finished() {
             let (_, proof) = call(
                 reader.clone(),
                 "/knot/status",
-                &status(&input()),
+                status(&input()),
                 false,
                 Some("alice"),
             )
