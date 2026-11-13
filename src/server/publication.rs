@@ -262,7 +262,14 @@ pub(crate) async fn knot(
     headers: axum::http::HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
+    if super::knot_durable::requested(&headers)? {
+        return super::knot_durable::knot(store, headers, input).await;
+    }
     let mut completion = super::knot_completion::begin(&store, &headers, &input)?;
+    let legacy_write_id = headers
+        .get("x-quipu-write-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
     use quipu::write_observation::{Observation, Path, Stage, observe};
     let observation = Observation::new(Path::Knot, crate::request_middleware::request_id());
     let dispatch = observation.stage(Stage::Dispatch);
@@ -276,6 +283,14 @@ pub(crate) async fn knot(
                 let (result, work) = {
                     let waiting = quipu::write_observation::stage(Stage::LockWait);
                     let mut st = store.lock();
+                    if let Some(id) = &legacy_write_id
+                        && st.knot_write_id_consumed(id)?
+                    {
+                        return Err(quipu::Error::InvalidValue(
+                            "write ID already consumed; do not replay".into(),
+                        )
+                        .into());
+                    }
                     waiting.finish(true);
                     let held = quipu::write_observation::stage(Stage::LockHeld);
                     let targets = super::update::writer_targets::json(&input);
