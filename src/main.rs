@@ -410,6 +410,8 @@ fn print_usage() {
         "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
+    qp fluent append <request.json> --server <url>  Authenticated HTTP observations (remote feature)
+    qp fluent current --server <url> --graph <iri> --fluent <name>  HTTP current value (remote feature)
     qp competency lint <pendant>  Validate contract schema and syntax offline
     qp prime [--brief] [--section <name>] [--static] [--json] [--db <path>]  Agent primer + live store summary
     qp install-alias [--bin-dir DIR] [--check]  Add the relative command alias: qp -> quipu
