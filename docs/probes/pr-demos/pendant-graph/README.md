@@ -13,8 +13,7 @@ extends the existing semantic snapshot model; blank-node identity and folding
 retain its documented limits. The diagram and full retained edge list state
 their bounds. Alias proposals and hardware verdicts remain separate.
 
-[Terminal recording](output.log.gz), [timing](timing.log): download, decompress
-`output.log.gz`, then run `scriptreplay --log-out output.log --log-timing timing.log`.
+[Terminal recording](output.log), [timing](timing.log): download both, then run `scriptreplay --log-out output.log --log-timing timing.log`.
 This is a replayable terminal recording, not an embedded video. Reproduce from
 the repository root with a baseline CLI and candidate CLI:
 
