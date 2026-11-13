@@ -242,13 +242,22 @@ fn a_missing_transaction_record_is_not_witness_evidence() {
     let (mut store, input) = fixture(true, true);
     let fact = signature_fact(&store, &input, CANONICAL, T1);
     store.transact(&[fact], T1, None, None).unwrap();
-    // Simulate unreadable/corrupt provenance without altering signature bytes.
+    // Inject corrupt provenance only in this disposable fixture. Re-enable
+    // foreign-key enforcement before the reader checks the orphaned fact.
+    store
+        .conn
+        .pragma_update(None, "foreign_keys", false)
+        .unwrap();
     store
         .conn
         .execute(
             "UPDATE facts SET tx = -999 WHERE e = ?1",
             [store.lookup(VERDICT).unwrap().unwrap()],
         )
+        .unwrap();
+    store
+        .conn
+        .pragma_update(None, "foreign_keys", true)
         .unwrap();
     assert!(tool_verdict_verify(&store, &input).is_err());
 }
