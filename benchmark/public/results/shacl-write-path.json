@@ -5,126 +5,97 @@
  "cases": 98,
  "by_component": {
   "and": {
-   "diverges": 1,
-   "agrees": 3
-  },
-  "class": {
-   "agrees": 13,
-   "diverges": 6
-  },
-  "closed": {
-   "agrees": 3,
-   "diverges": 1
-  },
-  "datatype": {
-   "agrees": 27,
-   "diverges": 1
-  },
-  "disjoint": {
-   "diverges": 1,
-   "agrees": 2
-  },
-  "equals": {
-   "diverges": 1,
-   "agrees": 2
-  },
-  "hasValue": {
-   "diverges": 1,
    "agrees": 4
   },
-  "in": {
-   "diverges": 2,
+  "class": {
+   "agrees": 14,
+   "diverges": 5
+  },
+  "closed": {
+   "agrees": 4
+  },
+  "datatype": {
+   "agrees": 28
+  },
+  "disjoint": {
    "agrees": 3
   },
+  "equals": {
+   "agrees": 3
+  },
+  "hasValue": {
+   "agrees": 5
+  },
+  "in": {
+   "agrees": 4,
+   "diverges": 1
+  },
   "languageIn": {
-   "diverges": 1,
-   "agrees": 2
+   "agrees": 3
   },
   "lessThan": {
-   "diverges": 1,
-   "agrees": 2
+   "agrees": 3
   },
   "lessThanOrEquals": {
-   "diverges": 1,
-   "agrees": 1
+   "agrees": 2
   },
   "maxCount": {
-   "agrees": 11,
-   "diverges": 1,
+   "agrees": 12,
    "write_error": 1
   },
   "maxExclusive": {
-   "diverges": 1,
-   "agrees": 2
+   "agrees": 3
   },
   "maxInclusive": {
-   "diverges": 1,
-   "agrees": 2
+   "agrees": 3
   },
   "maxLength": {
-   "diverges": 1,
-   "agrees": 2
+   "agrees": 3
   },
   "minCount": {
-   "diverges": 1,
-   "agrees": 19
+   "agrees": 20
   },
   "minExclusive": {
-   "diverges": 1,
-   "agrees": 3
-  },
-  "minInclusive": {
-   "diverges": 1,
-   "agrees": 3
-  },
-  "minLength": {
-   "diverges": 1,
-   "agrees": 2
-  },
-  "node": {
-   "diverges": 1,
    "agrees": 4
   },
+  "minInclusive": {
+   "agrees": 4
+  },
+  "minLength": {
+   "agrees": 3
+  },
+  "node": {
+   "agrees": 5
+  },
   "nodeKind": {
-   "agrees": 4,
-   "diverges": 1,
+   "agrees": 5,
    "write_error": 1
   },
   "not": {
-   "diverges": 1,
-   "agrees": 3
-  },
-  "or": {
-   "diverges": 1,
    "agrees": 4
   },
+  "or": {
+   "agrees": 5
+  },
   "pattern": {
-   "agrees": 5,
-   "diverges": 1
+   "agrees": 6
   },
   "property": {
-   "agrees": 51,
-   "diverges": 3,
-   "write_error": 1
+   "agrees": 52,
+   "write_error": 1,
+   "diverges": 2
   },
   "qualifiedValueShape": {
-   "diverges": 1,
-   "agrees": 3
+   "agrees": 4
   },
   "uniqueLang": {
-   "diverges": 1,
-   "agrees": 2
+   "agrees": 3
   },
   "xone": {
-   "diverges": 1,
-   "agrees": 2
+   "agrees": 3
   }
  },
  "owners": {
-  "core/complex/shacl-shacl#shacl-shacl": {
-   "class": "over-refusal-on-split",
-   "item": "aegis-9q3v"
-  },
   "core/path/path-complex-002#path-complex-002": {
    "class": "class-path-unexplained",
    "item": "aegis-kaj"
@@ -155,30 +126,6 @@
   }
  },
  "divergences": [
-  [
-   "core/complex/shacl-shacl#shacl-shacl",
-   "per_subject"
-  ],
-  [
-   "core/complex/shacl-shacl#shacl-shacl",
-   "per_subject_reversed"
-  ],
-  [
-   "core/complex/shacl-shacl#shacl-shacl",
-   "per_triple"
-  ],
-  [
-   "core/complex/shacl-shacl#shacl-shacl",
-   "per_triple_reversed"
-  ],
-  [
-   "core/complex/shacl-shacl#shacl-shacl",
-   "subject_halves"
-  ],
-  [
-   "core/complex/shacl-shacl#shacl-shacl",
-   "subject_halves_reversed"
-  ],
   [
    "core/path/path-complex-002#path-complex-002",
    "per_subject"
@@ -299,5 +246,8 @@
    "subject_halves_reversed",
    "cannot verify: post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an alternative of those as their path; (http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p1 / http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p2) is not one"
   ]
+ ],
+ "atomic_documents": [
+  "core/complex/shacl-shacl#shacl-shacl"
  ]
 }

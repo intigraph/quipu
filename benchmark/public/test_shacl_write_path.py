@@ -222,5 +222,61 @@ class ModeInventoryTests(unittest.TestCase):
         self.assertIn("unexpected ['mystery_split']", failures[0])
 
 
+class AtomicDocumentTests(unittest.TestCase):
+    def test_atomic_contract_changes_must_be_recorded_in_the_ledger(self):
+        case = next(iter(MODULE.ATOMIC_DOCUMENT_CASES))
+        atomic = row(case)
+        atomic["admission"] = "atomic_document"
+        self.assertIn(f"NEW atomic-document contract: {case}", MODULE.gate(suite(atomic), {}))
+        self.assertEqual(MODULE.gate(suite(atomic), {"atomic_documents": [case]}), [])
+        self.assertIn(f"STALE atomic-document contract: {case}",
+                      MODULE.gate(suite(), {"atomic_documents": [case]}))
+
+    def test_together_only_document_uses_actual_atomic_writes(self):
+        out = adapter_out(True, [SHACL_REJECTION])
+        for mode in out["modes"].values():
+            mode["atomic"] = {"accepted": True, "count": out["triples"]}
+        result = MODULE.classify(out, True, atomic_document=True)
+        self.assertEqual(result["status"], "agrees")
+        self.assertFalse(result["independent_modes"]["single"])
+        self.assertTrue(all(result["modes"].values()))
+        self.assertEqual(result["admission"], "atomic_document")
+
+    def test_an_empty_or_short_atomic_success_is_not_proof(self):
+        out = adapter_out(True, [SHACL_REJECTION])
+        for mode in out["modes"].values():
+            mode["atomic"] = {"accepted": True, "count": 0}
+        self.assertEqual(MODULE.classify(out, True, atomic_document=True)["status"], "mode_inventory")
+
+    def test_atomic_success_cannot_hide_an_independent_store_error(self):
+        out = adapter_out(True, [LOCKED])
+        for mode in out["modes"].values():
+            mode["atomic"] = {"accepted": True, "count": out["triples"]}
+        self.assertEqual(MODULE.classify(out, True, atomic_document=True)["status"], "write_error")
+
+    def test_missing_atomic_proof_cannot_reclassify_a_refusal(self):
+        result = MODULE.classify(adapter_out(True, [SHACL_REJECTION]), True,
+                                 atomic_document=True)
+        self.assertEqual(result["status"], "mode_inventory")
+
+    def test_an_atomic_failure_is_still_a_divergence(self):
+        out = adapter_out(True, [SHACL_REJECTION])
+        for mode in out["modes"].values():
+            mode["atomic"] = dict(SHACL_REJECTION)
+        self.assertEqual(MODULE.classify(out, True, atomic_document=True)["status"], "diverges")
+
+    def test_an_atomic_store_error_is_unknown(self):
+        out = adapter_out(True, [SHACL_REJECTION])
+        for mode in out["modes"].values():
+            mode["atomic"] = dict(LOCKED)
+        self.assertEqual(MODULE.classify(out, True, atomic_document=True)["status"], "write_error")
+
+    def test_other_cases_keep_independent_write_verdicts(self):
+        out = adapter_out(True, [SHACL_REJECTION])
+        for mode in out["modes"].values():
+            mode["atomic"] = {"accepted": True, "count": out["triples"]}
+        self.assertEqual(MODULE.classify(out, True)["status"], "diverges")
+
+
 if __name__ == "__main__":
     unittest.main()

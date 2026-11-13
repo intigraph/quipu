@@ -1526,6 +1526,71 @@ fn overlay_writes_do_not_touch_root() {
 }
 
 #[test]
+fn mapped_provenance_seeks_rml_sources_by_index_not_a_transaction_scan() {
+    // aegis-9pw: `LIKE 'rml:%'` is case-insensitive, so SQLite could not use
+    // the BINARY idx_tx_source and scanned every transaction once per graph;
+    // GET /graphs (170 graphs, 1.16M transactions) took ~6.75s on production.
+    // Pin the PLAN of the exact statement that runs.
+    let store = Store::open_in_memory().unwrap();
+    let details: Vec<String> = store
+        .conn
+        .prepare(&format!(
+            "EXPLAIN QUERY PLAN {}",
+            super::registry_list::MAPPED_PROVENANCE_SQL
+        ))
+        .unwrap()
+        .query_map(params![1_i64], |row| row.get(3))
+        .unwrap()
+        .map(|row| row.unwrap())
+        .collect();
+    assert!(
+        details.iter().any(|d| d.contains("idx_tx_source")),
+        "mapped provenance must seek transactions by source, plan={details:?}"
+    );
+    assert!(
+        !details.iter().any(|d| d.starts_with("SCAN t")),
+        "mapped provenance must not scan every transaction, plan={details:?}"
+    );
+}
+
+#[test]
+fn mapped_provenance_ignores_a_later_non_lowercase_rml_source() {
+    // The range keeps exactly the sources Materialization::parse accepts: a
+    // later "RML:" (wrong case) write neither shadows nor replaces the stamp.
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let g = store.graph_create("http://ex/graph/mapped-case").unwrap();
+    let e = store.intern("http://ex/thing").unwrap();
+    let a = store.intern("http://ex/label").unwrap();
+    let d = |v: &str| Datum {
+        entity: e,
+        attribute: a,
+        value: Value::Str(v.into()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    let good =
+        "rml:https://ex/mapping/m1|mapping=sha256:aa|source=https://ex/truth/t1|verified=sha256:bb";
+    let wrong_case =
+        "RML:https://ex/mapping/m2|mapping=sha256:cc|source=https://ex/truth/t2|verified=sha256:dd";
+    store
+        .transact_to_graph(&[d("v1")], "2026-01-01T00:00:00Z", None, Some(good), g)
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[d("v2")],
+            "2026-01-02T00:00:00Z",
+            None,
+            Some(wrong_case),
+            g,
+        )
+        .unwrap();
+    let m = store.mapped_provenance(g).unwrap().expect("stamp present");
+    assert_eq!(m.mapping_iri, "https://ex/mapping/m1");
+}
+
+#[test]
 fn a_mapped_graph_serves_its_materialization_stamp() {
     // quipu-212: the last RML materialization's provenance is parsed back
     // from the transaction record — no second store to drift — and a graph
@@ -3310,4 +3375,13 @@ fn current_triple_counts_match_the_materialised_query() {
     assert_eq!(streamed, (4, 2, 3), "facts, entities, predicates");
     let (_, physical, _) = store.graph_counts().unwrap();
     assert_eq!(physical, 6, "two live rows the dedup must remove");
+    let metrics = crate::metrics::metrics()
+        .render_with_graph_counts(Some(store.graph_counts().unwrap()), None);
+    assert!(metrics.contains("quipu_root_live_assertion_rows 6\n"));
+    assert!(metrics.contains("quipu_graph_facts 6\n"));
+    assert!(metrics.contains("repeated assertions count separately"));
+    assert!(
+        streamed.0 < physical,
+        "duplicates discriminate the two populations"
+    );
 }

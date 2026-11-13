@@ -518,6 +518,10 @@ jobs:
        needs.release-plz.outputs.releases_created == 'true')
     permissions:
       contents: write
+    # Every leg resolves the same tag from the same commit, so the exported value
+    # is the exact tag this run built, not the newest release (notify-tap).
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -783,6 +787,27 @@ jobs:
   # It verifies against the RELEASED x86_64 archive, downloaded and checksummed,
   # not a fresh build, because the provenance receipt binds the binary's sha256.
   # A re-run of this job therefore needs no rebuild and cannot clobber an asset.
+  conformance-report:
+    name: Dispatch release conformance report
+    needs: [release-plz, artifacts]
+    if: >-
+      always() && needs.artifacts.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' ||
+       needs.release-plz.outputs.releases_created == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Measure the published tag through the explicit dispatch lane
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.artifacts.outputs.tag }}
+        run: |
+          test -n "$TAG"
+          gh workflow run conformance.yml --ref main -f "release_tag=$TAG"
+
   repository-share:
     name: Trusted repository share
     needs: [release-plz, artifacts]
@@ -1041,3 +1066,70 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::error title=crates.io NOT published::the release was cut but crates.io was not published (wasm=${WASM}, binaries=${ARTIFACTS}, crates=${CRATES}). See docs/RELEASING.md."
           exit 1
+
+  # Tell scbrown/homebrew-tap that a release was published, so it regenerates
+  # formulas now instead of at its next hourly reconciliation (aegis-em2). The
+  # payload is informational: the tap still reads each repo's latest stable
+  # release. Fails closed without failing the release run: no token, a release
+  # that is missing, draft or prerelease, or any reply other than 204 means no
+  # notification. Inactive until HOMEBREW_TAP_DISPATCH_TOKEN is set (aegis-7q7b).
+  notify-tap:
+    name: Notify Homebrew tap
+    # artifacts is the whole native matrix, both Mac targets included; release-plz
+    # creates the release before those archives exist, so it is not the gate.
+    needs: [release-plz, artifacts]
+    if: >-
+      always() &&
+      github.event_name != 'pull_request' &&
+      needs.artifacts.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' ||
+       needs.release-plz.outputs.releases_created == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      REPO: ${{ github.repository }}
+      TAG: ${{ needs.artifacts.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
+    steps:
+      - name: Dispatch stack-release to scbrown/homebrew-tap
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::warning title=Homebrew tap not notified::HOMEBREW_TAP_DISPATCH_TOKEN is not set (aegis-7q7b). The tap's hourly schedule will reconcile."
+            exit 0
+          fi
+          if [[ ! "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+             [[ ! "$TAG" =~ ^([A-Za-z0-9]+-)*v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::warning title=Homebrew tap not notified::the release repository or tag is not well formed."
+            exit 0
+          fi
+          # Only a published, non-draft, non-prerelease release is announced.
+          if ! state="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '"\(.draft) \(.prerelease)"')"; then
+            echo "::warning title=Homebrew tap not notified::could not read the release for $TAG."
+            exit 0
+          fi
+          if [ "$state" != "false false" ]; then
+            echo "Release $TAG is not a published stable release (draft prerelease: $state); not notifying."
+            exit 0
+          fi
+          body="$(jq -nc --arg repo "$REPO" --arg tag "$TAG" \
+            '{event_type: "stack-release", client_payload: {repo: $repo, tag: $tag}}')"
+          # Fixed URL, no redirects followed (no -L). The token reaches curl on
+          # stdin (--config -), never on a command line or in the log.
+          status="$(printf 'header = "Authorization: Bearer %s"\n' "$TAP_TOKEN" |
+            curl --config - --silent --show-error --fail --proto '=https' --max-time 30 \
+              --output /dev/null --write-out '%{http_code}' \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --data "$body" \
+              https://api.github.com/repos/scbrown/homebrew-tap/dispatches)" || true
+          if [ "$status" != 204 ]; then
+            echo "::warning title=Homebrew tap not notified::dispatch answered HTTP ${status:-none}, not 204. The tap's hourly schedule will reconcile."
+            exit 0
+          fi
+          echo "Notified scbrown/homebrew-tap: $REPO $TAG"

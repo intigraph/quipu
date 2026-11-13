@@ -23,8 +23,8 @@ conflict from the place the data model already defines it: the schema.
 \paragraph{This paper.} We describe an operator with two halves. Triples are
 canonicalized and merged as sets, so serialization order cannot manufacture a
 conflict. A SHACL shapes graph then decides which slots the set algebra is
-allowed to settle on its own: where a shape declares \texttt{sh:maxCount 1} and
-the two sides carry different values, the operator refuses and records a
+allowed to settle on its own: where a shape bounds a slot's cardinality and
+the two sides' changes cannot both stand within that bound, the operator refuses and records a
 decision; everywhere else, it unions. Because the shapes are already present ---
 they are what validates writes into the store --- the merge policy is not a
 second configuration to keep in step with the ontology. It \emph{is} the

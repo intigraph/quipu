@@ -147,28 +147,24 @@ impl<'a> Blanks<'a> {
             return "[...]".into();
         }
         path.push(id.to_string());
-        let mut parts: Vec<String> = self
-            .out
-            .get(id)
-            .map(|edges| {
-                let preds = names.preds(edges.iter().map(|(p, _)| *p));
-                edges
-                    .iter()
-                    .map(|(p, o)| {
-                        let value = match o {
-                            Term::BlankNode(b) => self.inline(b.as_str(), names, depth + 1, path),
-                            Term::NamedNode(n) => names.iri(n.as_str()),
-                            Term::Literal(l) => literal(l),
-                            // RDF 1.2 triple terms: oxrdf's rdf-12 arrives with the
-                            // shacl dependency tree (same gate as `src/rdf.rs`).
-                            #[cfg(feature = "shacl")]
-                            Term::Triple(t) => t.to_string(),
-                        };
-                        format!("{} {value}", preds[p])
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut parts: Vec<String> = self.out.get(id).map_or_else(Default::default, |edges| {
+            let preds = names.preds(edges.iter().map(|(p, _)| *p));
+            edges
+                .iter()
+                .map(|(p, o)| {
+                    let value = match o {
+                        Term::BlankNode(b) => self.inline(b.as_str(), names, depth + 1, path),
+                        Term::NamedNode(n) => names.iri(n.as_str()),
+                        Term::Literal(l) => literal(l),
+                        // RDF 1.2 triple terms: oxrdf's rdf-12 arrives with the
+                        // shacl dependency tree (same gate as `src/rdf.rs`).
+                        #[cfg(feature = "shacl")]
+                        Term::Triple(t) => t.to_string(),
+                    };
+                    format!("{} {value}", preds[p])
+                })
+                .collect()
+        });
         path.pop();
         parts.sort_unstable();
         parts.dedup();

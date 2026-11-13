@@ -30,6 +30,15 @@ def main():
         if set(ours) == {"0"}:
             ours = result
         theirs = result
+    elif event_name == "merge_group":
+        # A merge-queue group commit sits on the queue's base; check exactly that
+        # range, like a push. HEAD must be the group the event names.
+        event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+        group = event["merge_group"]
+        if group["head_sha"] != result:
+            raise SystemExit("refusing: checkout must be the merge group's head commit")
+        ours = group["base_sha"]
+        theirs = result
     elif event_name in ("schedule", "workflow_dispatch"):
         ours = theirs = result
     else:

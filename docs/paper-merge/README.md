@@ -52,7 +52,7 @@ Stiwi's to do, and is marked so.
       RDF-Graph that supports SPARQL Update 1.1 operations." The remembered
       author list was exactly right, which is why the entry looked sound. The
       key is unchanged; the entry's `note` carries the name and the 2013 IJMSO
-      extended version. **All six entries now carry a resolved identifier.**
+      extended version. **All six entries then present carried a resolved identifier; the bibliography has since grown to ten, all resolved (rechecked 2026-11-11).**
 - [x] ~~Confirm the Context Merge description in §8 against Quit Store itself.~~
       **Checked 2026-08-30 against the paper's own §8.4**, read from the source
       PDF rather than from the abstract. Every claim held: Quit is "Quads in
@@ -108,7 +108,7 @@ Constrained by the novelty ruling, and the constraint is not cosmetic:
 ## October research update
 
 [ARM-E-F-RESULTS.md](ARM-E-F-RESULTS.md) is the generated schema-evolution
-results note. The paper builds to 15 pages and includes the datatype conflict
+results note. The paper builds to 17 pages and includes the datatype conflict
 detector miss caught by
 post-merge validation. Regenerate it with `just bench merge-note`; its counts
 come from the published shape fixtures and results. The submission abstract

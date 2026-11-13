@@ -94,7 +94,10 @@ Read whole transaction change pages. graph scopes an exact graph; use next_tx fo
 | `capture` | string: `new_values`, `old_and_new_values`, `new_row` | no |  |
 | `graph` | string | no |  |
 | `limit` | integer | no |  |
+| `member` | string | no |  |
+| `predicate` | string | no |  |
 | `since` | integer | no |  |
+| `subject` | string | no |  |
 
 ## `quipu_context`
 
@@ -411,6 +414,8 @@ Stage a portable share with hash, vocabulary and attestation gates. Copy member 
 | `actor` | string | no |  |
 | `alignments_turtle` | string | no |  |
 | `attestation` | object | no |  |
+| `commands_turtle` | string | no |  |
+| `competency_toml` | string | no |  |
 | `export_ntriples` | string | yes |  |
 | `manifest` | object | yes |  |
 | `queries_turtle` | string | no |  |
@@ -932,6 +937,7 @@ Produce a bounded portable share payload, including canonical manifest and membe
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `alignments_turtle` | string | no |  |
+| `competency_toml` | string | no |  |
 | `max_bytes` | integer | no |  |
 | `no_shapes` | boolean | no |  |
 | `parent_share` | string | no |  |

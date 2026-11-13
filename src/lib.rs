@@ -135,10 +135,12 @@ pub mod provider;
 pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
+pub mod rdf_triple;
 pub mod term_vocabulary;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
 /// Oversized-transaction parts shared by the change stream and the as-of share.
 pub mod feed_parts;
+pub mod fluent;
 pub mod follow;
 #[cfg(feature = "remote")]
 pub mod follow_http;
@@ -216,6 +218,8 @@ pub mod share_diff;
 pub mod promotion_control;
 pub mod shape_mapping;
 pub mod share_alignments;
+/// Opaque fluent proof transport, separate from native admission authority.
+pub mod share_fluent;
 pub mod share_import;
 pub(crate) mod share_import_resolve;
 #[cfg(not(target_arch = "wasm32"))]
@@ -384,3 +388,6 @@ pub mod mcp_transport;
 /// Bounded search-seeded SPARQL SELECT queries.
 pub mod search_query;
 pub use search_query::tool_search_query;
+
+#[cfg(test)]
+mod share_competency_tests;

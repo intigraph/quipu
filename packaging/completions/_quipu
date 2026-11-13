@@ -765,6 +765,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--construct=[SPARQL CONSTRUCT query selecting the share]:VALUE:_default' \
 '*--shapes=[Shapes used for validation or packaging]:VALUE:_default' \
 '*--queries=[Stored queries to include]:VALUE:_default' \
+'*--competency=[Verbatim competency.toml to compile and seal with the share]:VALUE:_default' \
 '*--alignments=[Reviewed SSSOM/RDF alignment file to carry]:VALUE:_default' \
 '*--parent-share=[Parent share for a delta export]:VALUE:_default' \
 '*--since=[Starting share or transaction for incremental output]:VALUE:_default' \
@@ -1905,7 +1906,23 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:quipu-graph-command-$line[1]:"
         case $line[1] in
-            (create)
+            (writer-instance)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-iri:_default' \
+&& ret=0
+;;
+(writer-grant)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-grant-json:_default' \
+&& ret=0
+;;
+(create)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
@@ -2743,6 +2760,8 @@ _quipu__subcmd__git-mergetool_commands() {
 (( $+functions[_quipu__subcmd__graph_commands] )) ||
 _quipu__subcmd__graph_commands() {
     local commands; commands=(
+'writer-instance:Read a local committed graph instance pin for owner enrollment' \
+'writer-grant:Apply an owner-local scoped writer grant revision or revocation' \
 'create:Register a committed named graph' \
 'label:Declare lattice labels on a registered graph' \
 'list:List registered named graphs' \
@@ -2799,6 +2818,16 @@ _quipu__subcmd__graph__subcmd__overlay-write_commands() {
 _quipu__subcmd__graph__subcmd__thaw_commands() {
     local commands; commands=()
     _describe -t commands 'quipu graph thaw commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__graph__subcmd__writer-grant_commands] )) ||
+_quipu__subcmd__graph__subcmd__writer-grant_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu graph writer-grant commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__graph__subcmd__writer-instance_commands] )) ||
+_quipu__subcmd__graph__subcmd__writer-instance_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu graph writer-instance commands' commands "$@"
 }
 (( $+functions[_quipu__subcmd__hook_commands] )) ||
 _quipu__subcmd__hook_commands() {

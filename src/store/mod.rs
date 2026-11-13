@@ -17,7 +17,14 @@ pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
 mod ownership_fence;
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_latch;
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_scope;
 // Dormant enrollment inventory: native identity fields, no startup wiring.
+mod ownership_admission;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ownership_admission_fixture;
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_inventory;
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
@@ -53,9 +60,13 @@ pub mod demotions;
 mod demotions_tests;
 pub mod events;
 mod events_retention;
+pub mod fluent_guard;
+mod fluent_persistence;
+#[cfg(all(test, feature = "shacl"))]
+mod fluent_persistence_tests;
 pub mod forks;
 mod forks_merge;
-pub mod freeze;
+mod freeze;
 mod freeze_io;
 mod gate;
 mod graph_events;

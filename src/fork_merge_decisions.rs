@@ -542,17 +542,13 @@ pub fn apply(
         }),
         #[cfg(feature = "shacl")]
         ForkPromotion::Refused(feedback) => {
-            let first = feedback
-                .results
-                .first()
-                .map(|i| {
-                    format!(
-                        ": {} on {}",
-                        i.message.as_deref().unwrap_or("constraint violated"),
-                        i.focus_node
-                    )
-                })
-                .unwrap_or_default();
+            let first = feedback.results.first().map_or_else(Default::default, |i| {
+                format!(
+                    ": {} on {}",
+                    i.message.as_deref().unwrap_or("constraint violated"),
+                    i.focus_node
+                )
+            });
             Err(Error::InvalidValue(format!(
                 "promotion REFUSED by SHACL with these decisions: {} violation(s){first}; nothing was written",
                 feedback.violations

@@ -72,6 +72,7 @@ pub(crate) fn spawn_git(e: &std::io::Error) -> Error {
 impl Pack {
     pub(crate) fn verify(&self) -> Result<()> {
         let m = &self.manifest;
+        crate::competency::carriage::refuse_unsupported(m, "pendant Git merge")?;
         if m.schema != "https://github.com/scbrown/quipu/share-manifest/v1"
             || m.files.graph != "export.nt"
             || m.files.shapes != "shapes.ttl"

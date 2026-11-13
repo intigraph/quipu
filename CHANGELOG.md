@@ -47,6 +47,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- *(ownership)* Require opaque startup admission for ownership pins ([54264f7](https://github.com/intigraph/quipu/commit/54264f70d3cfdc29ac1f39cee532be1ee11dc8e0)).
 - Invoke Tambo and update current stack names (#1036)([6d87ed0](https://github.com/scbrown/quipu/commit/6d87ed07db91b0d412da6239ff7432fb457f071c))
 - *(share)* Admit measured repository archives within 96 MiB (#1045)([a1776af](https://github.com/scbrown/quipu/commit/a1776af11755906d2a341a665709b4003d7a18f0))
 - *(security)* Recognize squashed history source witness (#1055)([a302d90](https://github.com/scbrown/quipu/commit/a302d90d5bfc5feaa666adc71005201e7bbf7499))

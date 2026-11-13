@@ -1,0 +1,321 @@
+{
+  "arms": [
+    {
+      "arm": "git-turtle-reserialized",
+      "available": true,
+      "decisions_per_1k_edits": 1875.0,
+      "f1": 0.013106159895150724,
+      "false_negatives": 8,
+      "false_positives": 745,
+      "human_decisions": 750,
+      "merge_us": 40470,
+      "precision": 0.006666666666666667,
+      "recall": 0.38461538461538464,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 1
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 1
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 3
+        }
+      },
+      "shacl_conforms": true,
+      "shacl_violations": 0,
+      "triples_lost": 290,
+      "triples_spurious": 75,
+      "true_positives": 5,
+      "unparseable_lines": 119,
+      "validate_us": 13806
+    },
+    {
+      "arm": "git-turtle-stable",
+      "available": true,
+      "decisions_per_1k_edits": 107.5,
+      "f1": 0.17857142857142855,
+      "false_negatives": 8,
+      "false_positives": 38,
+      "human_decisions": 43,
+      "merge_us": 33400,
+      "precision": 0.11627906976744186,
+      "recall": 0.38461538461538464,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 0
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 2
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 3
+        }
+      },
+      "shacl_conforms": false,
+      "shacl_violations": 1,
+      "triples_lost": 56,
+      "triples_spurious": 14,
+      "true_positives": 5,
+      "unparseable_lines": 6,
+      "validate_us": 13378
+    },
+    {
+      "arm": "git-canonical",
+      "available": true,
+      "decisions_per_1k_edits": 320.0,
+      "f1": 0.07092198581560284,
+      "false_negatives": 8,
+      "false_positives": 123,
+      "human_decisions": 128,
+      "merge_us": 32158,
+      "precision": 0.0390625,
+      "recall": 0.38461538461538464,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 0
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 2
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 3
+        }
+      },
+      "shacl_conforms": false,
+      "shacl_violations": 1,
+      "triples_lost": 119,
+      "triples_spurious": 20,
+      "true_positives": 5,
+      "unparseable_lines": 0,
+      "validate_us": 12650
+    },
+    {
+      "arm": "union",
+      "available": true,
+      "decisions_per_1k_edits": 0.0,
+      "f1": null,
+      "false_negatives": 13,
+      "false_positives": 0,
+      "human_decisions": 0,
+      "merge_us": 614,
+      "precision": null,
+      "recall": 0.0,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 0
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 0
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 0
+        }
+      },
+      "shacl_conforms": false,
+      "shacl_violations": 70,
+      "triples_lost": 5,
+      "triples_spurious": 128,
+      "true_positives": 0,
+      "unparseable_lines": 0,
+      "validate_us": 13744
+    },
+    {
+      "arm": "lww-theirs",
+      "available": true,
+      "decisions_per_1k_edits": 0.0,
+      "f1": null,
+      "false_negatives": 13,
+      "false_positives": 0,
+      "human_decisions": 0,
+      "merge_us": 5168,
+      "precision": null,
+      "recall": 0.0,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 0
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 0
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 0
+        }
+      },
+      "shacl_conforms": false,
+      "shacl_violations": 1,
+      "triples_lost": 8,
+      "triples_spurious": 8,
+      "true_positives": 0,
+      "unparseable_lines": 0,
+      "validate_us": 13035
+    },
+    {
+      "arm": "triple-3way",
+      "available": true,
+      "decisions_per_1k_edits": 0.0,
+      "f1": null,
+      "false_negatives": 13,
+      "false_positives": 0,
+      "human_decisions": 0,
+      "merge_us": 5157,
+      "precision": null,
+      "recall": 0.0,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 0
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 0
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 0
+        }
+      },
+      "shacl_conforms": false,
+      "shacl_violations": 4,
+      "triples_lost": 5,
+      "triples_spurious": 11,
+      "true_positives": 0,
+      "unparseable_lines": 0,
+      "validate_us": 13280
+    },
+    {
+      "arm": "context-merge",
+      "available": true,
+      "decisions_per_1k_edits": 422.5,
+      "f1": 0.054945054945054944,
+      "false_negatives": 8,
+      "false_positives": 164,
+      "human_decisions": 169,
+      "merge_us": 5561,
+      "precision": 0.029585798816568046,
+      "recall": 0.38461538461538464,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 0
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 2
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 3
+        }
+      },
+      "shacl_conforms": false,
+      "shacl_violations": 1,
+      "triples_lost": 141,
+      "triples_spurious": 71,
+      "true_positives": 5,
+      "unparseable_lines": 0,
+      "validate_us": 12863
+    },
+    {
+      "arm": "shape-aware",
+      "available": true,
+      "decisions_per_1k_edits": 15.0,
+      "f1": 0.631578947368421,
+      "false_negatives": 7,
+      "false_positives": 0,
+      "human_decisions": 6,
+      "merge_us": 5264,
+      "precision": 1.0,
+      "recall": 0.46153846153846156,
+      "recall_by_class": {
+        "alias-mint": {
+          "declared": 7,
+          "detected": 0
+        },
+        "cardinality-overflow": {
+          "declared": 1,
+          "detected": 1
+        },
+        "delete-modify": {
+          "declared": 2,
+          "detected": 2
+        },
+        "functional-divergence": {
+          "declared": 3,
+          "detected": 3
+        }
+      },
+      "shacl_conforms": true,
+      "shacl_violations": 0,
+      "triples_lost": 0,
+      "triples_spurious": 0,
+      "true_positives": 6,
+      "unparseable_lines": 0,
+      "validate_us": 13127
+    }
+  ],
+  "graphs": {
+    "base_triples": 1910,
+    "edits_applied": 400,
+    "ours_triples": 2090,
+    "theirs_triples": 2068
+  },
+  "oracle": {
+    "by_class": {
+      "alias-mint": 7,
+      "cardinality-overflow": 1,
+      "delete-modify": 2,
+      "functional-divergence": 3
+    },
+    "conflicts": 13
+  },
+  "params": {
+    "edits_per_side": 200,
+    "entities": 200,
+    "overlap": 0.1,
+    "seed": 1
+  }
+}

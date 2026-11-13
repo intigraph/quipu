@@ -13,22 +13,31 @@ impl Store {
     /// cannot become a pin; missing schema/read errors never become empty data.
     pub fn current_shape_pins(&self, kind: RegistryKind, name: &str) -> Result<Vec<ShapePin>> {
         let mut statement = self.conn.prepare(&format!(
-            "SELECT valid_from,digest FROM {} WHERE name=?1 AND valid_to IS NULL ORDER BY valid_from",
+            "SELECT valid_from,digest,digest_backfill_error FROM {} WHERE name=?1 AND valid_to IS NULL ORDER BY valid_from",
             kind.table()
         ))?;
         let rows = statement
             .query_map(params![name], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         rows.into_iter()
-            .map(|(valid_from, digest)| {
+            .map(|(valid_from, digest, error)| {
                 Ok(ShapePin {
                     registry: kind,
                     name: name.into(),
                     valid_from,
-                    digest: digest
-                        .ok_or_else(|| invalid("registry content has no verified digest"))?,
+                    digest: digest.ok_or_else(|| {
+                        invalid(if error.is_some() {
+                            "registry content has no verified digest: backfill failed"
+                        } else {
+                            "registry content has no verified digest: backfill pending"
+                        })
+                    })?,
                 })
             })
             .collect()

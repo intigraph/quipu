@@ -163,7 +163,7 @@ impl ReconcileFile {
         let labels = std::fs::read_to_string(parent.join("export.nt"))
             .ok()
             .and_then(|nt| crate::share_merge::parse_graph(&nt, "export.nt").ok())
-            .map(|g| {
+            .map_or_else(Default::default, |g| {
                 // Alias IRIs need labels too; carry them as pseudo-records.
                 let pairs: Vec<DecisionRecord> = decisions
                     .aliases
@@ -180,8 +180,7 @@ impl ReconcileFile {
                 let records: Vec<&DecisionRecord> =
                     decisions.conflicts.iter().chain(&pairs).collect();
                 crate::share_merge_decisions_view::labels(&records, &[&g])
-            })
-            .unwrap_or_default();
+            });
         Ok(Self::Git {
             decisions,
             dir: parent.to_string_lossy().into_owned(),

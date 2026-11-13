@@ -94,7 +94,7 @@ fn digest_migration_preserves_history_and_marks_legacy_unknown() {
     }
     migrate_registry_digests(&conn).unwrap();
     migrate_registry_digests(&conn).unwrap();
-    let x: (String, String, i64, String) = conn
+    let x: (String, String, i64, Option<String>) = conn
         .query_row(
             "SELECT valid_from,valid_to,tx,digest FROM shapes WHERE name='one'",
             [],
@@ -102,9 +102,9 @@ fn digest_migration_preserves_history_and_marks_legacy_unknown() {
         )
         .unwrap();
     assert_eq!((x.0.as_str(), x.1.as_str(), x.2), ("before", "after", 7));
-    assert_eq!(
-        x.3,
-        canonical_shape_digest("<urn:s> <urn:p> <urn:o> .").unwrap()
+    assert!(
+        x.3.is_none(),
+        "schema migration must not canonicalize history"
     );
     let unknown: Option<String> = conn
         .query_row("SELECT digest FROM shapes WHERE name='legacy'", [], |r| {

@@ -242,6 +242,7 @@ pub fn build_delta_with_limit(
     // The full result is needed for canonical identity and comparison, but
     // it is not the transported delta. Cap the delta files after diffing.
     let result = build_share_payload(store, &opts)?;
+    crate::competency::carriage::refuse_unsupported(&result.manifest, "delta share")?;
     let header = crate::changeset::Header {
         target_tx: Some(result.manifest.tx_anchor),
         base_share: Some(parent_share_id.to_string()),
@@ -374,6 +375,7 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
         .map_err(|e| Error::InvalidValue(format!("delta manifest read: {e}")))?;
     let manifest: DeltaManifest = serde_json::from_slice(&bytes)
         .map_err(|e| Error::InvalidValue(format!("delta manifest parse: {e}")))?;
+    crate::competency::carriage::refuse_unsupported(&manifest.result, "delta materialization")?;
     if manifest.schema != SCHEMA
         || manifest.parent_share != parent.manifest.share_id
         || manifest.parent_graph_hash != parent.manifest.graph_hash
@@ -439,6 +441,8 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
         // The fixed member is read whether or not it is declared, so a present but
         // undeclared file refuses instead of being dropped. `verify_member` then
         // checks it against `result.alignments_hash`.
+        competency_toml: None,
+        commands_turtle: None,
         alignments_turtle: {
             let physical = crate::share_alignments::read_directory(root)?;
             match (manifest.files.alignments.as_deref(), physical) {

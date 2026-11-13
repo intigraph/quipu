@@ -617,6 +617,8 @@ jobs:
           tool: git-cliff
       - name: Prove the changelog guard, pre-cut gate and freshness check
         run: ./scripts/test-verify-changelog.sh
+      - name: Prove changelog-check scope (release-plz PRs only; still fails a bad one)
+        run: python3 scripts/test_changelog_check_scope.py
       - name: Check current release-window coverage
         run: python3 scripts/check-release-window.py
 
@@ -897,10 +899,14 @@ jobs:
           path: /tmp/shacl-write-path.json
           if-no-files-found: warn
 
+  conformance:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    uses: ./.github/workflows/conformance.yml
+
   release-correctness:
     name: Release correctness
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
-    needs: [clippy, test, build, check, shacl-write-path, generated-docs]
+    needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass

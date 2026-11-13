@@ -186,8 +186,7 @@ fn first_cycle(edges: &BTreeMap<String, BTreeSet<String>>) -> Option<Vec<String>
         let successors = |n: &str| -> Vec<&str> {
             edges
                 .get(n)
-                .map(|s| s.iter().map(String::as_str).collect())
-                .unwrap_or_default()
+                .map_or_else(Default::default, |s| s.iter().map(String::as_str).collect())
         };
         mark.insert(root, Mark::Open);
         stack.push((root, successors(root)));

@@ -356,3 +356,123 @@ fn an_unattached_store_is_indistinguishable() {
     assert_eq!(s.lookup_all("urn:a:b").unwrap(), vec![id]);
     assert_eq!(s.canonical_id(id).unwrap(), id);
 }
+
+#[test]
+fn post_open_dictionary_growth_joins_new_shared_iris() {
+    let scratch = Scratch::new("live-growth");
+    let (mut store, _, _, _) = adversarial(&scratch);
+    let query = "SELECT ?s WHERE { ?s <urn:p:local> ?local . \
+        GRAPH <urn:layer:graph> { ?s <urn:p:layer> ?layer } }";
+    assert_eq!(
+        select_rows(&store, query).len(),
+        1,
+        "startup positive control"
+    );
+    let mut layer = Store::open(&scratch.path("layer.db").to_string_lossy()).unwrap();
+    let local = store.intern("urn:shared:late").unwrap();
+    let remote = layer.intern("urn:shared:late").unwrap();
+    assert_ne!(local, remote, "same IRI must have different file-local IDs");
+    let local_attr = store.lookup("urn:p:local").unwrap().unwrap();
+    let layer_attr = layer.lookup("urn:p:layer").unwrap().unwrap();
+    let graph = layer.lookup("urn:layer:graph").unwrap().unwrap();
+    store
+        .transact(
+            &[fact(local, local_attr, Value::Str("late local".into()))],
+            T0,
+            None,
+            None,
+        )
+        .unwrap();
+    layer
+        .transact_to_graph(
+            &[fact(remote, layer_attr, Value::Str("late layer".into()))],
+            T0,
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+    // Both real writes are visible separately; the oracle requires the join,
+    // rather than treating a stale matching prefix as complete parity.
+    assert_eq!(
+        select_rows(&store, "SELECT ?s WHERE { ?s <urn:p:local> ?v }").len(),
+        3
+    );
+    assert_eq!(
+        select_rows(
+            &layer,
+            "SELECT ?s WHERE { GRAPH <urn:layer:graph> { ?s <urn:p:layer> ?v } }"
+        )
+        .len(),
+        4
+    );
+    assert_eq!(
+        select_rows(&store, query).len(),
+        2,
+        "late shared IRI disappeared at the composition seam"
+    );
+    let distinct = select_rows(
+        &store,
+        "SELECT DISTINCT ?s WHERE {         { ?s <urn:p:local> ?v } UNION { GRAPH <urn:layer:graph> { ?s <urn:p:layer> ?v } } }",
+    );
+    assert_eq!(
+        distinct.len(),
+        4,
+        "new shared IRI must collapse under DISTINCT, not only join"
+    );
+    assert_eq!(
+        store.canonical_id(remote).unwrap(),
+        local,
+        "new alias must canonicalize at the current read cut"
+    );
+    let reference = store.intern("urn:p:late-reference").unwrap();
+    store
+        .transact(&[fact(local, reference, Value::Ref(local))], T0, None, None)
+        .unwrap();
+    let rows = select_rows(
+        &store,
+        "SELECT ?object WHERE {         ?s <urn:p:late-reference> ?object .         GRAPH <urn:layer:graph> { ?object <urn:p:layer> \"late layer\" } }",
+    );
+    assert_eq!(
+        rows.len(),
+        1,
+        "new Ref must join a remote subject by RDF identity"
+    );
+    let Value::Ref(id) = rows[0].get("object").unwrap() else {
+        panic!("expected reference")
+    };
+    assert_eq!(store.resolve(*id).unwrap(), "urn:shared:late");
+    assert!(
+        select_rows(&store, "SELECT ?s WHERE { ?s <urn:p:layer> ?v }").is_empty(),
+        "composition must not add the layer to default ROOT"
+    );
+}
+
+#[test]
+fn late_alias_miss_is_snapshot_scoped_and_not_cached_across_commits() {
+    let scratch = Scratch::new("live-growth-cut");
+    let (store, _, _, _) = adversarial(&scratch);
+    let layer = Store::open(&scratch.path("layer.db").to_string_lossy()).unwrap();
+    let writer = Store::open(&scratch.path("main.db").to_string_lossy()).unwrap();
+    let iri = "urn:shared:after-cut";
+    let remote = layer.intern(iri).unwrap();
+    let snapshot = store.conn.unchecked_transaction().unwrap();
+    assert_eq!(
+        store.canonical_id(remote).unwrap(),
+        remote,
+        "no local spelling at this cut"
+    );
+    let local = writer.intern(iri).unwrap();
+    assert_ne!(local, remote);
+    assert_eq!(
+        store.canonical_id(remote).unwrap(),
+        remote,
+        "a later local term must not leak into the retained snapshot"
+    );
+    snapshot.commit().unwrap();
+    assert_eq!(
+        store.canonical_id(remote).unwrap(),
+        local,
+        "the old miss must not hide a local spelling at the next cut"
+    );
+}

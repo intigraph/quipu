@@ -12,7 +12,8 @@ with the setting omitted creates no keyword tables or write triggers.
 Quipu answers two different kinds of question. **Lexical** retrieval (SPARQL,
 `CONTAINS`, exact match) needs nothing but the fact log. **Semantic** retrieval
 (`/context`, `quipu_hybrid_search`, `/search` with `mode: "semantic"`) needs vectors, and vectors need
-an embedding provider you configure yourself. With a fresh unindexed local store,
+an embedding provider. Explicit model installation supplies a pinned default.
+With a fresh unindexed local store,
 plain-text `quipu_search` and `quipu_hybrid_search` instead return bounded lexical
 matches. No Bobbin service or model download is required for that fallback.
 
@@ -34,14 +35,13 @@ Automatic embedding is enabled by default when a provider is configured.
 No model is downloaded automatically. To install the default explicitly:
 
 ```bash
-quipu model install
+quipu model install --db graph.db
 quipu doctor search --db graph.db
-quipu model backfill --batch-size 32 --db graph.db
 ```
 
 The installer pins `sentence-transformers/all-MiniLM-L6-v2` at revision
 `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`, verifies the exact ONNX and tokenizer
-SHA-256 digests, and publishes the directory atomically. The files occupy about
+SHA-256 digests, and publishes verified files atomically. The files occupy about
 91 MB under `$XDG_DATA_HOME/quipu/models` (or `~/.local/share/quipu/models`;
 Windows also supports `LOCALAPPDATA`).
 An existing corrupt cache is refused and preserved. New CLI/server opens discover
@@ -51,6 +51,17 @@ including with a discovered model, while explicit semantic queries still work.
 The installer needs a build with `remote`; inference needs `onnx` and its runtime.
 A full build includes both features. Runtime distribution is separate from model
 installation.
+
+If `graph.db` already exists, installation also prepares up to 1,024 ROOT
+subjects in at most 32 passes of 32. The JSON `preparation` field reports
+completion, embedded count, concurrent skips, and a resume cursor. The command
+does not create a database when the selected path does not exist. Ordinary opens
+do not download assets or prepare existing facts. Existing vectors remain intact.
+For a larger store, continue with the reported cursor:
+
+```bash
+quipu model backfill --after <next_cursor> --batch-size 32 --db graph.db
+```
 
 Backfill visits at most the requested number of ROOT subjects per call, with
 inference batches capped at 32. Resume using `--after` with `progress.next_cursor`
@@ -63,6 +74,13 @@ lexical graph operations still work and the loader reports that semantic
 indexing is unavailable. Set `auto_embed = false` to disable automatic vector
 writes. This does not disable model initialization, explicit semantic queries,
 or existing import identity resolution, which may also use the provider.
+
+CLI commands that initialize automatic embedding refuse with a nonzero exit and
+the canonical `no embedding provider configured` reason when `auto_embed = true`
+is explicitly configured but neither a configured nor an installed model is available. This refusal happens
+before writing facts. Use explicit `auto_embed = false` for graph-only writes;
+the omitted default remains quiet, and pure graph reads continue to work
+without initializing a provider.
 
 ## Writes and staged imports
 

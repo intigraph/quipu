@@ -56,6 +56,12 @@ async fn stats_answers_while_the_writer_is_held() {
         Some(0),
         "the cold cache was recomputed"
     );
+    assert_eq!(answer["root_live_triples"], answer["facts"]);
+    assert_eq!(answer["counts_scope"]["graph"], "ROOT");
+    assert_eq!(
+        answer["counts_scope"]["unit"],
+        "distinct_subject_predicate_term_key"
+    );
 }
 
 /// A write must not queue behind /stats. The test holds the pool's only reader, so

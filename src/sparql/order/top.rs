@@ -80,6 +80,7 @@ fn consistent_keys(
                     return Ok(false);
                 }
                 Value::Str(_) | Value::Lang { .. } | Value::Typed { .. } => 3,
+                Value::Triple(_) => return Ok(false),
                 Value::Bytes(_) => 4,
             };
             if previous.is_some_and(|before| before != class) {
