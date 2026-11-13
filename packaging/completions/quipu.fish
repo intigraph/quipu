@@ -26,6 +26,7 @@ end
 
 complete -c quipu -n "__fish_quipu_needs_command" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_needs_command" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "fluent" -d 'Append fluent observations or read current values over authenticated HTTP'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "competency" -d 'Inspect pendant competency contracts without opening a store'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "store" -d 'Inspect native ownership, or explicitly adopt or restore a disk store'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "version" -d 'Print the version and source commit'
@@ -100,6 +101,15 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "db" -d 'Respace, attach
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "events" -d 'Read store event records such as refusals'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "fork" -d 'Create, list, diff, drop or promote named forks of ROOT'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "audit" -d 'Check traces, namespaces, replays and quarantine against policy'
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and not __fish_seen_subcommand_from append current" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and not __fish_seen_subcommand_from append current" -f -a "append" -d 'Append a JSON observation through the native fluent writer'
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and not __fish_seen_subcommand_from append current" -f -a "current" -d 'Read a fluent snapshot from its exact graph'
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and __fish_seen_subcommand_from append" -l server -d 'HTTP(S) server origin without credentials, query or path' -r
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and __fish_seen_subcommand_from append" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and __fish_seen_subcommand_from current" -l server -d 'HTTP(S) server origin without credentials, query or path' -r
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and __fish_seen_subcommand_from current" -l graph -d 'Explicit graph IRI for this operation' -r
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and __fish_seen_subcommand_from current" -l fluent -d 'Exact fluent IRI to read' -r
+complete -c quipu -n "__fish_quipu_using_subcommand fluent; and __fish_seen_subcommand_from current" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand competency; and not __fish_seen_subcommand_from lint" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand competency; and not __fish_seen_subcommand_from lint" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand competency; and not __fish_seen_subcommand_from lint" -f -a "lint" -d 'Validate competency.toml schema and query/command syntax offline; execute nothing'
