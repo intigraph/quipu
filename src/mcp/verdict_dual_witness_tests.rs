@@ -1,8 +1,16 @@
 //! Native compatibility controls, using real root-signed registrations.
 use super::*;
 
-const CANONICAL: &str = include_str!("../../tests/fixtures/dual-witness/signature.iri");
-const LEGACY: &str = include_str!("../../tests/fixtures/dual-witness/legacy-signature.iri");
+fn canonical() -> &'static str {
+    include_str!("../../tests/fixtures/dual-witness/signature.iri")
+        .strip_suffix('\n')
+        .unwrap()
+}
+fn legacy() -> &'static str {
+    include_str!("../../tests/fixtures/dual-witness/legacy-signature.iri")
+        .strip_suffix('\n')
+        .unwrap()
+}
 const VERDICT: &str = "http://ex/verdict/dual-witness";
 const REG: &str = "http://ex/reg/dual-witness";
 
@@ -49,7 +57,7 @@ fn signature_fact(store: &Store, input: &serde_json::Value, predicate: &str, at:
 
 #[test]
 fn canonical_and_legacy_use_the_original_recorded_transaction() {
-    for predicate in [LEGACY, CANONICAL] {
+    for predicate in [legacy(), canonical()] {
         let (mut store, mut input) = fixture(true, true);
         let original = input["signature"].clone();
         let fact = signature_fact(&store, &input, predicate, T1);
@@ -83,7 +91,7 @@ fn canonical_and_legacy_use_the_original_recorded_transaction() {
 
 #[test]
 fn canonical_and_legacy_keep_revocation_bound_to_the_original_transaction() {
-    for predicate in [LEGACY, CANONICAL] {
+    for predicate in [legacy(), canonical()] {
         let (mut store, input) = fixture(true, true);
         let fact = signature_fact(&store, &input, predicate, T1);
         let tx = store.transact(&[fact], T1, None, None).unwrap();
@@ -118,10 +126,10 @@ fn canonical_and_legacy_keep_revocation_bound_to_the_original_transaction() {
 #[test]
 fn mixed_and_conflicting_assertions_refuse_even_when_one_signature_matches() {
     for (first, second, conflict) in [
-        (LEGACY, CANONICAL, false),
-        (LEGACY, CANONICAL, true),
-        (CANONICAL, CANONICAL, true),
-        (LEGACY, LEGACY, true),
+        (legacy(), canonical(), false),
+        (legacy(), canonical(), true),
+        (canonical(), canonical(), true),
+        (legacy(), legacy(), true),
     ] {
         let (mut store, input) = fixture(true, true);
         let first = signature_fact(&store, &input, first, T1);
@@ -136,7 +144,7 @@ fn mixed_and_conflicting_assertions_refuse_even_when_one_signature_matches() {
 
 #[test]
 fn duplicate_graphs_and_distinct_historical_transactions_refuse() {
-    for predicate in [LEGACY, CANONICAL] {
+    for predicate in [legacy(), canonical()] {
         let (mut store, input) = fixture(true, true);
         let fact = signature_fact(&store, &input, predicate, T1);
         store
@@ -162,7 +170,7 @@ fn duplicate_graphs_and_distinct_historical_transactions_refuse() {
 
 #[test]
 fn missing_mismatched_and_non_string_signatures_never_fall_back_to_supplied_time() {
-    for predicate in [LEGACY, CANONICAL] {
+    for predicate in [legacy(), canonical()] {
         for value in [None, Some(Value::Str("wrong".into())), Some(Value::Int(7))] {
             let (mut store, mut input) = fixture(true, true);
             if let Some(value) = value {
@@ -184,7 +192,7 @@ fn canonical_witness_does_not_endorse_or_expand_registration_authority() {
         (true, false, "not-authorized-for-predicate"),
     ] {
         let (mut store, mut input) = fixture(governed, authorized);
-        let fact = signature_fact(&store, &input, CANONICAL, T1);
+        let fact = signature_fact(&store, &input, canonical(), T1);
         store.transact(&[fact], T1, None, None).unwrap();
         input["trusted"] = json!(true);
         let out = tool_verdict_verify(&store, &input).unwrap();
@@ -200,11 +208,15 @@ fn canonical_registration_terms_are_not_silently_promoted_to_authority() {
     let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::governance::trust_root::test_support::ensure_root(&mut store);
     let kp = keypair();
-    let core = include_str!("../../tests/fixtures/dual-witness/core.iri");
+    let core = include_str!("../../tests/fixtures/dual-witness/core.iri")
+        .strip_suffix('\n')
+        .unwrap();
     let class = store
-        .intern(include_str!(
-            "../../tests/fixtures/dual-witness/registration-class.iri"
-        ))
+        .intern(
+            include_str!("../../tests/fixtures/dual-witness/registration-class.iri")
+                .strip_suffix('\n')
+                .unwrap(),
+        )
         .unwrap();
     let mut datums = vec![datum(
         &store,
@@ -232,7 +244,7 @@ fn canonical_registration_terms_are_not_silently_promoted_to_authority() {
     let mut input = verdict(&kp, "dual-witness");
     input["verdict"] = json!(VERDICT);
     input["trusted"] = json!(true);
-    let fact = signature_fact(&store, &input, CANONICAL, T1);
+    let fact = signature_fact(&store, &input, canonical(), T1);
     store.transact(&[fact], T1, None, None).unwrap();
     let out = tool_verdict_verify(&store, &input).unwrap();
     assert_eq!(out["as_of"]["basis"], "recorded");
@@ -244,7 +256,7 @@ fn canonical_registration_terms_are_not_silently_promoted_to_authority() {
 #[test]
 fn a_missing_transaction_record_is_not_witness_evidence() {
     let (mut store, input) = fixture(true, true);
-    let fact = signature_fact(&store, &input, CANONICAL, T1);
+    let fact = signature_fact(&store, &input, canonical(), T1);
     store.transact(&[fact], T1, None, None).unwrap();
     // Inject corrupt provenance only in this disposable fixture. Re-enable
     // foreign-key enforcement before the reader checks the orphaned fact.
