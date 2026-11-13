@@ -110,7 +110,7 @@ Use [Tambo](https://github.com/intigraph/tambo) to configure and verify the tool
 ## Before you start
 
 - The CLI runs locally; `quipu-server` supplies the network API and explorer.
-- Fresh stores support keyword search without downloading a model. `quipu search "your terms"` uses keyword search until an embedding provider is configured; explicit `--mode semantic` still requires a model and vectors. Install the pinned default model with `quipu model install` in a full build. Check readiness with `quipu doctor search`.
+- Fresh stores support keyword search without downloading a model. `quipu search "your terms"` uses keyword search until an embedding provider is configured; explicit `--mode semantic` still requires a model and vectors. Install the pinned default model with `quipu model install --db graph.db` in a full build. This also prepares up to 1,024 existing ROOT subjects in bounded batches; larger stores receive a resume cursor. Check readiness with `quipu doctor search --db graph.db`.
 - [Configuration](https://intigraph.github.io/quipu/getting-started/configuration.html) covers storage and server settings.
 
 ## What's next
