@@ -75,6 +75,9 @@ fn try_lock(file: &File) -> std::io::Result<()> {
 fn try_lock(file: &File) -> std::io::Result<()> {
     use std::{ffi::c_void, os::windows::io::AsRawHandle};
 
+    // SAFETY: declaration matches the Win32 LockFile ABI; the live-handle
+    // and range preconditions are established at the single call below.
+    #[allow(unsafe_code)] // Only this foreign declaration, not the function.
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn LockFile(handle: *mut c_void, low: u32, high: u32, len_low: u32, len_high: u32) -> i32;
