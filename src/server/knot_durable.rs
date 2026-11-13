@@ -44,13 +44,12 @@ pub(crate) async fn knot(
     // same process-local worker truth while the durable path owns the effect.
     let mut ephemeral = super::knot_completion::begin(&store, &headers, &input)?;
     let receiver = store.clone();
-    // This admission commits before dispatch. Cancellation at this seam leaves
-    // admitted/UNKNOWN custody; it never turns a missing worker into a retry.
-    let ticket = super::admission::write_blocking(move || {
-        Ok(receiver.write_lock()?.admit_knot_attempt(bound)?)
-    })
-    .await?;
-    super::base::blocking(move || {
+    // One permit owns admission, effect, deferred work and terminal recording.
+    // Cancellation cannot release it while the blocking worker is still alive.
+    // The durable admission still commits before the effect: a crash between
+    // them retains admitted/UNKNOWN custody, never permission to retry.
+    super::admission::write_blocking(move || {
+        let ticket = receiver.write_lock()?.admit_knot_attempt(bound)?;
         if let Some(worker) = &mut ephemeral {
             worker.running();
         }

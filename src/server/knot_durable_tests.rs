@@ -358,8 +358,33 @@ async fn durable_http_cancellation_after_commit_does_not_fabricate_finished() {
     .await;
     assert_eq!(committed["state"], "committed");
     assert!(committed.get("receipt").is_none());
+    // An unrelated write must remain cancellable at async admission while
+    // the actual durable worker is held, including after its HTTP abort.
+    let (entered_tx, mut entered_rx) = tokio::sync::oneshot::channel();
+    let waiter = tokio::spawn(crate::admission::write_blocking(move || {
+        let _ = entered_tx.send(());
+        Ok(())
+    }));
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), &mut entered_rx)
+            .await
+            .is_err(),
+        "durable effect released write admission before its worker finished"
+    );
     work.abort();
     assert!(work.await.unwrap_err().is_cancelled());
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), &mut entered_rx)
+            .await
+            .is_err(),
+        "HTTP cancellation released admission held by the blocking worker"
+    );
+    waiter.abort();
+    assert!(waiter.await.unwrap_err().is_cancelled());
+    assert!(
+        entered_rx.await.is_err(),
+        "cancelled waiter executed its write"
+    );
     release_tx.send(()).unwrap();
     let completed = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
@@ -380,6 +405,13 @@ async fn durable_http_cancellation_after_commit_does_not_fabricate_finished() {
     .await
     .unwrap();
     assert!(completed["receipt"]["tx_id"].is_u64());
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        crate::admission::write_blocking(|| Ok(())),
+    )
+    .await
+    .expect("finished worker must release admission")
+    .unwrap();
 }
 
 #[tokio::test]
@@ -395,4 +427,26 @@ async fn retained_legacy_id_cannot_be_upgraded_into_a_second_execution() {
         call(app, "/knot", input(), true, Some("alice")).await.0,
         400
     );
+}
+
+#[tokio::test]
+async fn durable_failed_effect_releases_write_admission() {
+    let rejected = app(quipu::Store::open_in_memory().unwrap());
+    let (code, _) = call(
+        rejected,
+        "/knot",
+        json!({"turtle":"this is not valid Turtle"}),
+        true,
+        Some("alice"),
+    )
+    .await;
+    assert_ne!(code, 200, "fixture must fail after durable admission");
+    let next = app(quipu::Store::open_in_memory().unwrap());
+    let (code, _) = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        call(next, "/knot", input(), true, Some("alice")),
+    )
+    .await
+    .expect("failed durable effect must release write admission");
+    assert_eq!(code, 200);
 }
