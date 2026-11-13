@@ -163,8 +163,7 @@ impl Hub {
     fn member_specs(&self) -> Vec<MemberSpec> {
         self.members
             .lock()
-            .map(|m| m.keys().cloned().collect())
-            .unwrap_or_default()
+            .map_or_else(|_| Vec::new(), |m| m.keys().cloned().collect())
     }
 
     /// A receiver that changes whenever the ring's head moves.
