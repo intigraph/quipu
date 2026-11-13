@@ -139,7 +139,9 @@ fn duplicate_graphs_and_distinct_historical_transactions_refuse() {
     for predicate in [LEGACY, CANONICAL] {
         let (mut store, input) = fixture(true, true);
         let fact = signature_fact(&store, &input, predicate, T1);
-        store.transact(&[fact.clone()], T1, None, None).unwrap();
+        store
+            .transact(std::slice::from_ref(&fact), T1, None, None)
+            .unwrap();
         let graph = store.overlay_create("http://ex/other-witness", 0).unwrap();
         store
             .transact_to_graph(&[fact], T2, None, None, graph)
