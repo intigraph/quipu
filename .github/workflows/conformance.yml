@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to measure and publish
+        required: true
+        type: string
 
 concurrency:
   group: conformance-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
@@ -28,6 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: python3 -m unittest discover -s benchmark/public -p 'test_*.py'
+      - run: python3 scripts/test-stage-conformance-release.py
 
   re-run-conformance:
     name: Re-derive conformance from the pinned W3C suite
@@ -40,6 +46,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.release_tag || github.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Checkout the expected-results suite pins
@@ -56,6 +64,7 @@ jobs:
         run: cargo build --release --bin quipu --bin quipu-server --bin quipu-shacl-conformance --features shacl,onnx,server,dev-tools
       - name: Derive and enforce every pass and known failure
         env:
+          CONFORMANCE_RELEASE_TAG: ${{ inputs.release_tag }}
           CONFORMANCE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -74,3 +83,15 @@ jobs:
           path: /tmp/conformance-run/
           if-no-files-found: warn
           retention-days: 90
+      - name: Package release-only report
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          tar -czf /tmp/conformance-report.tar.gz -C /tmp/conformance-run/report .
+          cd /tmp
+          sha256sum conformance-report.tar.gz > conformance-report.tar.gz.sha256
+      - name: Retain release publication input
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-conformance-report
+          path: /tmp/conformance-report.tar.gz*
