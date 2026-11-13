@@ -193,12 +193,18 @@ fn bounded_inventory_and_escaped_json_references_refuse() {
 
 #[test]
 fn apply_remove_returns_the_exact_preexisting_effective_registry() {
-    let (mut store, mut config, mut request) = fixture();
+    let (_, mut config, mut request) = fixture();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let retained = Namespace {
         prefix: "retained".into(),
         base_iri: "https://other.example/id/".into(),
         ..Namespace::default()
     };
+    let mut initial = crate::QuipuConfig::default();
+    initial.namespaces.push(retained.clone());
+    configure(&mut store, &initial).unwrap();
+    apply(&mut store).unwrap();
+    let before = list(&store).unwrap();
     config.namespaces.push(retained.clone());
     configure(&mut store, &config).unwrap();
     apply(&mut store).unwrap();
@@ -207,7 +213,7 @@ fn apply_remove_returns_the_exact_preexisting_effective_registry() {
     configure(&mut store, &remaining).unwrap();
     request.expected_registry_hash = registry_hash(&store).unwrap();
     remove(&mut store, &request).unwrap();
-    assert_eq!(list(&store).unwrap(), vec![retained]);
+    assert_eq!(list(&store).unwrap(), before);
     assert!(
         configure(
             &mut store,
