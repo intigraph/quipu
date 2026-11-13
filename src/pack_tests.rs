@@ -161,6 +161,7 @@ fn a_pack_round_trips_and_verifies_and_leaves_no_wal_siblings() {
         ".building",
         ".building-wal",
         ".building-shm",
+        ".building.writer-lease",
     ] {
         assert!(
             !std::path::Path::new(&format!("{out}{suffix}")).exists(),
@@ -690,6 +691,7 @@ fn a_space_pack_owns_the_space_and_still_verifies() {
         ".building",
         ".building-wal",
         ".building-shm",
+        ".building.writer-lease",
     ] {
         assert!(
             !std::path::Path::new(&format!("{out}{suffix}")).exists(),

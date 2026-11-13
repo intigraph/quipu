@@ -362,9 +362,9 @@ pub fn pack_with_carriers(
         }
         Ok(())
     })();
-    // Remove the build artifact and ITS wal/shm siblings — on success so only
-    // the shipped file remains, on failure so a refused pack leaves nothing.
-    for suffix in ["", "-wal", "-shm"] {
+    // The private build Store is closed above. Remove its native writer lease
+    // as well as SQLite siblings, on refusal and after a successful export.
+    for suffix in ["", "-wal", "-shm", ".writer-lease"] {
         let p = format!("{build_path}{suffix}");
         if Path::new(&p).exists() {
             let _ = std::fs::remove_file(&p);
