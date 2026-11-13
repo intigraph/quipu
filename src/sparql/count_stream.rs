@@ -1,6 +1,7 @@
 //! COUNT-only grouping without retaining input solutions (aegis-skj0lv PR2).
 //! Unsupported algebra/aggregates keep the ordinary exact evaluator.
 use super::filter::{eval_expr, eval_filter};
+mod expr;
 use super::{Bindings, GraphScope, TemporalContext};
 use crate::types::Value;
 use crate::{Result, Store};
@@ -207,6 +208,11 @@ pub(super) fn visit(
             })
         }
         GraphPattern::Filter { expr, inner } => {
+            let compiled = expr::Program::filter(expr);
+            let matches = |row: &Bindings| match &compiled {
+                Some(program) => Ok(program.matches(row)),
+                None => eval_filter(store, expr, row, ctx),
+            };
             let pushed = super::filter_pushdown::seed_iri_equalities(store, expr, inner, seed)?;
             let seed = pushed.as_ref().unwrap_or(seed);
             let narrowed = super::string_pushdown::narrowed(expr, inner, seed, ctx);
@@ -217,7 +223,7 @@ pub(super) fn visit(
                 super::filter_drive::try_eval(store, expr, inner, inner_ctx, seed)?
             {
                 for mut row in rows {
-                    if eval_filter(store, expr, &row, ctx)? {
+                    if matches(&row)? {
                         emit(&mut row)?;
                     }
                 }
@@ -229,7 +235,7 @@ pub(super) fn visit(
                 narrowed.as_ref().unwrap_or(ctx),
                 seed,
                 &mut |row| {
-                    if eval_filter(store, expr, row, ctx)? {
+                    if matches(row)? {
                         emit(row)?;
                     }
                     Ok(())
@@ -249,18 +255,25 @@ pub(super) fn visit(
             inner,
             variable,
             expression,
-        } => visit(store, inner, ctx, seed, &mut |row| {
-            let Some(value) = eval_expr(store, expression, row) else {
-                return emit(row);
-            };
-            let previous = row.insert(variable.as_str().into(), value);
-            let result = emit(row);
-            match previous {
-                Some(previous) => row.insert(variable.as_str().into(), previous),
-                None => row.remove(variable.as_str()),
-            };
-            result
-        }),
+        } => {
+            let compiled = expr::Program::bind(expression);
+            visit(store, inner, ctx, seed, &mut |row| {
+                let value = match &compiled {
+                    Some(program) => program.value(row),
+                    None => eval_expr(store, expression, row),
+                };
+                let Some(value) = value else {
+                    return emit(row);
+                };
+                let previous = row.insert(variable.as_str().into(), value);
+                let result = emit(row);
+                match previous {
+                    Some(previous) => row.insert(variable.as_str().into(), previous),
+                    None => row.remove(variable.as_str()),
+                };
+                result
+            })
+        }
         _ => unreachable!("applicability checked before evaluation"),
     }
 }
