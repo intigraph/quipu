@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
+
 - *(reconcile)* [**breaking**] Code entities under [quipu].code_base, code vocabulary under base_ns (gju5 S3c) (#1014)([a16f8cf](https://github.com/scbrown/quipu/commit/a16f8cffff710a3af8190cfa5a7c7868c43d3e0f))
 - *(owl)* /ontology load can defer materialization off the writer lock (#1047)([44a403f](https://github.com/scbrown/quipu/commit/44a403f51645585bc6e5ae9c0cf82abda85bc2e9))
 - *(history)* Qualify retained MAIN history and transaction declarations (#1027)([4391747](https://github.com/scbrown/quipu/commit/4391747653c30a45991e6e19e901b6fd78cf5f8a))
