@@ -136,7 +136,8 @@ no handle:
    `g >= enrolled_at_generation`, continues. RETIRING/RETIRED/PENDING refuse
    ordinary startup; the transition path owns them.
 7. Draw a fresh 32-byte nonce, then read the witness head anchored at `g`
-   through the resolved backend, keeping every object version read.
+   through the resolved backend, passing that nonce to `WitnessSource` and
+   keeping every object version read. Record the same nonce in the receipt.
 8. Apply the D3 table. Only `Active(g)` with the identical authority tuple
    admits. `Reserved(g)` refuses ordinary startup. `Retired(g)`, `Active(g+1)`
    or later refuse as a rolled-back or superseded journal.
@@ -148,8 +149,11 @@ no handle:
 
 **Admission value.** `Admission` has private fields, no public constructor and
 no `Clone`, `Default`, `Deserialize` or test setter in production builds. It
-is created only at step 11 of `admit` and consumed by pin installation. No
-boolean, decoded record, receipt or caller value can stand in for it.
+is created only at step 11 of `admit` and consumed by `CommitFence::pin_admitted`,
+which accepts the opaque proof rather than raw pin fields. Its startup latch
+is retained until installation finishes. Commit-boundary test fixtures enroll
+disposable files and use this same admission route; there is no test pin setter.
+No boolean, decoded record, receipt or caller value can stand in for it.
 
 **Commit-time check.** `state_on` today revokes and refuses whenever the
 marker exists. With S1 it admits an enrolled database only when the handle's
