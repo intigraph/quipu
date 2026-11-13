@@ -59,6 +59,31 @@ class CargoConformanceTest(unittest.TestCase):
         self.assertIn("github.event.workflow_run.event == 'workflow_dispatch'", publisher)
         self.assertIn('gh api "repos/$GH_REPO/commits/$REF"', publisher)
 
+    def test_publisher_actual_condition_refuses_nondefault_branches(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        source = (root / '.github/workflows/publish-conformance-release.yml').read_text()
+        folded = ' '.join(source.split('    if: >-\n', 1)[1].split('    runs-on:', 1)[0].split())
+        condition = folded.removeprefix('${{').removesuffix('}}').replace('&&', ' and ')
+        trusted = {'github.event.workflow_run.conclusion': 'success',
+                   'github.event.workflow_run.event': 'workflow_dispatch',
+                   'github.event.workflow_run.head_repository.full_name': 'intigraph/quipu',
+                   'github.event.workflow_run.head_branch': 'main',
+                   'github.event.repository.default_branch': 'main',
+                   'github.repository': 'intigraph/quipu'}
+        cases = [({}, True), ({'github.event.workflow_run.head_branch': 'feature-unreviewed'}, False),
+                 ({'github.event.workflow_run.head_repository.full_name': 'foreign/quipu'}, False),
+                 ({'github.event.workflow_run.event': 'pull_request'}, False),
+                 ({'github.event.workflow_run.conclusion': 'failure'}, False)]
+        for changes, expected in cases:
+            with self.subTest(changes=changes):
+                expression = condition
+                values = dict(trusted, **changes)
+                for key in sorted(values, key=len, reverse=True):
+                    expression = expression.replace(key, repr(values[key]))
+                # Evaluate the checked-in boolean condition, with fixture values
+                # quoted as literals and no builtins, rather than a second policy.
+                self.assertIs(eval(expression, {'__builtins__': {}}), expected)
+
 
 if __name__ == "__main__":
     unittest.main()
