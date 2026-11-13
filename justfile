@@ -199,6 +199,7 @@ demo name="explorer":
     #!/usr/bin/env bash
     set -euo pipefail
     case {{quote(name)}} in
+        writer-lock) cargo run --quiet --locked --no-default-features --example writer_lock_demo ;;
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
         strict-new) cargo run --quiet --locked --no-default-features --example episode_strict_new ;;
         merge-risk-plan) cargo run --quiet --locked --offline --no-default-features --example merge_risk_plan ;;

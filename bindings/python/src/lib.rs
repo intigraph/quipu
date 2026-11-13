@@ -150,6 +150,7 @@ impl Engine {
 
     /// Open (or create) a file-backed store at `path`. Never a file a running
     /// quipu-server serves: see `quipu::bindings::Engine::open`.
+    /// Participating native writers refuse contention with open_failed.
     #[staticmethod]
     fn open(py: Python<'_>, path: &str) -> PyResult<Self> {
         Facade::open(path)
