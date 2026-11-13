@@ -1,0 +1,44 @@
+name: Merge-group ledger
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  merge-group-ledger-controls:
+    name: Merge-group ledger controls
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python3 scripts/ci/test-merge-group-ledger.py
+
+  merge-group-ledger-provenance:
+    # Required before enabling the queue; validates the combined checkout, not
+    # an individual PR or the helper's earlier pre-enqueue observation.
+    name: Merge-group ledger provenance
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.merge_group.head_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python3 scripts/ci/check-merge-group-ledger.py

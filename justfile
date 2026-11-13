@@ -17,6 +17,10 @@ setup:
 
 # === Quality ===
 
+# Strict combined-tree provenance; test uses synthetic Git queue groups only.
+merge-queue command="test":
+    @if [ "{{command}}" = "test" ]; then python3 scripts/ci/test-merge-group-ledger.py; elif [ "{{command}}" = "check" ]; then python3 scripts/ci/check-merge-group-ledger.py; else echo 'Use: just merge-queue [test|check]' >&2; exit 2; fi
+
 # Run all quality checks (pre-push gate)
 check:
     pre-commit run --all-files

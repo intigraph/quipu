@@ -1,0 +1,9 @@
+Script started on 2026-11-12 23:16:51-05:00 [COMMAND="stty -onlcr; python3 docs/probes/merge-group-ledger/demo.py" <not executed on terminal>]
+BASE bc8d91fb46b87ab54c8aad32d5987c5dfc402300: merge_group trigger exists, strict ledger job absent
+CANDIDATE: correct ledger on combined two-parent Git group
+ledger 2fa548378b04db0540fd0e6f04a15bd3487a0c0d covers merge group 7aecb0445945e387d99a1af467d35bae4743d00c (base 8b617ddf49da633accd8730dc1daf7cfbff6df8c)
+CANDIDATE: same ledger after another queue entry changes code
+REFUSED: stale ledger on combined tree: src/ahead.rs
+Expected stale-ledger refusal observed. No live queue tested.
+
+Script done on 2026-11-12 23:16:51-05:00 [COMMAND_EXIT_CODE="0"]
