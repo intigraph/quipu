@@ -18,6 +18,7 @@ or `manifest.ttl` at the merge base or at the head. Loose N-Triples files and
 test fixtures without a manifest are not packs and are not reviewed.
 """
 import argparse
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -78,7 +79,7 @@ def blob_id(repo, ref, path):
     return out.stdout.strip() if out.returncode == 0 else None
 
 
-def review(repo, binary, base, head, directory, work):
+def review(repo, binary, base, head, directory, work, graph_dir=None):
     base_files, head_files = names(repo, base, directory), names(repo, head, directory)
     # Only a sidecar this PR adds or changes is rendered; an old one from an
     # earlier merge describes that merge, not this change.
@@ -93,6 +94,24 @@ def review(repo, binary, base, head, directory, work):
         capture_output=True,
         text=True,
     )
+    if graph_dir is not None and out.returncode in (0, 3):
+        graph_dir.mkdir(parents=True, exist_ok=True)
+        stem = hashlib.sha256(directory.encode()).hexdigest()[:24]
+        report_json = graph_dir / f"{stem}.json"
+        graph_html = graph_dir / f"{stem}.html"
+        data = subprocess.run(
+            [binary, "share", "diff", str(old), str(new), "--report", "--format", "json"],
+            capture_output=True, text=True, check=True,
+        )
+        report_json.write_text(data.stdout, encoding="utf-8")
+        subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("pendant-graph.py")),
+             str(report_json), str(graph_html)], check=True,
+        )
+        out.stdout = (
+            f"Graph view in the workflow artifact: `{graph_html.name}` (pack `{directory}`).\n\n"
+            + out.stdout
+        )
     return out.returncode, out.stdout, out.stderr
 
 
@@ -104,6 +123,7 @@ def main():
     parser.add_argument("--binary", default="target/debug/quipu")
     parser.add_argument("--summary", help="append the markdown here (GITHUB_STEP_SUMMARY)")
     parser.add_argument("--comment-body", help="write a sticky-comment body here")
+    parser.add_argument("--graph-dir", type=Path, help="write offline graph HTML and source report JSON here")
     args = parser.parse_args()
     repo = Path(args.repo)
     binary = str(Path(args.binary).resolve())
@@ -153,7 +173,8 @@ def main():
             failed.append(directory)
             continue
         with tempfile.TemporaryDirectory() as tmp:
-            code, report, err = review(repo, binary, base, args.head, directory, Path(tmp))
+            code, report, err = review(
+                repo, binary, base, args.head, directory, Path(tmp), args.graph_dir)
         parts += [f"## `{directory}`", ""]
         if code in (0, 3):
             parts.append(report.rstrip())

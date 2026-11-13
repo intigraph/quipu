@@ -460,3 +460,7 @@ signing command:
         package-controls) python3 scripts/ci/test_signing_package.py ;;
         *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
     esac
+
+# Offline pendant neighborhood display controls (no build or service access).
+pendant-graph:
+    python3 scripts/ci/test-pendant-graph.py

@@ -297,6 +297,7 @@ fn git(repo: &std::path::Path, args: &[&str]) -> String {
 #[test]
 fn ci_script_is_red_only_for_an_introduced_violation() {
     let temp = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
     let repo = temp.path();
     git(repo, &["init", "-q", "-b", "main"]);
     let pack = repo.join("data/qpack");
@@ -332,9 +333,29 @@ fn ci_script_is_red_only_for_an_introduced_violation() {
             .arg(repo)
             .arg("--summary")
             .arg(&summary)
+            .arg("--graph-dir")
+            .arg(artifacts.path().join(branch))
             .output()
             .unwrap();
         let md = std::fs::read_to_string(&summary).unwrap();
+        if md.contains("Graph view in the workflow artifact") {
+            let files: Vec<_> = std::fs::read_dir(artifacts.path().join(branch))
+                .unwrap()
+                .map(|f| f.unwrap().path())
+                .collect();
+            assert!(
+                files
+                    .iter()
+                    .any(|p| p.extension().is_some_and(|e| e == "html"))
+            );
+            let json = files
+                .iter()
+                .find(|p| p.extension().is_some_and(|e| e == "json"))
+                .unwrap();
+            let report: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(json).unwrap()).unwrap();
+            assert!(report["neighborhood"]["before"]["edges"].is_array());
+        }
         std::fs::remove_file(&summary).unwrap();
         (o.status.code().unwrap(), md)
     };
