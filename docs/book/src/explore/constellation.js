@@ -23,6 +23,9 @@ export function createConstellation({ query, prefixes, short, inspect, factHisto
   let ready = false;
   const shape = (tag, attrs, text) => {
     const e = document.createElementNS(NS, tag);
+    // Knots and cords have equivalent HTML targets/legend. Only interactive
+    // relation controls belong in this SVG's accessibility tree.
+    e.setAttribute("aria-hidden", "true");
     Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
     if (text) e.textContent = text;
     svg.append(e);
@@ -114,6 +117,7 @@ export function createConstellation({ query, prefixes, short, inspect, factHisto
         "stroke-width": selected ? 2 : 1 });
       line.dataset.edge = JSON.stringify(e);
       line.setAttribute("tabindex", "0"); line.setAttribute("role", "button");
+      line.removeAttribute("aria-hidden");
       line.setAttribute("aria-label", `${a.label} → ${short(e.rel)} → ${b.label}`);
       line.addEventListener("click", () => relation(e));
       line.addEventListener("keydown", (event) => {
