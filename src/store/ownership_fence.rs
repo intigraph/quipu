@@ -5,22 +5,22 @@
 //! on the committing connection. Contention and poisoned/unavailable state
 //! refuse without waiting while SQLite holds its writer lock.
 //!
-//! This is the unenrolled boundary only. No callback may promote an enrolled
-//! lineage: observing enrollment permanently revokes this handle's legacy pin,
-//! including after a local database rollback or callback replacement. There is
-//! no authenticated startup adapter or protected-journal enrollment API yet.
+//! Observing enrollment permanently revokes a legacy handle, including after
+//! a local database rollback or callback replacement. An enrolled handle must
+//! carry the binding installed by the opaque S1 startup admission proof.
 //!
 //! The check latch is NOT a retirement latch. The source-only explicit
 //! `ownership_scope` holds a separate shared lineage latch across actual SQL
 //! completion, with an exclusive journal-transition counterpart. A pinned
-//! write outside that scope refuses. Enrollment/startup still admits none.
+//! write outside that scope refuses.
 //!
 //! Generation pin (P1, aegis-s24.8): a handle may carry the protected-journal
 //! path and the exact authority tuple it was admitted under. Every check then
 //! also re-reads that journal (a file read, never SQL on the committing
 //! connection) and refuses unless it is still ACTIVE at that tuple. A refusal
 //! revokes the pin for good, so restoring older journal bytes cannot revive
-//! the handle. No public path sets a pin yet: enrolled startup still refuses.
+//! the handle. Only the dormant S1 route can construct the admission consumed
+//! by pin installation; there is no public enrollment API.
 use std::path::PathBuf;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::AtomicU8;
@@ -131,15 +131,14 @@ impl CommitFence {
         Ok(())
     }
 
-    /// S1 installation, reachable only through `Admission::install`. The
-    /// generation pin is set first; the admitted binding last.
+    /// Consume the opaque S1 proof. Its shared startup latch remains held
+    /// until both the generation pin and admitted binding have been installed.
     #[cfg(not(target_arch = "wasm32"))]
     pub(super) fn pin_admitted(
         &self,
-        path: PathBuf,
-        authority: Authority,
-        binding: super::ownership_inventory::Binding,
+        admission: super::ownership_admission::Admission,
     ) -> Result<()> {
+        let (path, authority, binding) = admission.pin_parts();
         let denied = |why: &str| {
             crate::error::Error::PolicyDenied(format!(
                 "store handoff: admission install refused: {why}"
@@ -149,11 +148,13 @@ impl CommitFence {
             return Err(denied("handle already revoked"));
         }
         self.journal
-            .set((path, authority))
+            .set((path.to_path_buf(), authority.clone()))
             .map_err(|_| denied("handle already pinned"))?;
         self.admitted
-            .set(binding)
+            .set(binding.clone())
             .map_err(|_| denied("handle already admitted"))?;
+        // Consume the proof only after both pins exist, releasing its latch.
+        drop(admission);
         Ok(())
     }
 
@@ -161,16 +162,6 @@ impl CommitFence {
     #[cfg(not(target_arch = "wasm32"))]
     pub(super) fn admitted(&self) -> Option<&super::ownership_inventory::Binding> {
         self.admitted.get()
-    }
-
-    /// Test fixtures only: there is no enrollment or admission path that
-    /// could set a pin in production yet.
-    #[cfg(test)]
-    pub(super) fn pin_journal(&self, path: PathBuf, authority: Authority) {
-        assert!(
-            self.journal.set((path, authority)).is_ok(),
-            "a handle is pinned once"
-        );
     }
 
     pub(super) fn refuses(&self) -> bool {

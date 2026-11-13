@@ -272,7 +272,7 @@ impl Store {
                 "store handoff: enrolled startup needs a native commit fence".into(),
             )
         })?;
-        admission.install(&fence)?;
+        fence.pin_admitted(admission)?;
         store.ensure_ownership_writable()?;
         Ok(store)
     }
