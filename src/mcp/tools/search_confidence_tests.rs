@@ -388,6 +388,13 @@ fn entity_terms_split_across_label_and_same_transaction_comments_are_admitted() 
 
     let control = crate::tool_search(&store, &json!({"query":label,"verbose":true})).unwrap();
     assert_eq!(control["context_results"][0]["entity"], entity);
+    // Keep the short operational lookup separate from the longer coverage
+    // regression: its terms are also split across the current comment cohort.
+    let short_query = format!("{label} automation container");
+    let short = crate::tool_search(&store, &json!({"query":short_query,"verbose":true})).unwrap();
+    assert_eq!(short["insufficient_context"], false, "{short}");
+    assert_eq!(short["context"]["top_term_coverage"], 1.0);
+    assert_eq!(short["context_results"][0]["entity"], entity);
     let query = format!("{label} automation service container management inventory fixture");
     let result = crate::tool_search(&store, &json!({"query":query,"verbose":true})).unwrap();
     assert_eq!(result["results"][0]["entity"], entity);

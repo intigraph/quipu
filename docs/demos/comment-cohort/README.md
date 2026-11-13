@@ -7,6 +7,10 @@ coverage and NO CONTEXT at similarity 1.0. The candidate must report coverage
 1.0 and CONTEXT for the same input. An unrelated subject must remain NO CONTEXT.
 The PR identifies the exact demonstrated candidate revision.
 
+The unit regression also checks the shorter `<label> automation container`
+lookup and requires all three terms to be retained. This isolates text retention
+from model quality; it does not establish live ranking against other entities.
+
 Run `just demo comment-cohort`. The example displays the measured
 [base response](base-result.json), extracted from the guarded failing regression;
 it does not rerun the base. The candidate and negative control are actual local
