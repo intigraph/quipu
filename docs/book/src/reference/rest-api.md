@@ -1326,6 +1326,25 @@ Consumer validation requires a finite declared floor in `[0.52, 1]` before
 accepting either CONTEXT or NO CONTEXT. A lower, missing or malformed floor
 is UNKNOWN in these consumers, even when the server reports no context.
 
+Hybrid results use the explicit `context.admission: "hybrid-ranked-terms/v1"`
+rule. An admitted row must have `ranking_reason: "hybrid"`, a finite fused
+`score` in `(0, 1]`, and `fusion_rank` from 1 through 20. It must also cover the
+query subject, every required identifier and the existing distinct-term
+threshold (half the query terms, rounded up, capped at three). An
+uncorroborated top result still refuses the entire context. A fused score is
+never compared with the cosine floor; raw `similarity` remains nullable and
+diagnostic. `query_terms` and `fusion_rank_limit` accompany this rule so native
+MCP projection and outcome accounting validate the same evidence. Unknown
+admission rules remain UNKNOWN. Pure semantic admission keeps its cosine floor.
+
+`ranking: "content"` is supported with hybrid fusion: content demotion applies
+to the semantic leg before fusion, and the keyword leg retains its BM25 scale.
+In automatic mode, content requests use hybrid only when hybrid is enabled,
+the keyword index is complete and a vector input/provider is available.
+Explicit modes retain their backend gates; configuring hybrid as the default
+also accepts content requests. This does not activate hybrid or backfill an
+existing store automatically.
+
 `results`, `count`, ranking scores, ordering, scope and temporal provenance remain
 unchanged diagnostic search output. They are **not** evidence that an answer
 exists. Context consumers must render **NO CONTEXT** when
