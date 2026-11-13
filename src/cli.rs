@@ -482,6 +482,8 @@ pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
         quipu::Value::Float(f) => f.to_string(),
         quipu::Value::Bool(b) => b.to_string(),
         quipu::Value::Bytes(b) => format!("<{} bytes>", b.len()),
+        quipu::Value::Triple(triple) => serde_json::to_string(triple)
+            .unwrap_or_else(|error| format!("<triple encoding refused: {error}>")),
     }
 }
 

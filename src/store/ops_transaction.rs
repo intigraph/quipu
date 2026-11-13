@@ -54,6 +54,7 @@ impl Store {
             window,
             window_guard,
             None,
+            None,
         )
     }
 
@@ -97,6 +98,125 @@ impl Store {
             None,
             None,
             Some(receipt),
+            None,
+        )
+    }
+
+    /// Source-stage fluent entry: no HTTP/CLI adapter is admitted yet.
+    #[allow(dead_code)]
+    pub(crate) fn append_fluent_native(
+        &mut self,
+        request: &crate::fluent::writer::Append,
+        graph: i64,
+    ) -> Result<i64> {
+        self.transact_with_owl_receipt(
+            &[],
+            &crate::time::now_iso(),
+            None,
+            Some("quipu:fluent"),
+            graph,
+            None,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            Some(crate::fluent::writer::NativeWrite::Append(request)),
+        )
+    }
+
+    /// Source-only import; new primitive declarations pass the same local gates.
+    #[allow(dead_code)]
+    pub(crate) fn import_fluent_native(
+        &mut self,
+        proof: &crate::fluent::source_witness::Proof,
+        graph: i64,
+    ) -> Result<i64> {
+        self.transact_with_owl_receipt(
+            &[],
+            &crate::time::now_iso(),
+            None,
+            Some("quipu:fluent"),
+            graph,
+            None,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            Some(crate::fluent::writer::NativeWrite::Import(proof)),
+        )
+    }
+
+    /// Atomically admit a bounded union of independently witnessed source events.
+    #[allow(dead_code)]
+    pub(crate) fn import_fluent_batch_native(
+        &mut self,
+        proofs: &[crate::fluent::source_witness::Proof],
+        graph: i64,
+    ) -> Result<i64> {
+        self.transact_with_owl_receipt(
+            &[],
+            &crate::time::now_iso(),
+            None,
+            Some("quipu:fluent"),
+            graph,
+            None,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            Some(crate::fluent::writer::NativeWrite::ImportBatch(proofs)),
+        )
+    }
+
+    /// Register immutable observable configuration through normal native gates.
+    #[allow(dead_code)]
+    pub(crate) fn register_observable_native(
+        &mut self,
+        request: &crate::fluent::registration::Register,
+        graph: i64,
+    ) -> Result<i64> {
+        self.transact_with_owl_receipt(
+            &[],
+            &crate::time::now_iso(),
+            None,
+            Some("quipu:fluent"),
+            graph,
+            None,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            Some(crate::fluent::writer::NativeWrite::Register(request)),
+        )
+    }
+
+    /// Source-only explicit config acceptance; transport never calls this.
+    #[allow(dead_code)]
+    pub(crate) fn accept_pending_observable_native(
+        &mut self,
+        request: &crate::fluent::pending_config::Pending,
+        approval: &crate::fluent::pending_config::Approval,
+        graph: i64,
+    ) -> Result<i64> {
+        self.transact_with_owl_receipt(
+            &[],
+            &crate::time::now_iso(),
+            None,
+            Some("quipu:fluent"),
+            graph,
+            None,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            Some(crate::fluent::writer::NativeWrite::PendingConfig(
+                request, approval,
+            )),
         )
     }
 
@@ -114,6 +234,7 @@ impl Store {
         window: Option<crate::store::source_claims::ClaimWindow>,
         window_guard: Option<&crate::store::source_claims::WindowGuard>,
         receipt: Option<(&str, &str)>,
+        fluent: Option<crate::fluent::writer::NativeWrite<'_>>,
     ) -> Result<i64> {
         let observation_guards =
             crate::write_observation::stage(crate::write_observation::Stage::Guards);
@@ -179,11 +300,21 @@ impl Store {
                     retract_source,
                     window,
                     None,
+                    fluent,
                 )
             })
             .and_then(|staged| {
-                self.enforce_shacl_poststate(datums, graph, staged.tx_id, !expected.is_empty())
-                    .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
+                if staged.replayed {
+                    return Ok(staged);
+                }
+                let datums = staged.materialized.as_deref().unwrap_or(datums);
+                self.enforce_shacl_poststate(
+                    datums,
+                    graph,
+                    staged.tx_id,
+                    fluent.is_some() || !expected.is_empty(),
+                )
+                .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
                 if let Some((batch, digest)) = receipt {
                     self.conn.execute(
                         "INSERT INTO owl_batch_receipts(batch,digest,tx) VALUES(?1,?2,?3)",
@@ -196,6 +327,17 @@ impl Store {
         observation_guards.finish(staged.is_ok());
         match staged {
             Ok(mut staged) => {
+                if staged.replayed {
+                    let rollback =
+                        crate::store::release::rollback_release(&self.conn, "quipu_transact");
+                    self.term_cache.borrow_mut().clear_persistent();
+                    self.set_write_in_progress(false);
+                    self.clear_pending_write_events();
+                    rollback?;
+                    return Ok(staged.tx_id);
+                }
+                let materialized = staged.materialized.take();
+                let datums = materialized.as_deref().unwrap_or(datums);
                 let tx_id = staged.tx_id;
                 let counts = staged.counts;
                 // Taken before `staged` moves into after_commit_hooks below.
@@ -206,6 +348,9 @@ impl Store {
                     // error path, but record no verdicts or refusal for a
                     // write that passed its gates and was never committed.
                     self.set_write_in_progress(false);
+                    if fluent.is_some() {
+                        self.term_cache.borrow_mut().clear_persistent();
+                    }
                     self.pending_refusal = None;
                     self.clear_pending_write_events();
                     self.pending_verdicts.clear();
@@ -257,6 +402,9 @@ impl Store {
                 // Undo the staged datums and the transaction row; the store is
                 // left byte-identical to before this call (no partial mutation).
                 let _ = crate::store::release::rollback_release(&self.conn, "quipu_transact");
+                if fluent.is_some() {
+                    self.term_cache.borrow_mut().clear_persistent();
+                }
                 // The suspended model never observed rolled-back rows.
                 self.set_write_in_progress(false);
                 // Take the staged refusal BEFORE flushing verdicts: the flush

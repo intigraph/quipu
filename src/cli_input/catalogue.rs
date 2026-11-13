@@ -184,6 +184,8 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("trust-root bootstrap", "", 0, 0, "verifier public-key pop-signature attests", ""),
     spec!("trust-root status", "", 0, 0, "", ""),
     spec!("graph", "", GROUP, 0, "", ""),
+    spec!("graph writer-instance", "<iri>", 1, 1, "", ""),
+    spec!("graph writer-grant", "<grant.json>", 1, 1, "", ""),
     spec!("graph create", "<iri>", 1, 1, "actor timestamp", ""),
     spec!("graph label", "<iri>", 1, 1, "label actor timestamp", ""),
     spec!("graph list", "", 0, 0, "kind graph", "frozen json"),

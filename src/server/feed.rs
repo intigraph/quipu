@@ -76,6 +76,48 @@ pub(crate) struct ChangeParams {
     capture: Option<String>,
     /// Graph IRI to scope to; absent spans all graphs.
     graph: Option<String>,
+    /// Comma-separated predicate IRIs; only their records (aegis-n0wc.3).
+    predicate: Option<String>,
+    /// Comma-separated subject IRIs; only their records (aegis-n0wc.3).
+    subject: Option<String>,
+    /// One `<predicate> <term>` membership condition: only records whose
+    /// subject satisfies it before or after their transaction (aegis-n0wc.3).
+    member: Option<String>,
+}
+
+/// Most IRIs in one `predicate` or `subject` list (aegis-n0wc.3).
+pub(crate) const MAX_TERM_LIST: usize = 64;
+
+/// Split a comma-separated IRI list: no empty member, at most
+/// [`MAX_TERM_LIST`]. `None` when the list is malformed.
+pub(crate) fn term_list(list: &str) -> Option<Vec<&str>> {
+    let items: Vec<&str> = list.split(',').map(str::trim).collect();
+    (items.len() <= MAX_TERM_LIST && items.iter().all(|i| !i.is_empty())).then_some(items)
+}
+
+/// Term ids for a comma-separated IRI list. An IRI the store has never seen
+/// matches nothing, so it is dropped (an all-unknown list matches nothing,
+/// which `Some(empty)` says).
+fn term_ids(
+    store: &quipu::Store,
+    list: Option<&str>,
+    what: &str,
+) -> quipu::Result<Option<Vec<i64>>> {
+    let Some(list) = list else {
+        return Ok(None);
+    };
+    let items = term_list(list).ok_or_else(|| {
+        quipu::Error::InvalidValue(format!(
+            "{what} must be 1 to {MAX_TERM_LIST} comma-separated IRIs"
+        ))
+    })?;
+    let mut ids = Vec::new();
+    for iri in items {
+        if let Some(id) = store.lookup(iri)? {
+            ids.push(id);
+        }
+    }
+    Ok(Some(ids))
 }
 
 /// GET /changes — pull fact-level change records in commit order.
@@ -113,8 +155,34 @@ pub(crate) async fn changes_get(
                     quipu::Error::InvalidValue(format!("unknown graph IRI: {iri}"))
                 })?),
             };
+        let scope = quipu::store::changes::TermScope {
+            attributes: term_ids(&store, p.predicate.as_deref(), "predicate")?,
+            entities: term_ids(&store, p.subject.as_deref(), "subject")?,
+        };
         let limit = usize::try_from(p.limit.unwrap_or(100).clamp(1, 10_000)).unwrap_or(100);
-        let page = store.changes_after(p.since.unwrap_or(0), limit, capture, graph)?;
+        let since = p.since.unwrap_or(0);
+        let member = match p.member.as_deref() {
+            None => None,
+            Some(text) => {
+                let spec = quipu::store::changes::member::MemberSpec::parse(text)?;
+                Some(store.member_condition(&spec)?)
+            }
+        };
+        let page = match member {
+            None => store.changes_after_scoped(since, limit, capture, graph, &scope)?,
+            Some(Some(member)) => {
+                store.changes_after_member(since, limit, capture, graph, &scope, &member)?
+            }
+            // A predicate or IRI value the store has never seen: no subject
+            // satisfies the condition, so nothing matches.
+            Some(None) => {
+                let nothing = quipu::store::changes::TermScope {
+                    attributes: Some(Vec::new()),
+                    entities: None,
+                };
+                store.changes_after_scoped(since, limit, capture, graph, &nothing)?
+            }
+        };
         Ok(axum::Json(page.to_json()))
     })
     .await

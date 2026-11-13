@@ -58,9 +58,13 @@ pub mod demotions;
 mod demotions_tests;
 pub mod events;
 mod events_retention;
+pub mod fluent_guard;
+mod fluent_persistence;
+#[cfg(all(test, feature = "shacl"))]
+mod fluent_persistence_tests;
 pub mod forks;
 mod forks_merge;
-pub mod freeze;
+mod freeze;
 mod freeze_io;
 mod gate;
 mod graph_events;

@@ -496,7 +496,7 @@ impl Session {
 
     fn coverage_frame(&mut self, watermark: i64, nonce: Option<[u8; 16]>) -> Frame {
         let seq = self.next_seq();
-        let nonce_hex = nonce.map(hex::encode).unwrap_or_default();
+        let nonce_hex = nonce.map_or_else(Default::default, hex::encode);
         let signature = self.identity.sign(&message(&Signed::Coverage {
             session: &self.id,
             store_id: &self.store_id,
