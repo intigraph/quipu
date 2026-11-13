@@ -1,6 +1,5 @@
 """Cargo-only changes must reach and invalidate the conformance ledger gate."""
 import contextlib
-import fnmatch
 import pathlib
 import re
 import unittest
@@ -34,17 +33,31 @@ class CargoConformanceTest(unittest.TestCase):
                 code, messages = probe._provenance(root, {"quipu_revision": base}, pr_base)
                 self.assertEqual(code, 0, messages)
 
-    def test_workflow_selects_cargo_on_pr_and_main_push(self):
+    def test_required_ci_runs_conformance_on_pr_main_and_queue(self):
         root = pathlib.Path(__file__).resolve().parents[2]
         workflow = (root / ".github/workflows/conformance.yml").read_text()
-        for event in ("pull_request", "push"):
-            section = re.search(rf"^  {event}:\n(.*?)(?=^  [a-z_]+:|\Z)", workflow, re.M | re.S)
-            self.assertIsNotNone(section)
-            paths = re.findall(r"^      - '([^']+)'$", section.group(1), re.M)
-            for filename in ("Cargo.toml", "Cargo.lock", "src/lib.rs"):
-                with self.subTest(event=event, filename=filename):
-                    self.assertTrue(any(fnmatch.fnmatchcase(filename, p) for p in paths),
-                                    (event, filename, paths))
+        ci = (root / ".github/workflows/ci.yml").read_text()
+        self.assertIn('  workflow_call:', workflow)
+        for event in ('pull_request', 'push', 'merge_group'):
+            self.assertRegex(ci, rf'(?m)^  {event}:')
+        self.assertIn('    uses: ./.github/workflows/conformance.yml', ci)
+        gate = re.search(r'^  release-correctness:\n(.*?)(?=^  [a-z_-]+:|\Z)', ci, re.M | re.S)
+        self.assertIsNotNone(gate)
+        self.assertRegex(gate.group(1), r'needs: \[[^\]]*\bconformance\b')
+
+    def test_release_uses_explicit_dispatch_and_separate_publication(self):
+        root = pathlib.Path(__file__).resolve().parents[2]
+        release = (root / '.github/workflows/release.yml').read_text()
+        conformance = (root / '.github/workflows/conformance.yml').read_text()
+        publisher = (root / '.github/workflows/publish-conformance-release.yml').read_text()
+        self.assertIn('gh workflow run conformance.yml --ref main -f "release_tag=$TAG"', release)
+        self.assertIn('TAG: ${{ needs.artifacts.outputs.tag }}', release)
+        self.assertNotRegex(conformance, r'(?m)^  release:')
+        self.assertIn('ref: ${{ inputs.release_tag || github.sha }}', conformance)
+        self.assertNotIn('contents: write', conformance)
+        self.assertIn('run-id: ${{ github.event.workflow_run.id }}', publisher)
+        self.assertIn("github.event.workflow_run.event == 'workflow_dispatch'", publisher)
+        self.assertIn('gh api "repos/$GH_REPO/commits/$REF"', publisher)
 
 
 if __name__ == "__main__":

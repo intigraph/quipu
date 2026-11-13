@@ -3,32 +3,16 @@ name: Conformance
 # Expected outcomes are stable source. Measurements, timings and source stamps
 # belong to the run/release artifacts; this workflow never commits them.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'benchmark/public/**'
-      - 'docs/book/src/benchmarks/**'
-      - '.github/workflows/conformance.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'benchmark/public/**'
-      - 'docs/book/src/benchmarks/**'
-      - '.github/workflows/conformance.yml'
-  merge_group:
-    types: [checks_requested]
-  release:
-    types: [published]
+  # Required CI calls this on every PR, main push and combined queue tree.
+  workflow_call:
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to measure and publish
+        required: true
+        type: string
 
 concurrency:
   group: conformance-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
@@ -55,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ github.event.release.tag_name || github.sha }}
+          ref: ${{ inputs.release_tag || github.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Checkout the expected-results suite pins
@@ -72,7 +56,7 @@ jobs:
         run: cargo build --release --bin quipu --bin quipu-server --bin quipu-shacl-conformance --features shacl,onnx,server,dev-tools
       - name: Derive and enforce every pass and known failure
         env:
-          CONFORMANCE_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          CONFORMANCE_RELEASE_TAG: ${{ inputs.release_tag }}
           CONFORMANCE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -92,35 +76,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
       - name: Package release-only report
-        if: github.event_name == 'release'
+        if: github.event_name == 'workflow_dispatch'
         run: |
           tar -czf /tmp/conformance-report.tar.gz -C /tmp/conformance-run/report .
           cd /tmp
           sha256sum conformance-report.tar.gz > conformance-report.tar.gz.sha256
       - name: Retain release publication input
-        if: github.event_name == 'release'
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: release-conformance-report
           path: /tmp/conformance-report.tar.gz*
-
-  publish-release-report:
-    if: github.event_name == 'release'
-    needs: re-run-conformance
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-conformance-report
-          path: report
-      - name: Publish report and rebuild public docs after the asset exists
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          gh release upload "$RELEASE_TAG" report/conformance-report.tar.gz report/conformance-report.tar.gz.sha256 --clobber
-          gh workflow run docs.yml --ref main

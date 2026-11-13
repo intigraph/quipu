@@ -3,6 +3,8 @@
 import importlib.util
 import io
 import json
+import os
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -14,6 +16,29 @@ spec.loader.exec_module(stage_report)
 
 
 class StageReport(unittest.TestCase):
+    def test_missing_assets_hold_publication_but_transport_errors_fail(self):
+        workflow = (Path(__file__).parents[1] / ".github/workflows/docs.yml").read_text()
+        step = workflow.split("      - name: Stage the latest release conformance report\n", 1)[1]
+        shell = step.split("        run: |\n", 1)[1].split("\n      - name:", 1)[0]
+        shell = "\n".join(line[10:] for line in shell.splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gh = root / "gh"
+            gh.write_text('#!/bin/sh\nif [ "$PROBE_TRANSPORT" = fail ]; then exit 9; fi\nprintf \'%s\\n\' \'{"tagName":"v-before-reports","assets":[]}\'\n')
+            gh.chmod(0o755)
+            output = root / "outputs"
+            env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}", GITHUB_OUTPUT=str(output))
+            held = subprocess.run(["bash", "-c", shell], env=env, capture_output=True, text=True)
+            self.assertEqual(held.returncode, 0, held.stderr)
+            self.assertEqual(output.read_text(), "ready=false\n")
+            self.assertIn("Public deployment held", held.stdout)
+            output.unlink()
+            failed = subprocess.run(["bash", "-c", shell], env=dict(env, PROBE_TRANSPORT="fail"), capture_output=True)
+            self.assertEqual(failed.returncode, 9)
+            self.assertFalse(output.exists())
+        self.assertIn("github.ref == 'refs/heads/main' && steps.conformance.outputs.ready == 'true'", workflow)
+        self.assertIn("github.ref == 'refs/heads/main' && needs.build.outputs.release_report_ready == 'true'", workflow)
+
     def test_exact_tag_and_safe_members(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

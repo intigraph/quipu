@@ -15,8 +15,9 @@ update with `python3 benchmark/public/expected_results.py --results-dir PATH --w
 Measured results, source revisions, timestamps and timings are retained in the
 `conformance-run-SHA` CI artifact. Release runs publish the report and its
 checksum as `conformance-report.tar.gz` release assets. Public docs stage the
-latest release's verified report and refuse a missing or wrong-tag report;
-the release job rebuilds docs after publishing the assets. PR previews retain
+latest release's verified report. Missing assets hold public deployment while
+the source preview still builds; download or validation failures fail the job.
+The release publisher rebuilds docs after publishing the assets. PR previews retain
 the committed historical page. The committed `results/` files are historical
 fixtures for renderer and expectation tests, not per-commit freshness claims.
 Competitor ledgers remain pinned, committed data.
