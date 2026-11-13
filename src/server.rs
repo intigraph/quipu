@@ -530,8 +530,7 @@ fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedSt
             get(service_description::service_description),
         )
         .route("/metrics", get(metrics_handler))
-        .route("/fluent/observations", fluents::append_route())
-        .route("/fluent/current", get(fluents::current))
+        .merge(fluents::routes())
         .merge(query_endpoint::routes())
         .route("/update", post(update::update_post))
         .route("/patch", post(patch::patch_post))

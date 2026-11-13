@@ -12,8 +12,13 @@ use quipu::fluent::transport::AppendRequest;
 use serde::Deserialize;
 use serde_json::json;
 
-pub(crate) fn append_route() -> axum::routing::MethodRouter<SharedStore> {
-    axum::routing::post(append).layer(axum::extract::DefaultBodyLimit::max(65536))
+pub(crate) fn routes() -> axum::Router<SharedStore> {
+    axum::Router::new()
+        .route(
+            "/fluent/observations",
+            axum::routing::post(append).layer(axum::extract::DefaultBodyLimit::max(65536)),
+        )
+        .route("/fluent/current", axum::routing::get(current))
 }
 
 pub(crate) async fn append(

@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WriteKind {
     MemoryFiles,
+    Fluent,
     Episode,
     Knot,
     Promote,
@@ -39,8 +40,9 @@ pub enum WriteKind {
 
 impl WriteKind {
     /// Every variant, for rendering and for the totality tests.
-    pub const ALL: [WriteKind; 19] = [
+    pub const ALL: [WriteKind; 20] = [
         Self::MemoryFiles,
+        Self::Fluent,
         Self::Episode,
         Self::Knot,
         Self::Promote,
@@ -65,6 +67,7 @@ impl WriteKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MemoryFiles => "memory_files",
+            Self::Fluent => "fluent",
             Self::Episode => "episode",
             Self::Knot => "knot",
             Self::Promote => "promote",
@@ -93,6 +96,7 @@ impl WriteKind {
     pub fn for_route(template: &str) -> Option<Self> {
         Some(match template {
             "/memory/commit" => Self::MemoryFiles,
+            "/fluent/observations" => Self::Fluent,
             "/episode" | "/episodes/complete" | "/episode/retract" => Self::Episode,
             "/knot" | "/knot/stage" => Self::Knot,
             "/knot/promote" | "/knot/cancel" | "/import/promote" => Self::Promote,

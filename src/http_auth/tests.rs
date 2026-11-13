@@ -358,6 +358,8 @@ fn routes_in_server_source() -> Vec<String> {
             include_str!("../server/knot_completion.rs"),
         ),
         ("server/base.rs", include_str!("../server/base.rs")),
+        // Handler-only today; scan future route additions too.
+        ("server/fluents.rs", include_str!("../server/fluents.rs")),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is
     // invisible to both tests here: its routes are never seen, so they are

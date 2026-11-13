@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-FLUENT-CURRENT 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-fluent\-current \- Read a fluent snapshot from its exact graph
+.SH SYNOPSIS
+\fBquipu fluent current\fR [\fB\-\-server\fR] [\fB\-\-graph\fR] [\fB\-\-fluent\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Read a fluent snapshot from its exact graph
+.SH OPTIONS
+.TP
+\fB\-\-server\fR \fI<VALUE>\fR
+HTTP(S) server origin without credentials, query or path
+.TP
+\fB\-\-graph\fR \fI<VALUE>\fR
+Explicit graph IRI for this operation
+.TP
+\fB\-\-fluent\fR \fI<VALUE>\fR
+Exact fluent IRI to read
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

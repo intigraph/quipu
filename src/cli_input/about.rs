@@ -7,6 +7,9 @@
 
 #[rustfmt::skip]
 pub(crate) static ABOUT: &[(&str, &str)] = &[
+    ("fluent", "Append fluent observations or read current values over authenticated HTTP"),
+    ("fluent append", "Append a JSON observation through the native fluent writer"),
+    ("fluent current", "Read a fluent snapshot from its exact graph"),
     ("competency", "Inspect pendant competency contracts without opening a store"),
     ("competency lint", "Validate competency.toml schema and query/command syntax offline; execute nothing"),
     ("version", "Print the version and source commit"),
