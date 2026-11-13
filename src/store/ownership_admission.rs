@@ -161,21 +161,19 @@ fn owner_only_regular(_: &Path, what: &str, _: u32) -> Result<fs::Metadata> {
     )))
 }
 
-/// Step 1: canonical path and device/inode from the open file itself.
+/// Step 1: canonical path and device/inode, from `lstat` of the canonical
+/// path. Never opens a descriptor on the database: closing any descriptor of
+/// that file drops every POSIX fcntl lock this process holds on it, including
+/// SQLite's, so a check must not open and close one (4qv review).
 fn database(path: &Path) -> Result<(PathBuf, Database)> {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+        use std::os::unix::fs::MetadataExt;
         let canonical = path
             .canonicalize()
             .map_err(|e| refused(format!("database path: {e}")))?;
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW)
-            .open(&canonical)
-            .map_err(|e| refused(format!("database open: {e}")))?;
-        let meta = file
-            .metadata()
+        // lstat does not follow a link substituted after canonicalization.
+        let meta = std::fs::symlink_metadata(&canonical)
             .map_err(|e| refused(format!("database stat: {e}")))?;
         if !meta.is_file() || meta.nlink() != 1 {
             return Err(refused("database is not a single-link regular file"));

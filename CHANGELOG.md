@@ -37,6 +37,8 @@ All notable changes to this project will be documented in this file.
 - *(merge)* Plan risk before native automatic persistence (#1122)([70e7b23](https://github.com/scbrown/quipu/commit/70e7b2348748b5ed11c84e27535f8655de8021af))
 - *(merge)* Merge declared DataBooks on the shared Git core (#1119)([576537d](https://github.com/scbrown/quipu/commit/576537d8a887b899b77b84075d900fc12610fda1))
 - *(client)* Admit ROOT changesets under exact local grants (#1132)([effd3c4](https://github.com/scbrown/quipu/commit/effd3c419a43f988aba77ed3c37e0ad7795f7c56))
+- *(store)* Fence native graph owners against cooperating Store writers (aegis-4qv)([2aab097](https://github.com/scbrown/quipu/commit/2aab097310ff29120cb53bacf92d78b60c93d318))
+- *(store)* Capture bounded strict snapshots across native graph owners (aegis-4qv)([18d6d6e](https://github.com/scbrown/quipu/commit/18d6d6e12d22305cbd56ae5a2193ea5cc32241dc))
 
 
 

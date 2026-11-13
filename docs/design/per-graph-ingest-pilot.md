@@ -61,6 +61,91 @@ attachment and worker budgets. An unavailable owner returns an explicit error;
 it cannot fall back to a writable legacy handle or borrow another owner's entire
 resource reservation. The graph catalog is not written on ordinary commits.
 
+### Legacy bypass fence
+
+`Store::fence_routed_graph` makes the legacy file itself refuse every write
+that would change a routed graph, whichever path or process issues it. It adds
+a `routed_graph_fence` row and BEFORE triggers on each graph-bearing column.
+The columns are discovered from the live schema; each needs a reviewed class:
+
+| Class | Tables | Fenced operations |
+|---|---|---|
+| Authoritative | `facts`, `graphs`, `forks`, `writer_graph_instances`, `frozen_packs`, `pendant_repo_graphs` | insert, update, delete |
+| Log, staging or cursor | `graph_events`, `graph_consumers`, `snapshot_uploads`, `denial_quarantine` | insert, update (retention may delete) |
+| Reference | `dataset_members` | none: consumer dataset configuration must name routed graphs |
+| Derived | `substring_facts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
+
+An unclassified graph-bearing column refuses installation and
+`verify_routed_fence`; so does a missing trigger. Term-id columns resolve the
+graph IRI at write time, so a graph interned after fencing is still covered.
+The retained legacy copy stays readable and cannot be deleted through the
+fence, which keeps it available for reverse reconciliation.
+
+Consequences to plan for, not hidden: legacy compaction or retention that
+deletes authoritative rows of a fenced graph aborts; a denial-quarantine row
+for a fenced graph aborts, so the router must refuse such requests before the
+legacy gate; installed triggers add a per-row predicate on legacy writes whose
+cost has not been measured yet. Tables created later, including on-demand
+derivations, are covered only after `verify_routed_fence` passes or the fence
+is re-installed. The fence is never installed in an owner file. Removing a
+fence row after the owner accepted writes still needs fenced reverse
+reconciliation.
+
+### Producer source cutover
+
+The observed producers write ROOT and own their facts by the transaction
+source tag `snapshot:<key>`. Moving them is therefore not only a named-graph
+fence: an old or misconfigured producer that still omits `graph` would keep
+writing ROOT copies, and existing ROOT copies would stay current for ROOT
+consumers although their producer can no longer replace them.
+`Store::cut_over_routed_source(tag, graph, revision, generation, ts)` requires
+the graph fence first. Then, in one savepoint, it retracts that tag's current
+ROOT facts (bitemporally, so history stays readable) and records the tag. A
+`transactions.source` trigger then refuses any new transaction under it. No
+producer write can land between the retraction and the fence. Identical
+re-runs retract nothing; another route for the same tag refuses.
+`verify_routed_fence` also proves the source triggers exist. Which tags move
+comes from the executing-producer inventory, never an IRI prefix.
+
+### Slice copy and source parity
+
+`Store::export_routed_slice(tag, graph)` returns a producer's current facts
+in canonical form (IRIs resolved, never file-local ids). It uses the same
+source-retraction plan that `cut_over_routed_source` retracts, so the copied
+set and the retracted set cannot drift. `Owner::import_slice` asserts it into
+the owner graph through the ownership seam, under the same tag and with its
+original valid time. A second import refuses. The qualified sequence is:
+take an immutable baseline, export, import, fence the graph, cut the source
+over. Then compare the canonical fact multiset and the SPARQL result rows in
+the owner against the baseline. Controls: moved facts left ROOT, an unmoved
+producer stayed in ROOT and never reached the owner, and the producer's next
+`replace_snapshot` in the owner replaces the copied facts.
+
+A consumer parity test runs one consumer query through the strict composed
+reader before and after the move. The query selects ROOT as the default graph
+and the routed graph by `FROM NAMED`, as `{ ?s ?p ?o } UNION { GRAPH <g> {...} }`.
+It requires identical W3C bindings, including datatypes and language tags.
+Controls: after the move, ROOT alone and the routed graph alone each give only
+their part. This shows the consumer-side rewrite a migrated consumer needs.
+Existing ROOT-only queries do not see moved facts until they adopt it.
+
+Still not covered: history copy, paging beyond the endpoint row cap, the
+production stored-query inventory, `/search` and code-intelligence joins.
+Those remain required before any cutover.
+
+### Write router
+
+`graph_router::Router::admit` takes the catalog, the legacy writer's store and
+exactly one prepared owner per route. It refuses unless the legacy fence names
+exactly the catalog's routes at the catalog revision and each route's
+generation, and `verify_routed_fence` passes; until then no route is
+advertised. `Router::knot` dispatches by `Catalog::write_target`: a routed
+graph runs only in its owner, any other target runs the ordinary pipeline on
+the legacy writer, and the request and input must name the same graph. A
+caller that bypasses the router still meets the legacy file's fence.
+`Router::recheck` repeats the fence check, e.g. after legacy maintenance. The
+router is not wired into the server, CLI or startup.
+
 ## Composed reads are part of the first slice
 
 Ingest previously visible in ROOT must remain visible to its existing consumers
@@ -85,6 +170,63 @@ under bounded participant fences and release them before evaluation. A selected
 unavailable graph or attachment-limit violation refuses the complete read. A
 scalar transaction ID spanning files refuses; never reinterpret it as a global
 head. Search, counts and feeds must obey the same visibility and graph grants.
+
+The private native prototype can pin ROOT separately with
+`Catalog::with_legacy_participant`. Its exact store identity, epoch, policy,
+generation and opaque placement remain distinct from routed graph entries.
+`Owner::prepare_with_memory` can then consume that configured legacy writer and
+open its reserved readers. A strict selection may include this participant in
+addition to the routed-owner bound. The shared allocation must reserve its writer,
+ownership-fence reader and application readers before scratch admission succeeds.
+ROOT remains absent from `Catalog::routes` and is never a routed write target.
+Queries retain the existing ROOT syntax: `FROM <urn:quipu:graph:root>` selects
+ROOT as the default graph, and `FROM NAMED <graph>` selects a routed join input.
+`GRAPH <urn:quipu:graph:root>` remains invalid.
+
+Composed authorization must explicitly include ROOT to select it. The scratch
+copy maps only physical graph zero to ROOT; other named graphs in the legacy
+file are excluded. The legacy participant uses the same nonwaiting commit fence,
+retained SQLite snapshot, identity checks and deadline as routed participants.
+This primitive does not integrate the production legacy mutation entrypoints:
+all of those must use this same fence before a server may advertise composed
+strict reads. Evaluator/RSS reservation and durable startup/bypass qualification
+also remain separate requirements.
+
+The shared admission initializer also requires an explicit
+`ComposedReadReservation`: runtime headroom, each view's scratch/dictionary/model
+share, each outstanding query's evaluator/output share, and a serialized-body
+ceiling. These shares come from the evaluator half of the same aggregate service
+budget as the SQLite allocation. Zero, overflow and overcommit refuse before
+capture. There is no production sizing default; native controls use synthetic
+reservation values to exercise admission, not to certify a production profile.
+
+A view holds its view lease through destruction of scratch state. Each query
+acquires a separate lease before parsing/evaluation. The returned
+`ComposedQueryOutput` retains that lease with its bytes, even after the view is
+dropped, so retained responses cannot silently free capacity for another query.
+The W3C output writer refuses before extending its buffer past the declared
+serialized-body ceiling; overflow returns an error rather than a partial answer.
+Consumers borrow bytes and the serializer's media type. Any consumer-made copies
+need separate accounting. Existing fresh policy/cut recheck requirements still
+apply immediately before publication; retaining bytes is not publication authority.
+
+These are reservation and output-byte controls, not an allocator meter or proof
+of a hard evaluator RSS bound. Parser, resident-model, join, format-conversion and
+runtime peaks still require workload measurements and the aggregate process/cgroup
+boundary. The in-process prototype must not be advertised as an RSS-isolated server.
+
+The private native owner adapter reuses the handoff implementation's
+[`ownership_operation`](ownership-commit-scope.md) for both its ordinary knot
+pipeline and its later deferred-embedding write. Inference holds no lineage
+latch; the second write reacquires and rechecks the same authority. A retirement
+between those phases refuses the vector write while preserving the earlier
+committed facts and existing post-commit error semantics. It does not retry facts
+or pretend that a late embedding failure rolled them back.
+
+This integration adds no startup admission or generation-pin setter. Private
+controls use the handoff implementation's existing test-only pin. The actual
+protected startup adapter, external admission and producer routing remain separate
+requirements; a simulated ACTIVE journal cannot enable a production owner.
 
 ## Qualification sequence
 
