@@ -109,7 +109,6 @@ relative graph IRI in a `CONSTRUCT FROM` query
 ledger. This number says nothing about query-result correctness; evaluation
 manifests are deliberately excluded.
 
-
 ## Updating committed conformance ledgers
 
 Required CI validates the ledgers on each source PR and queue candidate.

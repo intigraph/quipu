@@ -23,6 +23,7 @@ class LedgerSnapshotTests(unittest.TestCase):
         source.mkdir()
         data = {"quipu_revision": "measured", "suite_revision": "pinned",
                 "generated_at": "first", "generated_by": "run-1",
+                "quipu_version": "quipu 0.17.0\ngit_sha: measured\ngit_dirty: false",
                 "results": [{"id": "one", "status": "passed", "duration_ms": 1.2}]}
         for name in ledger.LEDGERS:
             (source / name).write_text(json.dumps(data))
@@ -51,9 +52,16 @@ class LedgerSnapshotTests(unittest.TestCase):
             stable = root / "stable"
             self.assertEqual(self.run_tool("--source", source, "--output", stable), 0)
             data["quipu_revision"] = "queue-candidate"
+            data["quipu_version"] = "quipu 0.17.0\ngit_sha: queue-candidate\ngit_dirty: false"
             path = source / ledger.LEDGERS[0]
             path.write_text(json.dumps(data))
             self.assertEqual(self.run_tool("--source", source, "--check", stable), 0)
+            for version in ("quipu 0.18.0\ngit_sha: queue-candidate\ngit_dirty: false",
+                            "quipu 0.17.0\ngit_sha: queue-candidate\ngit_dirty: true"):
+                changed = copy.deepcopy(data)
+                changed["quipu_version"] = version
+                path.write_text(json.dumps(changed))
+                self.assertEqual(self.run_tool("--source", source, "--check", stable), 1)
             for field, value in (("status", "failed"), ("id", "missing-original-case")):
                 changed = copy.deepcopy(data)
                 changed["results"][0][field] = value

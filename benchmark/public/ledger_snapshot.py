@@ -65,11 +65,17 @@ def snapshot(value, *, outcomes=False):
     synthetic commit necessarily have different IDs.
     """
     if isinstance(value, dict):
-        return {
-            key: snapshot(child, outcomes=outcomes)
-            for key, child in value.items()
-            if key not in TELEMETRY and not (outcomes and key == "quipu_revision")
-        }
+        result = {}
+        for key, child in value.items():
+            if key in TELEMETRY or (outcomes and key == "quipu_revision"):
+                continue
+            if outcomes and key == "quipu_version" and isinstance(child, str):
+                # The version banner repeats the measured revision. Keep the
+                # actual version and dirty-state evidence in outcome checks.
+                child = "\n".join(line for line in child.splitlines()
+                                  if not line.startswith("git_sha:"))
+            result[key] = snapshot(child, outcomes=outcomes)
+        return result
     if isinstance(value, list):
         return [snapshot(child, outcomes=outcomes) for child in value]
     return value

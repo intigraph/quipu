@@ -716,6 +716,9 @@ def head_tree_fixture(*, stale=True):
         revision = measured if stale else run("rev-parse", "HEAD").stdout.strip()
         for ledger_path in (public / "results").glob("*.json"):
             data = json.loads(ledger_path.read_text())
+            # These controls exercise legacy revision provenance in their own
+            # tiny tree; never inherit a real measurement's source digest.
+            data.pop("code_digest", None)
             for key in data:
                 if key.endswith("quipu_revision"):
                     data[key] = revision

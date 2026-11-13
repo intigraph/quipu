@@ -1,8 +1,8 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "cd86223bd2afdce9ce616cdaa90825b6d23ab3ab",
-  "quipu_version": "quipu 0.17.0\ngit_sha: cd86223bd2afdce9ce616cdaa90825b6d23ab3ab\ngit_dirty: false",
+  "quipu_revision": "7f99fc3317176e7255e0461f97f0cecc835d9644",
+  "quipu_version": "quipu 0.17.0\ngit_sha: 7f99fc3317176e7255e0461f97f0cecc835d9644\ngit_dirty: false",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -1425,5 +1425,6 @@
       "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     }
   ],
-  "inventory_digest": "6de8774f671a8ebde8f610a40f8648cf1dfb61abb08a1a095734cb561b2fd06c"
+  "inventory_digest": "6de8774f671a8ebde8f610a40f8648cf1dfb61abb08a1a095734cb561b2fd06c",
+  "code_digest": "sha256:cd321744a4b5ee5ba5fa5da5ddd9c62b88a98fd14621fc4f9075be43dd3ad676"
 }

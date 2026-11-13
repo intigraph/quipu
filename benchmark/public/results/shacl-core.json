@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C SHACL Core conformance",
   "suite_revision": "9c863967bceaef1a87c24e4dd761eda763823120",
-  "quipu_revision": "cd86223bd2afdce9ce616cdaa90825b6d23ab3ab",
+  "quipu_revision": "7f99fc3317176e7255e0461f97f0cecc835d9644",
   "runner_version": 1,
   "inventory_digest": "4e4893d94f93cb4497bcc9381c4892cbea74a493e60d0c9745bd0c6ae9fdb4ea",
   "classes": {
@@ -1962,5 +1962,6 @@
   "reproduce": {
     "runner": "python3 benchmark/public/shacl_core.py",
     "suite": "/tmp/data-shapes/data-shapes-test-suite/tests"
-  }
+  },
+  "code_digest": "sha256:cd321744a4b5ee5ba5fa5da5ddd9c62b88a98fd14621fc4f9075be43dd3ad676"
 }

@@ -37,8 +37,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `cd86223bd2afdce9ce616cdaa90825b6d23ab3ab` |
-| Quipu revision (syntax) | `cd86223bd2afdce9ce616cdaa90825b6d23ab3ab` |
+| Quipu revision (evaluation) | `7f99fc3317176e7255e0461f97f0cecc835d9644` |
+| Quipu revision (syntax) | `7f99fc3317176e7255e0461f97f0cecc835d9644` |
 | Quipu version | `quipu 0.17.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -436,7 +436,7 @@ Ledger: [`shacl-write-path.json`](https://github.com/intigraph/quipu/blob/main/b
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger records quipu `cd86223bd2af`. Per-run timestamps, producer URLs and timings are retained in the [Conformance CI artifacts](https://github.com/intigraph/quipu/actions/workflows/conformance.yml), outside the stable committed ledger.
+Ledger records quipu `7f99fc331717`. Per-run timestamps, producer URLs and timings are retained in the [Conformance CI artifacts](https://github.com/intigraph/quipu/actions/workflows/conformance.yml), outside the stable committed ledger.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
