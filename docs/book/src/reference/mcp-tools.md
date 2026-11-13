@@ -1181,7 +1181,7 @@ Fields: `consumer_id` (required), `graph` (required), `offset` (required).
 
 Read whole transaction change pages. graph scopes an exact graph; use next_tx for the next page. No cursor write.
 
-Fields: `since`, `limit`, `capture`, `graph`.
+Fields: `since`, `limit`, `capture`, `graph`, `predicate`, `subject`, `member`.
 
 ### `quipu_subscriptions`
 

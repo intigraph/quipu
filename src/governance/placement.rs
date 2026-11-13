@@ -669,8 +669,9 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 has_operating_point: composed.contains_key("operatingPoint"),
                 fp_tolerances: composed
                     .get("falsePositiveTolerance")
-                    .map(|vs| vs.iter().filter_map(|v| v.parse().ok()).collect())
-                    .unwrap_or_default(),
+                    .map_or_else(Default::default, |vs| {
+                        vs.iter().filter_map(|v| v.parse().ok()).collect()
+                    }),
                 ambiguous,
             },
         );

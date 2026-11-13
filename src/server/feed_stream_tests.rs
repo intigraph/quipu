@@ -438,3 +438,29 @@ async fn a_record_larger_than_a_frame_is_refused_without_advancing() {
         .unwrap();
     assert!(end.is_none(), "stream should end after the refusal");
 }
+
+/// aegis-n0wc.3: predicate and subject are change-stream filters. The event
+/// stream refuses them, and a list is 1 to 64 non-empty IRIs.
+#[test]
+fn predicate_and_subject_scope_only_the_change_stream_and_are_bounded() {
+    let p = |value: Value| -> Params { serde_json::from_value(value).unwrap() };
+    assert!(scope_ok(&p(json!({"predicate": "urn:p:status"})), true));
+    assert!(scope_ok(
+        &p(json!({"graph": "urn:g", "predicate": "urn:p:a,urn:p:b", "subject": "urn:s"})),
+        true
+    ));
+    assert!(!scope_ok(&p(json!({"predicate": "urn:p:status"})), false));
+    assert!(!scope_ok(&p(json!({"subject": "urn:s"})), false));
+    assert!(!scope_ok(&p(json!({"predicate": ""})), true));
+    assert!(!scope_ok(&p(json!({"subject": "urn:a,,urn:b"})), true));
+    let too_many = (0..65)
+        .map(|i| format!("urn:s:{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    assert!(!scope_ok(&p(json!({"subject": too_many})), true));
+    let sixty_four = (0..64)
+        .map(|i| format!("urn:s:{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    assert!(scope_ok(&p(json!({"subject": sixty_four})), true));
+}

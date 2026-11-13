@@ -5,6 +5,44 @@ that currently knows it. Link to the role when you mean a job; link to the host
 when you mean the hardware. Renaming a label does not change an IRI. Existing
 IRIs retain their meaning; this feature does not infer sameAs or migrate data.
 
+## Published stack vocabularies
+
+The stack publishes vocabulary IRIs under `https://w3id.org/intigraph/`.
+These vocabulary namespaces identify classes and properties; they are separate
+from the entity namespaces configured below. Use the stable links when citing
+terms across repositories:
+
+| Vocabulary | Namespace |
+| --- | --- |
+| Camayoc: code-entities | [https://w3id.org/intigraph/camayoc/code-entities/ns#](https://w3id.org/intigraph/camayoc/code-entities/ns#) |
+| Camayoc: core | [https://w3id.org/intigraph/camayoc/core/ns#](https://w3id.org/intigraph/camayoc/core/ns#) |
+| Camayoc: delivery | [https://w3id.org/intigraph/camayoc/delivery/ns#](https://w3id.org/intigraph/camayoc/delivery/ns#) |
+| Camayoc: homelab-infra | [https://w3id.org/intigraph/camayoc/homelab-infra/ns#](https://w3id.org/intigraph/camayoc/homelab-infra/ns#) |
+| Camayoc: personal-media | [https://w3id.org/intigraph/camayoc/personal-media/ns#](https://w3id.org/intigraph/camayoc/personal-media/ns#) |
+| Camayoc: session-transcript | [https://w3id.org/intigraph/camayoc/session-transcript/ns#](https://w3id.org/intigraph/camayoc/session-transcript/ns#) |
+| Camayoc: software-factory | [https://w3id.org/intigraph/camayoc/software-factory/ns#](https://w3id.org/intigraph/camayoc/software-factory/ns#) |
+| Camayoc: usage-breakdown | [https://w3id.org/intigraph/camayoc/usage-breakdown/ns#](https://w3id.org/intigraph/camayoc/usage-breakdown/ns#) |
+| Quechua | [https://w3id.org/intigraph/quechua/ns#](https://w3id.org/intigraph/quechua/ns#) |
+| Quipu | [https://w3id.org/intigraph/quipu/ns#](https://w3id.org/intigraph/quipu/ns#) |
+| Seeds | [https://w3id.org/intigraph/seeds/ns#](https://w3id.org/intigraph/seeds/ns#) |
+
+The resolver serves HTML for browser requests and RDF for an explicit
+`Accept: text/turtle` or `Accept: application/ld+json` request. The fragment
+identifies a term within the vocabulary and is not sent in the HTTP request.
+For example:
+
+```sh
+curl -L -H 'Accept: text/turtle' https://w3id.org/intigraph/camayoc/core/ns
+```
+
+A public vocabulary snapshot does not establish which pack a local store has
+loaded. Use the selected release bundle's manifest and checksums to identify
+pack assets and their versions. Renaming pack assets or linking a vocabulary
+does not migrate stored data or enable inference. Legacy IRIs retain their
+meaning; compatibility requires the explicit aliases and validation behavior
+provided by the selected packs and engine. Do not assume that `owl:sameAs`
+alone changes SHACL targets or makes every legacy instance validate.
+
 ## Configure and list
 
 Declare namespaces in `.bobbin/config.toml` or the normal user config:
