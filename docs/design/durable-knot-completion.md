@@ -57,7 +57,9 @@ Do not wrap `tool_knot` in a new outer savepoint. Existing
 write their own transactions. Moving their apparent commit boundary changes
 refusal and observer semantics. An ambient "next transaction" hook is also
 unsafe: an audit/refusal or derived transaction could consume the main receipt.
-Pass the binding explicitly to the intended native transaction.
+Pass the binding explicitly to the intended native transaction. The bound tool
+entry refuses an existing transaction or savepoint, so its ordinary RELEASE is
+the actual commit boundary; ordinary unbound transaction behavior is unchanged.
 
 Persist worker completion only after every synchronous and deferred action has
 ended. A compact **committed** witness is distinct from **worker finished**:
@@ -73,6 +75,7 @@ is unresolved until a receiver-side seal also fences any late worker.
 | admitted | Exact ID consumed; worker may still start | Retain frozen custody |
 | committed | Atomic effect witness exists; worker completion unresolved | Read exact effect; no replay |
 | finished | Worker ended; bounded original result retained | Validate result and exact readback |
+| stopped | Worker ended in error; a commit witness may exist | Not rollback proof; read back the exact effect |
 | sealed | Receiver fenced this attempt at the commit boundary | No replay; explicit disposition only |
 
 Status reads never seal. Sealing requires a separate, explicit authority-bearing
@@ -138,3 +141,10 @@ its owner. An explicit native owner-bound seal can select its immutable retained
 after restart without exposing the receiver nonce. The technical design read
 still covers this authority and the lifetime capacity policy; no transport may
 seal automatically. Consumer adoption and installed qualification remain pending.
+
+Before consumer activation, expose lifetime ledger occupancy and admission-refusal
+metrics, establish rate and remaining-capacity runway thresholds, and name the
+operational response. The 65,536 entries cover the store's entire lifetime,
+including terminal rows and old epochs. This is not an unbounded service limit
+or a concurrent-worker quota. Any compaction policy needs separate review and
+must retain consumed-ID and late-worker fences; age alone never permits reuse.
