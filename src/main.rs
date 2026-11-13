@@ -59,6 +59,7 @@ mod cli_demotions;
 mod cli_entailment;
 mod cli_explain;
 mod cli_export;
+mod cli_fluent;
 #[cfg(feature = "remote")]
 mod cli_follow;
 mod cli_fork;
@@ -126,6 +127,7 @@ fn main() {
     }
 
     match args[1].as_str() {
+        "fluent" => return cli_fluent::run(&args),
         "competency" => return cli_competency::run(&args),
         "install-alias" => return cli_alias::run(&args),
         "git-mergetool" => return cli_git_mergetool::run(&args),

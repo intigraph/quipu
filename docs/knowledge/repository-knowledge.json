@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "c8ec69d05a96136ce72d8170272918890d39179239ba669e5c0223912b6e18cb",
+      "source_sha256": "b2b0dc468ac495c868603f3a4e7b9e9d0212dcb8c3a8ce66ff4700f61166b191",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
