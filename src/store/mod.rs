@@ -15,6 +15,8 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+/// Durable, native receiver completion evidence; no replay API.
+pub mod knot_completion;
 mod ownership;
 mod ownership_fence;
 #[cfg(not(target_arch = "wasm32"))]
@@ -134,10 +136,6 @@ mod term_space_tests;
 #[cfg(test)]
 mod tests;
 
-use std::sync::Arc;
-
-use rusqlite::{Connection, OptionalExtension, params};
-
 use crate::config::{
     EmbeddingConfig, GovernanceConfig, OwlConfig, ResolutionConfig, SearchConfig, ShaclConfig,
 };
@@ -147,6 +145,8 @@ use crate::governance::PolicyRegistry;
 use crate::types::Value;
 use crate::vector::KnowledgeVectorStore;
 use crate::vector_delegate::DelegatingVectorStore;
+use rusqlite::{Connection, OptionalExtension, params};
+use std::sync::Arc;
 
 /// The core fact log store backed by `SQLite`.
 pub struct Store {

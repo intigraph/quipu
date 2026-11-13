@@ -1,12 +1,10 @@
 //! Quipu REST API server — HTTP interface to the knowledge graph.
 //! Usage: `quipu-server [--db <path>] [--bind <addr>]`
-
-use std::sync::Arc;
-
 use axum::{
     Router,
     routing::{get, post},
 };
+use std::sync::Arc;
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -54,6 +52,8 @@ mod knot_completion;
 #[cfg(test)]
 #[path = "server/knot_completion_tests.rs"]
 mod knot_completion_tests;
+#[path = "server/knot_durable.rs"]
+mod knot_durable;
 #[path = "server/mapping.rs"]
 mod mapping;
 #[path = "server/memory_files.rs"]
