@@ -186,6 +186,12 @@ requires fresh qualification. Cancellation is never a passing result. See
 The budget limits this repository's ordinary PR load; other repositories and
 non-PR workloads can still consume the account's hosted capacity.
 
+Aggregate jobs keep `always()` to report upstream failures, with an explicit
+PR-only `!cancelled()` guard so superseded PR runs can stop. Main, release and
+merge-group verdicts keep their existing behavior. Artifact-upload cleanup
+steps may still use `always()` within a job. See
+[GitHub workflow cancellation](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-cancellation).
+
 Run `just ci-pr-budget check` and `just ci-pr-budget test` to audit every
 PR-triggered workflow and reject jobs that escape the budget, replace pending
 work, or accidentally serialize merge-group matrix arms.

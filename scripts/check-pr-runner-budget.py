@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 import yaml
 
+PR_CANCEL_GUARD = "(github.event_name != 'pull_request' || !cancelled())"
+
 
 class UniqueLoader(yaml.BaseLoader):
     def construct_mapping(self, node, deep=False):
@@ -50,6 +52,9 @@ def audit(documents):
                 errors.append(label + ": queue:max must retain pending jobs instead of replacing them")
             if str(policy.get("cancel-in-progress")).lower() != "false":
                 errors.append(label + ": a budget slot must never cancel another PR job")
+            condition = config.get("if", "")
+            if "always()" in condition and PR_CANCEL_GUARD not in condition:
+                errors.append(label + ": always jobs must release superseded PR runs")
     if not count or slots != {1, 2, 3, 4}:
         errors.append("complete PR runner population/four budget slots not established")
     ci = documents.get("ci.yml", {})

@@ -969,7 +969,7 @@ jobs:
 
   release-correctness:
     name: Release correctness
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
+    if: ${{ ((github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always())) && (github.event_name != 'pull_request' || !cancelled()) }}
     needs: [clippy, test, build, check, shacl-write-path, generated-docs]
     runs-on: ubuntu-latest
     concurrency:
@@ -991,7 +991,7 @@ jobs:
 
   extended-correctness:
     name: Extended correctness
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always() && !contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ ((github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always() && !contains(fromJSON('["push", "merge_group"]'), github.event_name))) && (github.event_name != 'pull_request' || !cancelled()) }}
     needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
     concurrency:
