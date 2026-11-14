@@ -12,6 +12,14 @@ use super::{SharedStore, base::AppError, base::blocking};
 const SD: &str = "http://www.w3.org/ns/sparql-service-description#";
 const VOID: &str = "http://rdfs.org/ns/void#";
 
+/// Service-description routes, merged before the common authentication guard.
+pub(crate) fn routes() -> axum::Router<SharedStore> {
+    axum::Router::new().route(
+        "/.well-known/void",
+        axum::routing::get(service_description),
+    )
+}
+
 pub(crate) async fn service_description(
     State(store): State<SharedStore>,
     headers: HeaderMap,

@@ -527,10 +527,7 @@ fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedSt
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())
-        .route(
-            "/.well-known/void",
-            get(service_description::service_description),
-        )
+        .merge(service_description::routes())
         .route("/metrics", get(metrics_handler))
         .merge(fluents::routes())
         .merge(query_endpoint::routes())
