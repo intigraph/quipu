@@ -279,3 +279,64 @@ async fn list_advertises_rows_and_rows_answers_through_the_handler() {
         assert!(format!("{err:?}").contains(needle), "{needle}: {err:?}");
     }
 }
+
+/// aegis-eif2sj: the certificate rides beside an unchanged aggregate answer,
+/// and a malformed certificate request is refused rather than ignored.
+#[tokio::test]
+async fn aggregate_carries_a_certificate_and_refuses_a_malformed_one() {
+    let (_dir, s) = handle();
+    let plain = projections(
+        State(s.clone()),
+        axum::Json(json!({"action": "aggregate", "name": "items", "group_by": "key"})),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert!(plain.get("certificate").is_none(), "{plain}");
+    let a = projections(
+        State(s.clone()),
+        axum::Json(
+            json!({"action": "aggregate", "name": "items", "group_by": "key",
+            "certificate": {"class": format!("{EX}Item"), "unique": ["assignee"]}}),
+        ),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(a["total"], plain["total"], "{a}");
+    assert_eq!(a["groups"], plain["groups"], "{a}");
+    let c = &a["certificate"];
+    // The fixture never types its subjects: no members, every row lacks it.
+    assert_eq!(c["rows"], 4, "{a}");
+    assert_eq!(c["members"], 0, "{a}");
+    assert_eq!(c["rows_without_class"], 4, "{a}");
+    // Three rows share assignee "wu".
+    assert_eq!(c["unique"]["assignee"]["duplicated"], 3, "{a}");
+    assert_eq!(c["tx"], a["tx"], "{a}");
+    for (certificate, needle) in [
+        (json!("x"), "certificate must be an object"),
+        (json!({"unique": []}), "class must be an IRI string"),
+        (json!({"class": "urn:c", "extra": 1}), "unknown field"),
+        (
+            json!({"class": "urn:c", "unique": "assignee"}),
+            "unique must be an array",
+        ),
+        (
+            json!({"class": "urn:c", "unique": [1]}),
+            "unique must list column names",
+        ),
+        (
+            json!({"class": "urn:c", "unique": ["nope"]}),
+            "not declared",
+        ),
+    ] {
+        let err = projections(
+            State(s.clone()),
+            axum::Json(json!({"action": "aggregate", "name": "items",
+                "certificate": certificate})),
+        )
+        .await
+        .unwrap_err();
+        assert!(format!("{err:?}").contains(needle), "{needle}: {err:?}");
+    }
+}
