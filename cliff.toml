@@ -2,6 +2,8 @@
 header = """
 # Changelog\n
 All notable changes to this project will be documented in this file.\n
+[Breaking changes and running-system corrections](releases/BREAKING-CHANGES.md)
+are generated from the versioned release records.\n
 """
 body = """
 {%- macro remote_url() -%}

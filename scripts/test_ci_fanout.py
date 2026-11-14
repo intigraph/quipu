@@ -77,12 +77,17 @@ class WorkflowContract(unittest.TestCase):
                          "inputs.rederive == true || github.event_name == 'workflow_dispatch'")
         self.assertIn('rederive', ci['conformance']['with'])
 
-    def test_path_specific_checks(self):
+    def test_browser_coverage_at_queue_and_nightly(self):
         ci = workflow('ci.yml')['jobs']
         for job in ['wasm', 'wasm-explorer']:
             self.assertEqual(ci[job]['needs'], 'pr-paths')
             self.assertIn('!cancelled()', ci[job]['if'])  # nightly selector is skipped
-            self.assertIn("needs.pr-paths.outputs.wasm == 'true'", ci[job]['if'])
+            self.assertEqual(ci[job]['if'],
+                             "${{ !cancelled() && (github.event_name == 'merge_group' || "
+                             "github.event_name == 'schedule' || "
+                             "github.event_name == 'workflow_dispatch') }}")
+
+    def test_path_specific_checks(self):
         for file, included, excluded in [
             ('python-bindings.yml', ['python/**', 'bindings/python/**'], ['src/**', 'Cargo.toml']),
             ('docs.yml', ['docs/**'], ['src/**', 'Cargo.toml']),

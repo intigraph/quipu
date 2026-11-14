@@ -501,9 +501,12 @@ jobs:
   # quipu CLI + sqlite3, browser-produced pack → native attach, native .db →
   # browser import). Steps mirror `just wasm check|test|roundtrip` without a
   # just dependency, matching the raw-cargo style of the other jobs.
+  # Keep heavy browser coverage at queue admission and nightly/manual runs.
+  # Event-only conditions let the review gate prove PR skips from source;
+  # unobservable path-selector outputs cannot establish a skipped verdict.
   wasm:
     name: Wasm (browser harness)
-    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && !github.event.pull_request.draft && needs.pr-paths.outputs.wasm == 'true')) }}
+    if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     needs: pr-paths
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
@@ -580,7 +583,7 @@ jobs:
   # and merging them would hide which of the two went red.
   wasm-explorer:
     name: Wasm (browser bundle)
-    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && !github.event.pull_request.draft && needs.pr-paths.outputs.wasm == 'true')) }}
+    if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     needs: pr-paths
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
@@ -613,7 +616,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pre-commit PyYAML==6.0.3
+      - uses: extractions/setup-just@v2
+      - run: pip install pre-commit PyYAML==6.0.3 jsonschema==4.23.0
       - run: python3 scripts/check-private-keys.py
       # Quipu core names no stack vocabulary (namespace, hostname or term list);
       # vocabularies are data a store loads. Self-test the scanner first so a
@@ -650,7 +654,7 @@ jobs:
       # no model call and no build.
       - name: Verify the CI to Release contract
         run: |
-          python3 scripts/test_ci_fanout.py
+          python3 scripts/test_ci_fanout.py && just breaking test && just breaking render --check
           python3 scripts/test_release_ci_gate.py
           python3 docs/demos/terminal/test_harness_origin.py -v
           python3 scripts/test_release_schedule.py
