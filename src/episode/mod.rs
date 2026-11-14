@@ -31,6 +31,7 @@ use node_type::validate_node_type;
 pub(crate) use node_type::{QUECHUA_TYPE_PREFIX, node_type_iri};
 #[cfg(test)]
 mod near_duplicate_tests;
+mod properties;
 #[cfg(feature = "shacl")]
 mod refusals;
 mod validation;
@@ -271,6 +272,7 @@ pub fn ingest_episode_outcome(
     // the author is still present and can express one unambiguous node entry.
     validation::reject_duplicate_node_names(&episode.nodes)?;
     address::validate_nodes(&episode.nodes, base_ns)?;
+    properties::validate_nodes(&episode.nodes)?;
 
     // Idempotency key (hq-fhc). The episode activity IRI is derived purely from
     // the episode name, so re-ingesting the same name targets the same node. We
@@ -606,42 +608,14 @@ fn episode_to_turtle(
             ttl.push_str(&format!(" ;\n    quipu:distinctFrom <{other}>"));
         }
 
-        // Optional properties as typed literals. A JSON ARRAY yields one triple
-        // per element — the natural RDF reading, and exactly what the /knot+Turtle
-        // path's `a "x", "y" .` already does. Previously the array arm was a
-        // silent no-op, so a multi-valued property (e.g. a CrewRole trait axis
-        // that is MULTI by design) declared as a JSON array turned into a SILENTLY
-        // incomplete node with a 200 response. Scalars are unchanged
-        // (byte-identical output).
+        // Typed value objects preserve explicit literal datatypes. The write
+        // preflight validates predicate/datatype IRIs before hashing or mutation.
         if let Some(props) = &node.properties {
-            // Object term for a SCALAR json value; None for array/object/null.
-            let scalar_term = |v: &serde_json::Value| -> Option<String> {
-                match v {
-                    serde_json::Value::String(s) => Some(format!("\"{}\"", escape_turtle(s))),
-                    serde_json::Value::Number(n) => n
-                        .as_i64()
-                        .map(|i| format!("\"{i}\"^^xsd:integer"))
-                        .or_else(|| n.as_f64().map(|f| format!("\"{f}\"^^xsd:double"))),
-                    serde_json::Value::Bool(b) => Some(format!("\"{b}\"^^xsd:boolean")),
-                    _ => None,
-                }
-            };
-            for (key, val) in props {
-                let pred = sanitize_iri_local(key);
-                match val {
-                    // one triple per scalar element — multi-valued predicate preserved
-                    serde_json::Value::Array(elems) => {
-                        for elem in elems {
-                            if let Some(term) = scalar_term(elem) {
-                                ttl.push_str(&format!(" ;\n    aegis:{pred} {term}"));
-                            }
-                        }
-                    }
-                    _ => {
-                        if let Some(term) = scalar_term(val) {
-                            ttl.push_str(&format!(" ;\n    aegis:{pred} {term}"));
-                        }
-                    }
+            for (key, value) in props {
+                for triple in properties::render(key, value)
+                    .expect("episode properties validated before Turtle generation")
+                {
+                    ttl.push_str(&triple);
                 }
             }
         }
@@ -764,3 +738,6 @@ mod graph_idempotency_tests;
 mod tests;
 #[cfg(test)]
 mod type_ns_tests;
+
+#[cfg(all(test, feature = "shacl"))]
+mod directive_deferral_tests;

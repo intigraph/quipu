@@ -223,3 +223,38 @@ curl -s localhost:3030/retract -X POST \
 
 Retractions don't delete data — they close the valid-time window. The
 original facts remain in the log for audit and time-travel.
+
+## Retaining a directive before evaluating its links
+
+A Directive needs `trackedBy` a typed WorkItem and `governedBy` a typed Policy,
+or one typed traceability evaluation date. Episode properties accept explicit
+typed literal objects and absolute HTTP(S)/URN predicate IRIs:
+
+```json
+{
+  "name": "retained-decision",
+  "type": "Directive",
+  "properties": {
+    "https://w3id.org/intigraph/quechua/ns#traceabilityDueAt": {
+      "value": "2030-11-28T08:00:00Z",
+      "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+    }
+  }
+}
+```
+
+A typed object has exactly two string fields, `value` and `datatype`. Datatype
+and predicate IRIs are validated before mutation; ordinary JSON scalar and
+array properties keep their existing encoding. The loaded SHACL shape checks
+the literal datatype and cardinality. A plain JSON date string is untyped.
+
+Choose an actual evaluation deadline; fourteen days from capture is a suggested
+starting point. A past deadline retains the decision but makes its missing
+traceability overdue. It neither expires the directive nor grants authority to
+execute it. Camayoc's `camayoc_overdue_directive_traceability` query and installed
+`directive-lapse` adapter surface the overdue work to administrators.
+
+Episode admission blocks SHACL Violations. Warnings and Info are advisory,
+consistent with `ValidationFeedback::blocks()`; the SHACL `conforms` report
+remains false for any reported severity. Directive traceability is an explicit
+reject/Violation shape, so neither links nor a date still refuses the write.
