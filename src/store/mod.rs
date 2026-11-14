@@ -104,7 +104,8 @@ pub(crate) mod slot_read_batch;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod reserved_admission_fixture;
 pub use projections::{
-    GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
+    GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionCertificate, ProjectionRows,
+    ProjectionStatus, RowsAfter,
 };
 #[cfg(feature = "owl")]
 mod ontology_window;
