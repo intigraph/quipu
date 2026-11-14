@@ -36,6 +36,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  deploy-skip-proof:
+    name: Deployment skip prefix proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: extractions/setup-just@v2
+      - run: just deploy-skip test
+      - run: just deploy-skip check
+
   query-builders:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Typed SPARQL client builders
@@ -906,7 +919,7 @@ jobs:
   release-correctness:
     name: Release correctness
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
-    needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance]
+    needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance, deploy-skip-proof]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass
