@@ -12,7 +12,7 @@ use rudof_rdf::rdf_core::{NeighsRDF, Rdf, SHACLPath};
 use rudof_rdf::rdf_impl::OxigraphInMemory;
 use shacl_engine::error::ValidationError;
 use shacl_engine::ir::{IRComponent, IRSchema, IRShape, ShapeLabelIdx};
-use shacl_engine::validator::engine::{Engine, NativeEngine};
+use shacl_engine::validator::engine::{Engine, NativeEngine, NodeExprState};
 use shacl_engine::validator::nodes::{FocusNodes, ValueNodes};
 use shacl_engine::validator::processor::ShaclProcessor;
 use shacl_engine::validator::report::ValidationOutcome;
@@ -51,6 +51,10 @@ macro_rules! forward_mut {
 }
 
 impl Engine<OxigraphInMemory> for SubclassEngine {
+    fn node_expr_state(&mut self) -> &mut NodeExprState {
+        self.inner.node_expr_state()
+    }
+
     fn build_indexes(&mut self, store: &OxigraphInMemory) -> Result<(), ValidationError> {
         self.inner.build_indexes(store)?;
         let mut children: HashMap<Object, Vec<Object>> = HashMap::new();

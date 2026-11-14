@@ -49,11 +49,8 @@ impl Fixture {
             },
         )
         .unwrap();
-        store
-            .ownership_fence
-            .as_ref()
-            .unwrap()
-            .pin_journal(journal.clone(), authority.clone());
+        drop(store);
+        let store = super::super::ownership_admission_fixture::open(&path, &journal, &authority);
         Self {
             _dir: dir,
             store,
