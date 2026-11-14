@@ -149,6 +149,8 @@ pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
 pub mod grant_scope;
+/// Immutable admission plans for the per-graph writer pilot; not an activation API.
+pub mod graph_catalog;
 /// Inactive SQLite-only HA read profile; no serving adapter is installed.
 #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
 pub mod ha_read;
