@@ -409,6 +409,9 @@ pub(crate) fn import_inner(
     // mismatch; attesting bytes that do not hash to what the manifest claims would
     // be signing the wrong thing.
     verify_share(request)?;
+    if let Some(profile) = &request.manifest.required_profile {
+        profile.require_present(store)?;
+    }
     crate::namespace_publication::receive(store, request)?;
     crate::import_embedding::verify_recipe(store, request.manifest.embedding.as_ref())?;
     // THEN THE DESTINATION STAMP THE SHARE CARRIES, still before anything is
