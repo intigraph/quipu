@@ -277,6 +277,12 @@ impl Store {
         conn: Connection,
         attachments: &[attach::Attachment],
     ) -> Result<Self> {
+        // Every writable route (ordinary and S1 enrolled) takes the shared
+        // native writer lease here, before migrations or any other
+        // initializing write, so a graph Owner's exclusive upgrade excludes
+        // enrolled handles too.
+        #[cfg(unix)]
+        let writer_lease = super::writer_lease::Lease::claim(&conn)?;
         crate::lexical::register(&conn)?;
         // Per-row SPARQL scans reuse cached statements, one per text and
         // nesting depth (aegis-ek4); a multi-branch board query needs more
@@ -385,6 +391,10 @@ impl Store {
         alias::build_term_alias(&conn, attachments)?;
 
         let mut store = Self::with_connection(conn);
+        #[cfg(unix)]
+        {
+            store.writer_lease = writer_lease;
+        }
         store.created_fact_schema = created_fact_schema;
         // A later direct-library vector write must not activate FTS on an old
         // unindexed store merely because the global new-store default is on.
@@ -595,6 +605,8 @@ impl Store {
         Self {
             conn,
             ownership_fence: None,
+            #[cfg(unix)]
+            writer_lease: None,
             signing: None,
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),

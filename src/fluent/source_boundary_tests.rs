@@ -56,9 +56,13 @@ fn native_pendant_refuses_without_destroying_raw_history_or_shipping_partial_fil
         )
         .is_err()
     );
+    let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
     assert!(
-        std::fs::read_dir(dir.path()).unwrap().next().is_none(),
-        "a refused producer must remove its building file and SQLite siblings"
+        leftovers.is_empty(),
+        "a refused producer must remove its building file and SQLite siblings: {leftovers:?}"
     );
     assert_eq!(store.latest_tx_id().unwrap(), tx);
     assert_eq!(

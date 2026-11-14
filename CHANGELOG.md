@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Prepare bounded native owner leases, enrolled reader admission and strict-cut snapshots while preserving ordinary multi-handle writers.
+
 - Add immutable graph-owner catalog plans with bounded fan-out, placement and write-target admission; no route is activated.
 
 - Size SQLite connections from one aggregate budget and support bounded RDF result serialization without returning a partial body.
