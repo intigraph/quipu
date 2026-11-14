@@ -4,9 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
+
 ### Fixed
 
 - Remove a temporary native writer-lease sibling after pack export succeeds or refuses; retain the original export error and the single-file artifact contract.
+- Include the phase observer in route classification coverage and refresh the REST source witness ([b7c5c01](https://github.com/intigraph/quipu/commit/b7c5c0196308f06b9b591c75d413ab25033bd08a)).
 
 ## [0.18.0] - 2026-11-13
 
