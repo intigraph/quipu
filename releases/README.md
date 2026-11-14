@@ -43,7 +43,6 @@ whitespace-only file change. Output includes the observed file SHA256; approval
 authentication remains false and belongs to the promotion gate. Candidate order
 and envelope authenticity are verified by that consumer, not reimplemented here.
 
-
 One deterministic renderer produces [the correction changelog](BREAKING-CHANGES.md)
 and the book's breaking-change page. The root changelog links to these records.
 `render --check` also requires the correction link in both the root changelog
