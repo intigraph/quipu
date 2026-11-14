@@ -4,11 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.18.0] - 2026-11-13
-
 ### Added
 
 - *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
+
+### Fixed
+
+- Include the phase observer in route classification coverage and refresh the REST source witness ([b7c5c01](https://github.com/intigraph/quipu/commit/b7c5c0196308f06b9b591c75d413ab25033bd08a)).
+
+## [0.18.0] - 2026-11-13
+
+### Added
 
 - *(reconcile)* [**breaking**] Code entities under [quipu].code_base, code vocabulary under base_ns (gju5 S3c) (#1014)([a16f8cf](https://github.com/scbrown/quipu/commit/a16f8cffff710a3af8190cfa5a7c7868c43d3e0f))
 - *(owl)* /ontology load can defer materialization off the writer lock (#1047)([44a403f](https://github.com/scbrown/quipu/commit/44a403f51645585bc6e5ae9c0cf82abda85bc2e9))
