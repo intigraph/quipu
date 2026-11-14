@@ -283,3 +283,53 @@ fn six_historical_score_arrays_project_to_the_provisional_floor() {
         }
     }
 }
+#[test]
+fn hybrid_context_uses_rank_and_terms_not_cosine() {
+    let input = json!({"query":"holon definition"});
+    let policy = Policy::parse(&input).unwrap();
+    for cosine in [json!(0.1), Value::Null] {
+        let row = json!({"entity":"urn:holon","text":"holon definition", "similarity":cosine,
+            "ranking_reason":"hybrid","fusion_rank":1,"score":0.016});
+        let mut body = json!({"count":1,"ranking":"hybrid","results":[row]});
+        policy.annotate(&input, &mut body).unwrap();
+        assert_eq!(body["context"]["outcome"], "CONTEXT");
+        assert!(valid_admitted_row(&body["context"], &body["results"][0]));
+        assert_eq!(
+            crate::search_outcome::classify(crate::search_outcome::Operation::Search, &body)
+                .outcome,
+            crate::search_outcome::Outcome::Hits
+        );
+        for (field, value) in [
+            ("text", json!("unrelated")),
+            ("fusion_rank", json!(21)),
+            ("score", json!(0)),
+            ("score", json!(1.01)),
+            ("ranking_reason", json!("semantic")),
+        ] {
+            let mut bad = body.clone();
+            bad["results"][0][field] = value;
+            // The entity itself contains holon, so remove it for the no-term control.
+            if field == "text" {
+                bad["results"][0]["entity"] = json!("urn:unrelated");
+            }
+            policy.annotate(&input, &mut bad).unwrap();
+            assert_eq!(bad["context"]["outcome"], "NO CONTEXT", "{field}");
+        }
+        let mut identifier = body.clone();
+        policy
+            .annotate(&json!({"query":"holon aegis-k4uz.1"}), &mut identifier)
+            .unwrap();
+        assert_eq!(identifier["context"]["outcome"], "NO CONTEXT");
+        let mut lower_hit = body.clone();
+        let mut unrelated = row.clone();
+        unrelated["entity"] = json!("urn:unrelated");
+        unrelated["text"] = json!("unrelated");
+        lower_hit["results"] = json!([unrelated, row]);
+        policy.annotate(&input, &mut lower_hit).unwrap();
+        assert_eq!(lower_hit["context"]["outcome"], "NO CONTEXT");
+        let mut semantic = body.clone();
+        semantic["ranking"] = json!("semantic");
+        policy.annotate(&input, &mut semantic).unwrap();
+        assert_eq!(semantic["context"]["outcome"], "NO CONTEXT");
+    }
+}

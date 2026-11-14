@@ -143,6 +143,26 @@ fn pure_endpoints_are_exact_and_explain_has_real_lexical_fields() {
     )
     .unwrap();
     assert_eq!(fused["count"], 1);
+    let content = json!({"mode":"hybrid","ranking":"content","query":"Memory","embedding":[1.,0.],"alpha":0.5});
+    let content_result = crate::tool_search(&store, &content).unwrap();
+    assert_eq!(content_result["ranking"], "hybrid");
+    assert_eq!(content_result["context"]["outcome"], "CONTEXT");
+    assert_eq!(
+        content_result["context"]["admission"],
+        "hybrid-ranked-terms/v1"
+    );
+    store.search_config_mut().mode = "hybrid".into();
+    let mut implicit = content.clone();
+    implicit.as_object_mut().unwrap().remove("mode");
+    assert_eq!(
+        crate::tool_search(&store, &implicit).unwrap(),
+        content_result
+    );
+    store.search_config_mut().mode = "auto".into();
+    assert_eq!(
+        crate::tool_search(&store, &implicit).unwrap(),
+        content_result
+    );
     assert_eq!(
         fused["results"][0]["explain"]["matched_fields"],
         json!(["label"])

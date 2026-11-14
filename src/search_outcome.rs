@@ -148,7 +148,7 @@ fn search(value: &Value) -> Summary {
     };
     // Match the native context renderer: a ranked score cannot substitute for
     // the raw admitted similarity, and negative envelopes still need a floor.
-    let Some(floor) = context
+    let Some(_floor) = context
         .get("similarity_floor")
         .and_then(Value::as_f64)
         .filter(|f| f.is_finite() && (0.52..=1.0).contains(f))
@@ -173,9 +173,7 @@ fn search(value: &Value) -> Summary {
             .unwrap()
             .iter()
             .all(|row| {
-                row.get("similarity")
-                    .and_then(Value::as_f64)
-                    .is_some_and(|s| s.is_finite() && (floor..=1.0).contains(&s))
+                crate::mcp::tools::search_confidence::valid_admitted_row(context, row)
                     && value["results"].as_array().unwrap().contains(row)
             })
     {
