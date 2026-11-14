@@ -1,0 +1,20 @@
+BASE d39f6312: ordinary core-only PR
+  bundled-runtime: RUN
+  generated-docs: RUN
+  extended-features: RUN
+  build-full: RUN
+  wasm: RUN
+  wasm-explorer: RUN
+  load-test: RUN
+  query-perf: RUN
+  CI job slots (matrix-expanded; reusable call counted once): 25
+CANDIDATE workflow: ordinary core-only PR
+  bundled-runtime: SKIP
+  generated-docs: RUN
+  extended-features: SKIP
+  build-full: SKIP
+  wasm: SKIP
+  wasm-explorer: SKIP
+  load-test: SKIP
+  query-perf: SKIP
+  CI job slots (matrix-expanded; reusable call counted once): 16
