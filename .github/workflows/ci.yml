@@ -613,7 +613,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pre-commit PyYAML==6.0.3
+      - uses: extractions/setup-just@v2
+      - run: pip install pre-commit PyYAML==6.0.3 jsonschema==4.23.0
       - run: python3 scripts/check-private-keys.py
       # Quipu core names no stack vocabulary (namespace, hostname or term list);
       # vocabularies are data a store loads. Self-test the scanner first so a
@@ -650,7 +651,7 @@ jobs:
       # no model call and no build.
       - name: Verify the CI to Release contract
         run: |
-          python3 scripts/test_ci_fanout.py
+          python3 scripts/test_ci_fanout.py && just breaking test && just breaking render --check
           python3 scripts/test_release_ci_gate.py
           python3 docs/demos/terminal/test_harness_origin.py -v
           python3 scripts/test_release_schedule.py

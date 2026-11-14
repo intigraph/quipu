@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/intigraph/quipu/main/releases/schemas/breaking-change-v1.schema.json",
+  "title": "Breaking change record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "title",
+    "status",
+    "source_ref",
+    "symptom",
+    "affected",
+    "targets",
+    "detection",
+    "prerequisites",
+    "correction",
+    "validation",
+    "rollback",
+    "required_approver",
+    "review_ref",
+    "approval_ref"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "breaking-change/v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,99}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "ready"
+      ]
+    },
+    "source_ref": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 4096
+    },
+    "symptom": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "affected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tool",
+          "versions"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,99}$"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+            },
+            "minItems": 0,
+            "maxItems": 100,
+            "uniqueItems": true
+          }
+        }
+      },
+      "minItems": 1,
+      "maxItems": 100,
+      "uniqueItems": true
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tool",
+          "version",
+          "platforms"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,99}$"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          }
+        }
+      },
+      "minItems": 0,
+      "maxItems": 100,
+      "uniqueItems": true
+    },
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "description",
+        "canonical_terms",
+        "legacy_terms"
+      ],
+      "properties": {
+        "operation": {
+          "const": "vocabulary-alias-identity/v1"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "canonical_terms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 4096
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "legacy_terms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 4096
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        }
+      }
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "minItems": 1,
+      "maxItems": 100,
+      "uniqueItems": true
+    },
+    "correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "steps",
+        "packet_ref",
+        "packet_sha256"
+      ],
+      "properties": {
+        "operation": {
+          "const": "managed-reader-first-writer-upgrade/v1"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "packet_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 4096
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packet_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "validation": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096
+      },
+      "minItems": 1,
+      "maxItems": 100,
+      "uniqueItems": true
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "before_new_writes",
+        "after_new_writes",
+        "data_loss_limit",
+        "packet_ref",
+        "packet_sha256"
+      ],
+      "properties": {
+        "before_new_writes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "after_new_writes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "data_loss_limit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "packet_ref": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 4096
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packet_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "required_approver": {
+      "const": "Stiwi"
+    },
+    "review_ref": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "approval_ref": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}
