@@ -1592,54 +1592,6 @@ qp propose reject <id>
 
 - `--note <VALUE>`: Explanatory note recorded with the operation.
 
-## `qp memory`
-
-Read, export, receipt or commit versioned file memory.
-
-Subcommands: `memory read`, `memory export`, `memory receipt`, `memory commit`.
-
-### `qp memory read`
-
-Read a versioned memory file for an owner.
-
-```text
-qp memory read <owner.json>
-```
-
-- `--graph <VALUE>`: Explicit graph IRI for this operation.
-
-### `qp memory export`
-
-Export an owner's memory files as a file-data envelope.
-
-```text
-qp memory export <owner.json>
-```
-
-- `--graph <VALUE>`: Explicit graph IRI for this operation.
-
-### `qp memory receipt`
-
-Compute the receipt a memory commit request would produce.
-
-```text
-qp memory receipt <request.json>
-```
-
-- `--graph <VALUE>`: Explicit graph IRI for this operation.
-
-### `qp memory commit`
-
-Commit a versioned memory file change.
-
-```text
-qp memory commit <request.json>
-```
-
-- `--graph <VALUE>`: Explicit graph IRI for this operation.
-
-- `--local-authority`: Explicitly authorize a local memory commit.
-
 ## `qp attest`
 
 Register and manage attested session bindings.

@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "c8ec69d05a96136ce72d8170272918890d39179239ba669e5c0223912b6e18cb",
+      "source_sha256": "a815964fa3cb92a76f2c4c40a3a71ffdefc3cf7a1d3ccef49ca5d399a467ddfc",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "16822b9c2a16e0eb7f90a34f17f208d527f897ae3e2a18c76c3fc5f29da74d51",
+      "source_sha256": "7d5e6f25d351ee9e4f89dc298c3b33cbf18df7c231c8778c5908e15cfc726ec5",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "623734b55ff65199716d29dcefb9d3224ccea56a3bd45e5008a45249c0d01e66",
+      "source_sha256": "5f29d985339550dd384b3c21259ae429acb2f0955f050d36608cbd474503075a",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "72bc7fb1bc11a746398f556aae5fd5f301d37ae1113b91c82e4b404bcee8314a",
+      "source_sha256": "b7376341fa2e849c764a9163da32b078a5ed647d9bbeb123cb366d2b73c4f0f1",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "004d22486062d9240cae7a6d7254e9aa28871b4456da4cf7691d2dd99a108e7e",
+      "source_sha256": "ca1cbcdd6d2183a051f56bc384012e1ea1c941aa17691fbb0bb8521b5da2aa72",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"

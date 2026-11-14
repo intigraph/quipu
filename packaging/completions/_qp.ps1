@@ -88,7 +88,6 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('path', 'path', [CompletionResultType]::ParameterValue, 'Golden-path analysis: provenance cone, backtest and draft')
             [CompletionResult]::new('align', 'align', [CompletionResultType]::ParameterValue, 'Propose, decide and apply cross-graph alignments')
             [CompletionResult]::new('propose', 'propose', [CompletionResultType]::ParameterValue, 'List, submit, plan, accept or reject schema change proposals')
-            [CompletionResult]::new('memory', 'memory', [CompletionResultType]::ParameterValue, 'Read, export, receipt or commit versioned file memory')
             [CompletionResult]::new('attest', 'attest', [CompletionResultType]::ParameterValue, 'Register and manage attested session bindings')
             [CompletionResult]::new('signer', 'signer', [CompletionResultType]::ParameterValue, 'Enroll and manage hardware signers for attested writes')
             [CompletionResult]::new('deck', 'deck', [CompletionResultType]::ParameterValue, 'Configure and enroll the Decision Deck')
@@ -1208,45 +1207,6 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('--decided-by', '--decided-by', [CompletionResultType]::ParameterName, 'Identity recording the alignment decision')
             [CompletionResult]::new('--note', '--note', [CompletionResultType]::ParameterName, 'Explanatory note recorded with the operation')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'qp;memory' {
-            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('read', 'read', [CompletionResultType]::ParameterValue, 'Read a versioned memory file for an owner')
-            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export an owner''s memory files as a file-data envelope')
-            [CompletionResult]::new('receipt', 'receipt', [CompletionResultType]::ParameterValue, 'Compute the receipt a memory commit request would produce')
-            [CompletionResult]::new('commit', 'commit', [CompletionResultType]::ParameterValue, 'Commit a versioned memory file change')
-            break
-        }
-        'qp;memory;read' {
-            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'qp;memory;export' {
-            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'qp;memory;receipt' {
-            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'qp;memory;commit' {
-            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
-            [CompletionResult]::new('--local-authority', '--local-authority', [CompletionResultType]::ParameterName, 'Explicitly authorize a local memory commit')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

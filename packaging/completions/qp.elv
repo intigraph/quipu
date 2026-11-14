@@ -85,7 +85,6 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand path 'Golden-path analysis: provenance cone, backtest and draft'
             cand align 'Propose, decide and apply cross-graph alignments'
             cand propose 'List, submit, plan, accept or reject schema change proposals'
-            cand memory 'Read, export, receipt or commit versioned file memory'
             cand attest 'Register and manage attested session bindings'
             cand signer 'Enroll and manage hardware signers for attested writes'
             cand deck 'Configure and enroll the Decision Deck'
@@ -1083,40 +1082,6 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --decided-by 'Identity recording the alignment decision'
             cand --note 'Explanatory note recorded with the operation'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'qp;memory'= {
-            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
-            cand -h 'Print help'
-            cand --help 'Print help'
-            cand read 'Read a versioned memory file for an owner'
-            cand export 'Export an owner''s memory files as a file-data envelope'
-            cand receipt 'Compute the receipt a memory commit request would produce'
-            cand commit 'Commit a versioned memory file change'
-        }
-        &'qp;memory;read'= {
-            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
-            cand --graph 'Explicit graph IRI for this operation'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'qp;memory;export'= {
-            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
-            cand --graph 'Explicit graph IRI for this operation'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'qp;memory;receipt'= {
-            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
-            cand --graph 'Explicit graph IRI for this operation'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'qp;memory;commit'= {
-            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
-            cand --graph 'Explicit graph IRI for this operation'
-            cand --local-authority 'Explicitly authorize a local memory commit'
             cand -h 'Print help'
             cand --help 'Print help'
         }

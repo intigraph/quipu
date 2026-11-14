@@ -5,7 +5,6 @@
 //! write? is it allowed under read-only mode? does the bearer token match? — is
 //! pure and lives here so it can be unit-tested without standing up a server.
 
-mod memory_auth;
 mod render_auth;
 pub use render_auth::authorize_http_bearers;
 
@@ -73,7 +72,6 @@ impl SessionKeyPolicy {
 /// be inferred for you.
 pub const WRITE_ENDPOINTS: &[&str] = &[
     "/entity_ref",
-    "/memory/commit",
     "/knot",
     "/knot/stage",
     "/knot/promote",
@@ -165,10 +163,6 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/deck/receipt",
     // aegis-25k: exact attested-write receipt lookup by nonce; no write.
     "/attest/receipt",
-    "/memory/read",
-    "/memory/export",
-    "/memory/projection",
-    "/memory/receipt",
     "/knot/status",
     "/rule_query",
     "/watermark",
@@ -277,10 +271,7 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    matches!(
-        path,
-        "/identity" | "/memory/projection" | "/memory/receipt" | "/knot/status"
-    )
+    matches!(path, "/identity" | "/knot/status")
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.
@@ -422,7 +413,6 @@ impl BearerPolicy {
                 .is_some()
         });
         if registry.is_empty()
-            || registry.contains_memory_credentials()
             || registry.overlaps(&self.named)
             || registry.overlaps(&self.scoped_writers)
             || shared_collision
@@ -449,7 +439,6 @@ impl BearerPolicy {
                     .is_some()
             });
         if registry.is_empty()
-            || registry.contains_memory_credentials()
             || registry.overlaps(&self.named)
             || registry.overlaps(&self.replication_only)
             || collision
@@ -514,9 +503,7 @@ pub fn authorize_bearers(
 ) -> Authorization {
     // This lower-level API has no route to prove replication admission.
     // Only the HTTP adapter can grant the three exact replication operations.
-    if policy.replication_principal(auth_header).is_some()
-        || policy.memory_credential(auth_header).is_some()
-    {
+    if policy.replication_principal(auth_header).is_some() {
         return Authorization {
             decision: AccessDecision::Unauthorized,
             generation: None,

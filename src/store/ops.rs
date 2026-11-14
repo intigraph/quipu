@@ -242,8 +242,6 @@ impl Store {
         // not provide an alternate way to manufacture a protected record.
         crate::shape_mapping::write_scope::check(self, graph, &staged_datums)
             .map_err(|error| self.stash_refusal("shape-mapping", error, staged_datums.len()))?;
-        crate::memory_files::write_scope::check(self, graph, &staged_datums)
-            .map_err(|e| self.stash_refusal("memory-files", e, staged_datums.len()))?;
         crate::entity_key_guard::check_write(self, graph, &staged_datums)
             .map_err(|e| self.stash_refusal("key-identity", e, staged_datums.len()))?;
         // Whether anything beyond the caller's datums entered this write.

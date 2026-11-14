@@ -127,9 +127,6 @@ _qp() {
             qp,mcp)
                 cmd="qp__subcmd__mcp"
                 ;;
-            qp,memory)
-                cmd="qp__subcmd__memory"
-                ;;
             qp,merge)
                 cmd="qp__subcmd__merge"
                 ;;
@@ -445,18 +442,6 @@ _qp() {
             qp__subcmd__import__subcmd__review,reopen)
                 cmd="qp__subcmd__import__subcmd__review__subcmd__reopen"
                 ;;
-            qp__subcmd__memory,commit)
-                cmd="qp__subcmd__memory__subcmd__commit"
-                ;;
-            qp__subcmd__memory,export)
-                cmd="qp__subcmd__memory__subcmd__export"
-                ;;
-            qp__subcmd__memory,read)
-                cmd="qp__subcmd__memory__subcmd__read"
-                ;;
-            qp__subcmd__memory,receipt)
-                cmd="qp__subcmd__memory__subcmd__receipt"
-                ;;
             qp__subcmd__merge,resolve)
                 cmd="qp__subcmd__merge__subcmd__resolve"
                 ;;
@@ -578,7 +563,7 @@ _qp() {
 
     case "${cmd}" in
         qp)
-            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-mergetool git-merge merge-driver databook-merge-driver databook-check pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-mergetool git-merge merge-driver databook-merge-driver databook-check pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -3177,112 +3162,6 @@ _qp() {
                     return 0
                     ;;
                 --primary-url)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        qp__subcmd__memory)
-            opts="-h --db --help read export receipt commit"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --db)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        qp__subcmd__memory__subcmd__commit)
-            opts="-h --db --graph --local-authority --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --db)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --graph)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        qp__subcmd__memory__subcmd__export)
-            opts="-h --db --graph --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --db)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --graph)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        qp__subcmd__memory__subcmd__read)
-            opts="-h --db --graph --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --db)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --graph)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        qp__subcmd__memory__subcmd__receipt)
-            opts="-h --db --graph --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --db)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --graph)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

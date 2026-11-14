@@ -90,7 +90,6 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "gate" -d 'Judge a candi
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "path" -d 'Golden-path analysis: provenance cone, backtest and draft'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "align" -d 'Propose, decide and apply cross-graph alignments'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "propose" -d 'List, submit, plan, accept or reject schema change proposals'
-complete -c quipu -n "__fish_quipu_needs_command" -f -a "memory" -d 'Read, export, receipt or commit versioned file memory'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "attest" -d 'Register and manage attested session bindings'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "signer" -d 'Enroll and manage hardware signers for attested writes'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "deck" -d 'Configure and enroll the Decision Deck'
@@ -702,25 +701,6 @@ complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_sub
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from reject" -l decided-by -d 'Identity recording the alignment decision' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from reject" -l note -d 'Explanatory note recorded with the operation' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from reject" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and not __fish_seen_subcommand_from read export receipt commit" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and not __fish_seen_subcommand_from read export receipt commit" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and not __fish_seen_subcommand_from read export receipt commit" -f -a "read" -d 'Read a versioned memory file for an owner'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and not __fish_seen_subcommand_from read export receipt commit" -f -a "export" -d 'Export an owner\'s memory files as a file-data envelope'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and not __fish_seen_subcommand_from read export receipt commit" -f -a "receipt" -d 'Compute the receipt a memory commit request would produce'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and not __fish_seen_subcommand_from read export receipt commit" -f -a "commit" -d 'Commit a versioned memory file change'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from read" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from read" -l graph -d 'Explicit graph IRI for this operation' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from read" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from export" -l graph -d 'Explicit graph IRI for this operation' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from receipt" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from receipt" -l graph -d 'Explicit graph IRI for this operation' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from receipt" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from commit" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from commit" -l graph -d 'Explicit graph IRI for this operation' -r
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from commit" -l local-authority -d 'Explicitly authorize a local memory commit'
-complete -c quipu -n "__fish_quipu_using_subcommand memory; and __fish_seen_subcommand_from commit" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand attest; and not __fish_seen_subcommand_from register list allow-write deny-write require-v2 allow-v1 revoke" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand attest; and not __fish_seen_subcommand_from register list allow-write deny-write require-v2 allow-v1 revoke" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand attest; and not __fish_seen_subcommand_from register list allow-write deny-write require-v2 allow-v1 revoke" -f -a "register" -d 'Register a session binding for attested writes'
