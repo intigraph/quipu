@@ -484,3 +484,7 @@ ci command="test":
         demo) python3 docs/demos/ci-fanout/compare.py ;;
         *) echo 'usage: just ci test|demo' >&2; exit 2 ;;
     esac
+
+# Breaking-change records, generated corrections and read-only doctor plans.
+breaking command="test" *args:
+    python3 -B scripts/breaking-changes.py {{quote(command)}} {{args}}
