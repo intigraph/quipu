@@ -7,6 +7,35 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-11-14
+
+### Added
+
+- *(namespaces)* Add owner-local conditional inverse core (#1213)([5983f4e](https://github.com/scbrown/quipu/commit/5983f4eb29773761bc0cdbd852d82e1870a040ac))
+- *(observability)* Observe auth phases for signed health and identity requests (#1215)([83fe6d1](https://github.com/scbrown/quipu/commit/83fe6d1b0a511e4a28d6e99677a64cb5566eaee4))
+- *(projections)* Certify an aggregate's model compatibility in one snapshot (#1187)([df443f6](https://github.com/scbrown/quipu/commit/df443f6481416517ac09bb03be487b890e0578a9))
+- *(release)* Version breaking changes and read-only correction plans (#1234)([777e974](https://github.com/scbrown/quipu/commit/777e974dbf897eda3077586f142daa43e6f4b95c))
+
+### CI/CD
+
+- Prove deployment skip prefixes before consumer adoption (#1164)([72b4f30](https://github.com/scbrown/quipu/commit/72b4f30d4e5c507e719132808b470dc09266ffab))
+
+### Documentation
+
+- *(examples)* A two-sided pendant merge, end to end (#1216)([b996981](https://github.com/scbrown/quipu/commit/b996981dd21f14b1db9b527cc400a93aa00317c4))
+
+### Fixed
+
+- *(store)* Preserve graph creators across event retention (#1210)([e60a2ed](https://github.com/scbrown/quipu/commit/e60a2ed8037968d803f6d4f34536941cf6387bfe))
+- *(governance)* Resolve recorded verdict witnesses across signature spellings (#1214)([521b87e](https://github.com/scbrown/quipu/commit/521b87ebeac6eca308ecc3f9a2173ce93e8de503))
+- *(search)* Say which backends are live on HTTP /search (#1185)([1cc4d58](https://github.com/scbrown/quipu/commit/1cc4d58be744900f93e0bdc957079aef5c24e176))
+- *(pack)* Clean temporary writer lease before graph-owner adoption (#1218)([90b3988](https://github.com/scbrown/quipu/commit/90b39880ebb9efb4b058e530ac283e4c8d3c05c9))
+- *(shacl)* Adopt rudof 0.3.36 path-error propagation (#1153)([cad71e3](https://github.com/scbrown/quipu/commit/cad71e39f59c945c8cc9be81d6a4f2ce0ab3b178))
+
+### Miscellaneous
+
+- Add flake for nix build (#1194)([7d3ba5d](https://github.com/scbrown/quipu/commit/7d3ba5d4a62e62e65f50197efd53bdf065046216))
+
 ### Added
 
 - *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
