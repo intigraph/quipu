@@ -1,7 +1,7 @@
 //! Creation provenance for explicitly registered committed graphs.
 use super::Store;
-use crate::error::Result;
-use rusqlite::{OptionalExtension, params};
+use crate::error::{Error, Result};
+use rusqlite::params;
 use serde_json::{Value as JsonValue, json};
 
 impl Store {
@@ -29,6 +29,12 @@ impl Store {
                     params![timestamp, graph, self.latest_tx_id()?, json!({"graph":graph,"actor":actor,"timestamp":timestamp}).to_string()],
                 )?;
             }
+            if !existed {
+                self.conn.execute(
+                    "INSERT INTO graph_creators(g,actor) VALUES(?1,?2)",
+                    params![g, actor],
+                )?;
+            }
             let provenance = self.graph_creation_provenance(g)?;
             Ok(json!({"graph":graph,"g":g,"created":!existed,"creation":provenance}))
         })();
@@ -50,20 +56,20 @@ impl Store {
     /// Old/imported graphs have a registry timestamp but no declared actor.
     /// Never attribute a repeat caller as the creator of an existing graph.
     pub fn graph_creation_provenance(&self, g: i64) -> Result<JsonValue> {
-        let timestamp: String =
-            self.conn
-                .query_row("SELECT created_at FROM graphs WHERE g = ?1", [g], |r| {
-                    r.get(0)
-                })?;
+        let (timestamp, source, lifecycle): (String, Option<String>, Option<String>) =
+            self.conn.query_row(
+                "SELECT created_at,source,lifecycle FROM graphs WHERE g=?1",
+                [g],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )?;
         let graph = self.graph_display_name(g);
-        let payload: Option<String> = self.conn.query_row(
-            "SELECT payload FROM events WHERE type = 'graph.created' AND subject = ?1 ORDER BY offset DESC LIMIT 1",
-            [&graph], |r| r.get(0),
-        ).optional()?;
-        let actor = payload
-            .and_then(|p| serde_json::from_str::<JsonValue>(&p).ok())
-            .and_then(|p| p.get("actor").cloned())
-            .unwrap_or(JsonValue::Null);
+        if source.is_some() || lifecycle.as_deref() == Some("frozen") {
+            let metadata = self.graph_metadata(&graph)?.ok_or_else(|| {
+                Error::Store("graph creation source metadata is unavailable".into())
+            })?;
+            return Ok(metadata["creation"].clone());
+        }
+        let actor = super::graph_metadata::creator(&self.conn, "main", &graph)?;
         Ok(json!({"timestamp":timestamp,"actor":actor}))
     }
 }
