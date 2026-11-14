@@ -231,6 +231,27 @@ class Contracts(unittest.TestCase):
             self.assertEqual(absent.returncode, 2)
             self.assertEqual(json.loads(absent.stdout)['outcome'], 'UNKNOWN')
 
+    def test_candidate_ordered_binding_consumer_checks_exact_file_id_and_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'record.json'
+            path.write_text(json.dumps(self.record))
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            command = [sys.executable, '-B', str(ROOT / 'scripts/breaking-changes.py'),
+                       'validate', str(path), '--release']
+            bound = command + ['--expected-id', self.record['id'], '--expected-sha256', digest]
+            good = subprocess.run(bound, capture_output=True, text=True)
+            self.assertEqual(good.returncode, 0, good.stderr)
+            result = json.loads(good.stdout)[0]
+            self.assertEqual(result['sha256'], digest)
+            self.assertFalse(result['approval_verified'])
+            self.assertFalse(result['release_authorized'])
+            for args in [command + ['--expected-id', self.record['id']],
+                         command + ['--expected-id', 'wrong', '--expected-sha256', digest],
+                         command + ['--expected-id', self.record['id'], '--expected-sha256', 'f' * 64]]:
+                self.assertEqual(subprocess.run(args, capture_output=True).returncode, 2)
+            path.write_text(path.read_text() + ' ')  # same JSON meaning, different signed file bytes
+            self.assertEqual(subprocess.run(bound, capture_output=True).returncode, 2)
+
     def test_real_cli_rejects_generated_drift_in_an_isolated_source_copy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -264,7 +285,7 @@ class Contracts(unittest.TestCase):
             self.assertEqual(path.read_text(), body)
         record = copy.deepcopy(self.record)
         record['title'] = '<script>unsafe</script>`[x](https://invalid) {{#include /etc/passwd}}'
-        with patch('breaking_changes.render.records', return_value=[(FIXTURE, record)]):
+        with patch('breaking_changes.render.records', return_value=[(FIXTURE, record, 'd' * 64)]):
             changed = render()
         self.assertNotIn('{{#include', changed)
         self.assertNotIn('<script>', changed)

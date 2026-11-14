@@ -18,6 +18,8 @@ def main():
     sub.add_parser('demo')
     check = sub.add_parser('validate')
     check.add_argument('record', nargs='?')
+    check.add_argument('--expected-id', help='ID from the selected candidate binding')
+    check.add_argument('--expected-sha256', help='file SHA256 from the selected candidate binding')
     check.add_argument('--release', action='store_true', help='require structural readiness, not authorization')
     view = sub.add_parser('render')
     mode = view.add_mutually_exclusive_group()
@@ -40,11 +42,22 @@ def main():
             suite = unittest.defaultTestLoader.loadTestsFromName('test_breaking_changes')
             return 0 if unittest.TextTestRunner().run(suite).wasSuccessful() else 1
         if args.command == 'validate':
-            selected = [(args.record, validate(load(args.record)[0]))] if args.record else records()
+            if (args.expected_id is None) != (args.expected_sha256 is None):
+                raise ValueError('expected ID and SHA256 must be supplied together')
+            if args.expected_id is not None and not args.record:
+                raise ValueError('candidate binding requires one selected record')
+            if args.record:
+                record, digest = load(args.record)
+                selected = [(args.record, validate(record), digest)]
+            else:
+                selected = records()
             results = []
-            for _, record in selected:
+            for _, record, digest in selected:
+                if args.expected_id is not None and (record['id'] != args.expected_id
+                                                      or digest != args.expected_sha256):
+                    raise ValueError('candidate record ID/digest mismatch')
                 missing = readiness(record)
-                results.append({'id': record['id'], 'missing': missing,
+                results.append({'id': record['id'], 'sha256': digest, 'missing': missing,
                                 'approval_verified': False, 'release_authorized': False})
             print(json.dumps(results, indent=2))
             return 1 if args.release and any(r['missing'] for r in results) else 0

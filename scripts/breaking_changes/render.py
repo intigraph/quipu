@@ -17,7 +17,7 @@ def render():
              '<!-- Generated from releases/changes/*.json; use just breaking render. -->', '',
              'Draft records are incomplete and cannot satisfy release readiness. '
              'Doctor produces read-only plans; a plan never grants migration authority.', '']
-    for _, record in records():
+    for _, record, _ in records():
         missing = readiness(record)
         lines.extend(['## ' + text(record['title']), '',
                       '**ID:** ' + record['id'] + ' — **Status:** ' + record['status'], '',

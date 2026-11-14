@@ -83,8 +83,11 @@ def records():
     paths = sorted((ROOT / 'releases/changes').glob('*.json'))
     if not paths:
         raise ValueError('no breaking-change records')
-    result = [(path, validate(load(path)[0])) for path in paths]
-    ids = [record['id'] for _, record in result]
+    result = []
+    for path in paths:
+        record, digest = load(path)
+        result.append((path, validate(record), digest))
+    ids = [record['id'] for _, record, _ in result]
     if len(set(ids)) != len(ids):
         raise ValueError('duplicate breaking-change ID')
     return result

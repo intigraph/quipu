@@ -30,6 +30,20 @@ it never authenticates a receipt or authorizes publication. The promotion gate
 must independently verify the record digest and external approval receipts.
 Every breaking release requires Stiwi's approval under the release design.
 
+Candidate `payload.frozen.plan.breaking_records` entries are ordered `{id, sha256}`
+file bindings. For each selected entry, consumers can run:
+
+```sh
+just breaking validate record.json --release \
+  --expected-id RECORD_ID --expected-sha256 RECORD_FILE_SHA256
+```
+
+Supply both expected fields together. ID or digest mismatch refuses, including a
+whitespace-only file change. Output includes the observed file SHA256; approval
+authentication remains false and belongs to the promotion gate. Candidate order
+and envelope authenticity are verified by that consumer, not reimplemented here.
+
+
 One deterministic renderer produces [the correction changelog](BREAKING-CHANGES.md)
 and the book's breaking-change page. The root changelog links to these records.
 `render --check` and the behavioural controls run in the existing required
