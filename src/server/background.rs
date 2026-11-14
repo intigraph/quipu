@@ -4,6 +4,7 @@ pub(crate) fn start(
     push_store_outer: SharedStore,
     retention_days: u32,
     vectors: &quipu::EmbeddingConfig,
+    read_only: bool,
 ) {
     // Event push P2: the delivery worker. A 2s tick over deliver_tick with the
     // real poster; each tick runs under spawn_blocking (SQLite + ureq are
@@ -50,6 +51,11 @@ pub(crate) fn start(
     wal_maintenance::spawn_periodic_checkpoint(&push_store_outer);
     graph_metrics::spawn_refresh(&push_store_outer);
 
+    // Configured read-only primaries still publish metrics and checkpoint WAL,
+    // but must never start workers that delete event or vector rows.
+    if read_only {
+        return;
+    }
     spawn_vector_retention(&push_store_outer, vectors);
 
     // Event-log retention (quipu-9z9, aegis-jio5.5). `[quipu.events]

@@ -486,6 +486,7 @@ async fn main() {
             push_store_outer,
             config.events.retention_days,
             &config.embedding,
+            read_only,
         );
     }
 
