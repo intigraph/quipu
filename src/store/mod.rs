@@ -23,6 +23,8 @@ mod ownership_latch;
 mod ownership_scope;
 // Dormant enrollment inventory: native identity fields, no startup wiring.
 mod ownership_admission;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ownership_admission_fixture;
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_inventory;
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
@@ -82,6 +84,7 @@ mod named_graphs;
 mod open;
 pub(crate) use open::open_file_immutable;
 mod graph_creation;
+mod graph_creators;
 mod graph_metadata;
 pub mod ops;
 pub mod overlays;
