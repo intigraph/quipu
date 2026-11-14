@@ -942,6 +942,7 @@ Produce a bounded portable share payload, including canonical manifest and membe
 | `no_shapes` | boolean | no |  |
 | `parent_share` | string | no |  |
 | `queries` | array | no |  |
+| `required_profile` | object | no | Require the recipient to have this exact reviewed profile before import; does not install incoming shapes. |
 | `scope` | object | yes |  |
 | `shapes` | array | no |  |
 | `turtle_view` | boolean | no |  |
