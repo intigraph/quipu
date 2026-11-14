@@ -17,6 +17,9 @@ const T1: &str = "2026-01-10T00:00:00Z";
 const T2: &str = "2026-01-20T00:00:00Z";
 const T3: &str = "2026-01-30T00:00:00Z";
 
+#[path = "verdict_dual_witness_tests.rs"]
+mod dual_witness;
+
 fn keypair() -> ring::signature::Ed25519KeyPair {
     let rng = ring::rand::SystemRandom::new();
     let doc = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
