@@ -48,7 +48,10 @@ fn dispatch_verbs(main_rs: &str) -> BTreeSet<String> {
             continue;
         }
         let head = rest.split("=>").next().unwrap_or("");
-        for chunk in head.split('|') {
+        // Guards can contain closures (`|arg|`) and other expressions. Only
+        // literal alternatives before the guard contribute command names.
+        let patterns = head.split(" if ").next().unwrap_or("");
+        for chunk in patterns.split('|') {
             let token = chunk.trim().trim_matches('"').trim();
             // A command never begins with a dash: the same arm that dispatches
             // `help` also dispatches `--help` and `-h`, and those belong under
@@ -62,6 +65,24 @@ fn dispatch_verbs(main_rs: &str) -> BTreeSet<String> {
         }
     }
     verbs
+}
+
+#[test]
+fn dispatch_extraction_separates_patterns_from_closure_guards() {
+    let source = r#"
+        "report" if args.iter().any(|arg| arg == "--public") => run(),
+        "share" | "import" if args.iter().any(|value| value == "--flag") => run(),
+    "nested" => run(),
+"#;
+    assert_eq!(
+        dispatch_verbs(source),
+        BTreeSet::from(["report".into(), "share".into(), "import".into()])
+    );
+    // An actual command named arg must still be discovered and checked.
+    assert_eq!(
+        dispatch_verbs("        \"arg\" => run(),"),
+        BTreeSet::from(["arg".into()])
+    );
 }
 
 /// Verbs named in a block of documentation under either supported command name.

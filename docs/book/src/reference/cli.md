@@ -383,6 +383,34 @@ quipu report --hubs 10 --surprises 5 --db my.db
 | `--hubs` / `--surprises` / `--questions` | How many of each to return |
 | `--type <IRI>` / `--predicate <IRI>` | Restrict the underlying projection |
 
+`quipu report --public` instead reads operational history from Prometheus without
+opening the graph or loading its configuration. It requires the `remote` feature.
+Configure `QUIPU_REPORT_PROMETHEUS_URL` (or `--prometheus <URL>`), then run:
+
+```bash
+quipu report --public
+quipu report --public --days 30 --end 2026-11-10T00:00:00Z
+```
+
+The JSON table covers complete UTC days, with observed scrape and independent
+query/search probe success ratios and sample counts, per-endpoint histogram
+p50/p95/p99 estimates, and reset-aware completed requests by client excluding
+`/metrics`. Missing samples are unknown, not uptime; absent or idle latency is
+null. Expected sample counts assume one 60-second scrape and one 30-second probe
+per endpoint. Compare them with observations before making availability claims.
+The eight bounded reads use retained raw history, so new recording rules need
+not backfill old days. Retention gaps remain visible. Histogram quantiles are
+computed from the daily bucket increments once, not averaged from percentiles.
+
+Credentials stay in files: use `PROMETHEUS_BEARER_TOKEN_FILE`, or
+`PROMETHEUS_USERNAME` with `PROMETHEUS_PASSWORD_FILE`. Redirects are refused and
+errors omit URLs and response bodies. Output contains no graph entities,
+hostnames, query text, agent, task or session labels. Client labels and
+nonstandard endpoint labels are fresh random identifiers per report; their maps
+are discarded. This hides names, not statistical inference from traffic patterns.
+Known endpoint names such as `/query` remain readable. Public mode cannot be
+combined with graph-report options. `--days` is bounded to 1-90 (default 30).
+
 ### `quipu repl`
 
 Interactive SPARQL prompt.
