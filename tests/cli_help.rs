@@ -221,7 +221,10 @@ fn catalogue_covers_actual_top_level_dispatch() {
         if !line.starts_with('"') || !line.contains("=>") {
             continue;
         }
-        for token in line.split("=>").next().unwrap().split('|') {
+        let head = line.split("=>").next().unwrap();
+        // Guard closures contain pipes too; only match patterns name commands.
+        let patterns = head.split(" if ").next().unwrap();
+        for token in patterns.split('|') {
             let token = token.trim().trim_matches('"');
             if token.chars().all(|c| c.is_ascii_lowercase() || c == '-')
                 && !token.starts_with('-')

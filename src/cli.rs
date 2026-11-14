@@ -264,6 +264,13 @@ pub fn cmd_project(args: &[String], db_path: &str) {
 /// `quipu report` — god-nodes + surprising connections + suggested questions
 /// for the current graph (hq-ct27).
 pub fn cmd_report(args: &[String], db_path: &str) {
+    if args
+        .iter()
+        .any(|arg| matches!(arg.as_str(), "--prometheus" | "--days" | "--end"))
+    {
+        eprintln!("error: SLO options require --public");
+        std::process::exit(1);
+    }
     let get_val = |flag: &str| -> Option<String> {
         args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
     };
