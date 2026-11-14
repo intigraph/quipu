@@ -984,3 +984,24 @@ export is RDF triples; preserve its graph IRI separately when importing it.
 
 This flag does not fence an external writer and must not be used against a live
 database. Without the flag, the existing configured writable open is unchanged.
+
+### Before/after graph review
+
+The pendant review check links a `pendant-graph-diffs` workflow artifact.
+Download it and open the HTML files locally: each pack has a pair of directed
+graph diagrams, **Before** and **After**, with unchanged adjacent facts retained.
+Both diagrams use the same node positions. Blue nodes are touched subjects;
+hover nodes and arrows for labels and predicate details. The diagram overview
+shows at most 40 nodes and 80 edges, with counts displayed. Edge details follow.
+Every edge shows subject → predicate → object and its graph; expand **Identity
+keys** to distinguish equal display labels. The accompanying JSON is the same
+`share diff --report --format json` report, including its `neighborhood` field.
+
+The neighborhood includes incoming and outgoing edges of semantically touched
+subjects. Each side shows at most 2,000 edges and reports its total and truncation.
+When the other side is truncated, an unmatched edge is **uncompared**, rather than
+asserted added or removed. Referenced blank nodes remain folded inline using the
+text diff's structural identity and multiplicity rules. This is a semantic
+projection, not an exhaustive raw RDF graph. A pure blank-node relabel produces
+no touched neighborhood. Reports remain read-only; the alias caveat and separate
+hardware verdict requirements still apply.

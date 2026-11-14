@@ -1194,3 +1194,13 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 
 - Playwright: <https://playwright.dev>
 - wasm-bindgen-test: <https://wasm-bindgen.github.io/wasm-bindgen/wasm-bindgen-test/>
+
+## Pendant graph review
+
+PR pendant reviews provide an offline before/after neighborhood view, linked
+from the check summary as a workflow artifact. The existing semantic diff owns
+identity, blank-node folding and touched subjects; the view adds bounded incoming
+and outgoing context. It does not query the live store. This keeps a PR's graph
+view bound to the reviewed snapshots and usable without a service or external
+assets. See [CLI sharing](../book/src/reference/cli-sharing.md#beforeafter-graph-review)
+for the projection and truncation contract.

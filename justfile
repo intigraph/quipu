@@ -468,6 +468,10 @@ signing command:
         *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
     esac
 
+# Offline pendant neighborhood display controls (no build or service access).
+pendant-graph:
+    python3 scripts/ci/test-pendant-graph.py
+
 # Offline workflow topology, release guards and native Actions syntax.
 ci command="test":
     #!/usr/bin/env bash

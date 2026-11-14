@@ -1,0 +1,139 @@
+{
+  "diff": {
+    "entities": [
+      {
+        "id": "<http://example.org/people/alice>",
+        "name": "Alice Smith (people/alice)",
+        "status": "modified",
+        "changed": [
+          {
+            "predicate": "age",
+            "old": "\"30\"^^xsd:integer",
+            "new": "\"31\"^^xsd:integer"
+          }
+        ],
+        "added": [],
+        "removed": []
+      }
+    ],
+    "changed": 1,
+    "added": 0,
+    "removed": 0
+  },
+  "neighborhood": {
+    "touched": [
+      "<http://example.org/people/alice>"
+    ],
+    "before": {
+      "edges": [
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://example.org/vocab#age",
+          "predicate_label": "age",
+          "object": "\"30\"^^<http://www.w3.org/2001/XMLSchema#integer>",
+          "object_label": "\"30\"^^xsd:integer",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        },
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://example.org/vocab#email",
+          "predicate_label": "email",
+          "object": "\"alice@example.org\"",
+          "object_label": "\"alice@example.org\"",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        },
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "predicate_label": "rdf:type",
+          "object": "<http://example.org/vocab#Person>",
+          "object_label": "Person",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        },
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "predicate_label": "rdfs:label",
+          "object": "\"Alice Smith\"",
+          "object_label": "\"Alice Smith\"",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        }
+      ],
+      "total_edges": 4,
+      "truncated": false
+    },
+    "after": {
+      "edges": [
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://example.org/vocab#age",
+          "predicate_label": "age",
+          "object": "\"31\"^^<http://www.w3.org/2001/XMLSchema#integer>",
+          "object_label": "\"31\"^^xsd:integer",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        },
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://example.org/vocab#email",
+          "predicate_label": "email",
+          "object": "\"alice@example.org\"",
+          "object_label": "\"alice@example.org\"",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        },
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+          "predicate_label": "rdf:type",
+          "object": "<http://example.org/vocab#Person>",
+          "object_label": "Person",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        },
+        {
+          "subject": "<http://example.org/people/alice>",
+          "subject_label": "Alice Smith (people/alice)",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "predicate_label": "rdfs:label",
+          "object": "\"Alice Smith\"",
+          "object_label": "\"Alice Smith\"",
+          "graph": "",
+          "graph_label": "default graph",
+          "multiplicity": 1
+        }
+      ],
+      "total_edges": 4,
+      "truncated": false
+    }
+  },
+  "shacl": {
+    "status": "checked",
+    "introduced": [],
+    "introduced_count": 0,
+    "preexisting": 0,
+    "resolved": 0,
+    "shapes_changed": false
+  },
+  "decisions": null,
+  "alias_candidates": [],
+  "summary": "pendant review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates"
+}

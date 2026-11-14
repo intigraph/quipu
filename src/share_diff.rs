@@ -466,6 +466,10 @@ pub use names::{compact, local_name};
 mod render;
 pub use render::{render_markdown, render_text, render_textconv};
 
+#[path = "share_diff_neighborhood.rs"]
+mod neighborhood;
+pub use neighborhood::{Neighborhood, neighborhood};
+
 #[cfg(test)]
 #[path = "share_diff_tests.rs"]
 mod tests;
