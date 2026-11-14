@@ -9,6 +9,7 @@ are generated from the versioned release records.
 
 ### Added
 
+- Size SQLite connections from one aggregate budget and support bounded RDF result serialization without returning a partial body.
 - *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
 
 ### Fixed
