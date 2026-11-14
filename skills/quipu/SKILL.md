@@ -336,6 +336,7 @@ ROOT is the default graph; named graphs hold scoped knowledge and are selected e
 | `quipu episode <file.json>` | Ingest a structured episode of nodes and edges |
 | `quipu retract <IRI>` | Retract an entity's facts (history is kept) |
 | `quipu validate --shapes <s> --data <d>` | Check data against shapes without writing |
+| `quipu fluent append <request.json> --server <origin>` / `fluent current --server <origin> --graph <iri> --fluent <iri>` | Append observations or read current values over authenticated HTTP; requires loaded fluent declarations, never opens a local store |
 | `quipu shapes list` | Show the SHACL shapes that guard writes |
 | `quipu graph list` | List registered named graphs |
 | `quipu stats` / `quipu doctor labels` / `quipu doctor search` | Store statistics, graph-label drift, and search readiness |

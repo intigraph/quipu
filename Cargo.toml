@@ -232,7 +232,7 @@ owl = []
 # Minimal libraries use --no-default-features: neither
 # crate compiles for wasm32 (mio has no wasm target) — see
 # docs/design/wasm-support.md §4.3.
-remote = ["dep:ureq"]
+remote = ["dep:ureq", "dep:url"]
 # Design W2: S3-compatible conditional-create witness backend (source only;
 # selecting a bucket and principal is a deployment decision).
 ownership-witness-s3 = ["dep:ureq"]

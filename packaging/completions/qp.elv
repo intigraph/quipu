@@ -21,6 +21,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help (see more with ''--help'')'
             cand --help 'Print help (see more with ''--help'')'
+            cand fluent 'Append fluent observations or read current values over authenticated HTTP'
             cand competency 'Inspect pendant competency contracts without opening a store'
             cand store 'Inspect native ownership, or explicitly adopt or restore a disk store'
             cand version 'Print the version and source commit'
@@ -95,6 +96,24 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand events 'Read store event records such as refusals'
             cand fork 'Create, list, diff, drop or promote named forks of ROOT'
             cand audit 'Check traces, namespaces, replays and quarantine against policy'
+        }
+        &'qp;fluent'= {
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand append 'Append a JSON observation through the native fluent writer'
+            cand current 'Read a fluent snapshot from its exact graph'
+        }
+        &'qp;fluent;append'= {
+            cand --server 'HTTP(S) server origin without credentials, query or path'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;fluent;current'= {
+            cand --server 'HTTP(S) server origin without credentials, query or path'
+            cand --graph 'Explicit graph IRI for this operation'
+            cand --fluent 'Exact fluent IRI to read'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'qp;competency'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'

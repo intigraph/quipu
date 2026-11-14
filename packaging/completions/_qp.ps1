@@ -24,6 +24,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            [CompletionResult]::new('fluent', 'fluent', [CompletionResultType]::ParameterValue, 'Append fluent observations or read current values over authenticated HTTP')
             [CompletionResult]::new('competency', 'competency', [CompletionResultType]::ParameterValue, 'Inspect pendant competency contracts without opening a store')
             [CompletionResult]::new('store', 'store', [CompletionResultType]::ParameterValue, 'Inspect native ownership, or explicitly adopt or restore a disk store')
             [CompletionResult]::new('version', 'version', [CompletionResultType]::ParameterValue, 'Print the version and source commit')
@@ -98,6 +99,27 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('events', 'events', [CompletionResultType]::ParameterValue, 'Read store event records such as refusals')
             [CompletionResult]::new('fork', 'fork', [CompletionResultType]::ParameterValue, 'Create, list, diff, drop or promote named forks of ROOT')
             [CompletionResult]::new('audit', 'audit', [CompletionResultType]::ParameterValue, 'Check traces, namespaces, replays and quarantine against policy')
+            break
+        }
+        'qp;fluent' {
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('append', 'append', [CompletionResultType]::ParameterValue, 'Append a JSON observation through the native fluent writer')
+            [CompletionResult]::new('current', 'current', [CompletionResultType]::ParameterValue, 'Read a fluent snapshot from its exact graph')
+            break
+        }
+        'qp;fluent;append' {
+            [CompletionResult]::new('--server', '--server', [CompletionResultType]::ParameterName, 'HTTP(S) server origin without credentials, query or path')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;fluent;current' {
+            [CompletionResult]::new('--server', '--server', [CompletionResultType]::ParameterName, 'HTTP(S) server origin without credentials, query or path')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--fluent', '--fluent', [CompletionResultType]::ParameterName, 'Exact fluent IRI to read')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;competency' {

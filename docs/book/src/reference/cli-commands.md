@@ -2,7 +2,37 @@
 
 # CLI Command Index
 
-Every `quipu` command path with its syntax, generated from the same catalogue that admits arguments, so it cannot list a command the binary refuses or miss one it accepts. `qp` is the same binary. Every command also takes `--db <path>` (default `.bobbin/quipu/quipu.db`). For explanations and examples see [CLI Commands](cli.md); `man quipu-<command>` prints the same syntax.
+Every `quipu` command path with its syntax, generated from the same catalogue that admits arguments, so it cannot list a command the binary refuses or miss one it accepts. `qp` is the same binary. Local-store commands take `--db <path>` (default `.bobbin/quipu/quipu.db`); HTTP-only `fluent` commands use `--server` and refuse `--db`. For explanations and examples see [CLI Commands](cli.md); `man quipu-<command>` prints the same syntax.
+
+## `qp fluent`
+
+Append fluent observations or read current values over authenticated HTTP.
+
+Subcommands: `fluent append`, `fluent current`.
+
+### `qp fluent append`
+
+Append a JSON observation through the native fluent writer.
+
+```text
+qp fluent append <request.json>
+```
+
+- `--server <VALUE>`: HTTP(S) server origin without credentials, query or path.
+
+### `qp fluent current`
+
+Read a fluent snapshot from its exact graph.
+
+```text
+qp fluent current
+```
+
+- `--server <VALUE>`: HTTP(S) server origin without credentials, query or path.
+
+- `--graph <VALUE>`: Explicit graph IRI for this operation.
+
+- `--fluent <VALUE>`: Exact fluent IRI to read.
 
 ## `qp competency`
 
