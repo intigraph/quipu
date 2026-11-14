@@ -1,11 +1,7 @@
 name: Merge load
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
-  push:
-    branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 # Superseded PR runs are cancelled (aegis-9w9l, runner starvation); main

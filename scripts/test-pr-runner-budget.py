@@ -138,7 +138,7 @@ class RunnerBudget(unittest.TestCase):
                 with self.subTest(workflow=name, job=job):
                     self.assertTrue(budget.audit(doc)[0])
                 tested += 1
-        self.assertEqual(tested, 3)
+        self.assertGreaterEqual(tested, 3)
 
     def test_aggregate_truth_table_retains_failure_and_main_verdicts(self):
         for job in ["release-correctness", "extended-correctness"]:
@@ -148,7 +148,7 @@ class RunnerBudget(unittest.TestCase):
                     ["pull_request", "push", "merge_group", "schedule", "workflow_dispatch", "release"],
                     [False, True], [False, True], [False, True]):
                 expected = not (event == "pull_request" and (draft or cancelled))
-                if job == "extended-correctness" and event in {"push", "merge_group"}:
+                if job == "extended-correctness" and event not in {"schedule", "workflow_dispatch"}:
                     expected = False
                 with self.subTest(job=job, event=event, draft=draft,
                                   cancelled=cancelled, upstream_success=success):

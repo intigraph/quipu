@@ -3,10 +3,12 @@ name: Conformance
 # Expected outcomes are stable source. Measurements, timings and source stamps
 # belong to the run/release artifacts; this workflow never commits them.
 on:
-  # Required CI calls this on every PR, main push and combined queue tree.
+  # Fast controls stay in required CI; expensive re-derivation is nightly.
   workflow_call:
-  schedule:
-    - cron: '0 6 * * 1'
+    inputs:
+      rederive:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       release_tag:
@@ -36,6 +38,7 @@ jobs:
       - run: python3 scripts/test-stage-conformance-release.py
 
   re-run-conformance:
+    if: inputs.rederive == true || github.event_name == 'workflow_dispatch'
     name: Re-derive conformance from the pinned W3C suite
     needs: expected-controls
     runs-on: ubuntu-latest

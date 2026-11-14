@@ -1,8 +1,7 @@
 name: Docs
 
-# The two path lists are duplicated on purpose: GitHub Actions does not
-# support YAML anchors in workflow files, so an alias here would not expand.
-# Keep them identical.
+# PRs build the book for its sources and assets. Main keeps the broader
+# product-source list so published generated content follows core changes.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -24,14 +23,6 @@ on:
       - 'scripts/test-explore-default.cjs'
       - '.github/actions/wasm-explorer-build/**'
       - 'wasm/explorer/**'
-      - 'src/**'
-      - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - 'shapes/**'
-      - 'hooks/**'
-      - '.cargo/**'
       # The Agent Primer page includes the primer source (aegis-t7h).
       - 'src/primer.md'
   push:
