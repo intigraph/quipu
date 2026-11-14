@@ -21,6 +21,13 @@ setup:
 check:
     pre-commit run --all-files
 
+# Standing source proof; deployment consumers read the single JSON prefix list.
+deploy-skip cmd="check":
+    @if [ "{{cmd}}" = "check" ]; then python3 scripts/check-deploy-skip-prefixes.py; \
+    elif [ "{{cmd}}" = "test" ]; then python3 scripts/test-deploy-skip-prefixes.py; \
+    elif [ "{{cmd}}" = "demo" ]; then python3 docs/demos/deploy-skip-prefixes/demo.py; \
+    else echo 'Use: just deploy-skip check|test|demo' >&2; exit 2; fi
+
 # Query performance gate controls (offline; no fixture or server required).
 test-query-perf:
     python3 scripts/quipu-query-perf.py self-test
@@ -459,4 +466,21 @@ signing command:
             done ;;
         package-controls) python3 scripts/ci/test_signing_package.py ;;
         *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
+    esac
+
+# Offline workflow topology, release guards and native Actions syntax.
+ci command="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(command)}} in
+        test)
+            python3 scripts/test_ci_fanout.py
+            python3 scripts/test_release_ci_gate.py
+            python3 scripts/test_release_ci_gate_controls.py
+            python3 scripts/test_python_wheel_platforms.py
+            python3 scripts/check-wasm-workflow-shared.py
+            actionlint -shellcheck= .github/workflows/*.yml
+            ;;
+        demo) python3 docs/demos/ci-fanout/compare.py ;;
+        *) echo 'usage: just ci test|demo' >&2; exit 2 ;;
     esac
