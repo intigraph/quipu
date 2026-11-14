@@ -460,3 +460,20 @@ signing command:
         package-controls) python3 scripts/ci/test_signing_package.py ;;
         *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
     esac
+
+# Offline workflow topology, release guards and native Actions syntax.
+ci command="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(command)}} in
+        test)
+            python3 scripts/test_ci_fanout.py
+            python3 scripts/test_release_ci_gate.py
+            python3 scripts/test_release_ci_gate_controls.py
+            python3 scripts/test_python_wheel_platforms.py
+            python3 scripts/check-wasm-workflow-shared.py
+            actionlint -shellcheck= .github/workflows/*.yml
+            ;;
+        demo) python3 docs/demos/ci-fanout/compare.py ;;
+        *) echo 'usage: just ci test|demo' >&2; exit 2 ;;
+    esac
