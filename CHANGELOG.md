@@ -36,15 +36,6 @@ are generated from the versioned release records.
 
 - Add flake for nix build (#1194)([7d3ba5d](https://github.com/scbrown/quipu/commit/7d3ba5d4a62e62e65f50197efd53bdf065046216))
 
-### Added
-
-- *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
-
-### Fixed
-
-- Remove a temporary native writer-lease sibling after pack export succeeds or refuses; retain the original export error and the single-file artifact contract.
-- Include the phase observer in route classification coverage and refresh the REST source witness ([b7c5c01](https://github.com/intigraph/quipu/commit/b7c5c0196308f06b9b591c75d413ab25033bd08a)).
-
 ## [0.18.0] - 2026-11-13
 
 ### Added
