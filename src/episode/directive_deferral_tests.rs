@@ -19,8 +19,8 @@ fn warning_only_episode_is_admitted_but_violation_is_refused() {
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix a: <http://aegis.gastown.local/ontology/> .
 a:TraceShape a sh:NodeShape ; sh:targetClass a:Directive ;
- sh:severity sh:{severity} ;
- sh:property [ sh:path a:missing ; sh:minCount 1 ] .
+ sh:property [ sh:path a:missing ; sh:minCount 1 ;
+               sh:severity sh:{severity} ] .
 "#
         );
         store
