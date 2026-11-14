@@ -1,0 +1,7 @@
+Offline fixture replay; synthetic versions/receipts, not release authorization.
+Draft release readiness: REFUSED
+old-only reader: AFFECTED; plans=1; release_authorized=false
+dual reader, canonical record: NOT_AFFECTED; plans=0; release_authorized=false
+dual reader, legacy record: NOT_AFFECTED; plans=0; release_authorized=false
+duplicate identity: UNKNOWN; plans=0; release_authorized=false
+missing dataset control: UNKNOWN; plans=0; release_authorized=false
