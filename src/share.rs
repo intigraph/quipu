@@ -251,7 +251,7 @@ pub use pointers::{PointerTarget, SharePointer};
 /// source compatibility for this exhaustive public struct.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
-    /// Exact recipient profile, sealed by share_id; omitted for legacy bundles.
+    /// Exact recipient profile, sealed by `share_id`; omitted for legacy bundles.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_profile: Option<RequiredProfile>,
     /// Exact pending configuration strings; absent preserves legacy identities.
