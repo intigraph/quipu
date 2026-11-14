@@ -132,7 +132,7 @@ pub fn serialize(
     result: &QueryResult,
     fmt: ResultFormat,
 ) -> Result<Option<(&'static str, Vec<u8>)>> {
-    serialize_with_limit(store, result, fmt, usize::MAX)
+    serialize_bounded(store, result, fmt, usize::MAX)
 }
 
 /// Serialize through a writer that refuses before its buffer exceeds the cap.
