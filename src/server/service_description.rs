@@ -14,10 +14,7 @@ const VOID: &str = "http://rdfs.org/ns/void#";
 
 /// Service-description routes, merged before the common authentication guard.
 pub(crate) fn routes() -> axum::Router<SharedStore> {
-    axum::Router::new().route(
-        "/.well-known/void",
-        axum::routing::get(service_description),
-    )
+    axum::Router::new().route("/.well-known/void", axum::routing::get(service_description))
 }
 
 pub(crate) async fn service_description(
