@@ -232,6 +232,15 @@ Verification is as-of the recorded signature (signing-plane S1); see
 [signing-plane.md](https://github.com/intigraph/quipu/blob/main/docs/design/signing-plane.md) §5 S3b for the trust-root
 rule and how historical verdicts are judged.
 
+With a stored verdict IRI, the recorded witness accepts exactly one original
+signature assertion under either the legacy signature predicate or
+`https://w3id.org/intigraph/camayoc/core/ns#signature`. Its exact string value
+must match the supplied signature. Mixed predicates, conflicting values,
+duplicate assertions and missing transaction evidence refuse; verification
+does not choose an earlier transaction or fall back to a caller's instant.
+This compatibility read does not rename registrations, grant authority or
+change which trust-root registrations count.
+
 ## Transition signatures at the write gate
 
 Shuttle signs every workflow transition with the performing agent's ed25519
