@@ -77,8 +77,9 @@ This is not hidden by making the oracle cleverer. It is handled three ways:
 2. **Results are reported per conflict class**, so a reader can see exactly
    which rows are definitional and which are not.
 3. **The synthetic arm's contribution is the COST of the alternatives**, not
-   the correctness of ours. Correctness evidence for the operator is Arm B,
-   which replays recorded multi-agent divergences against the SHIPPED operator
+   the correctness of ours. Arm B is not shape-independent correctness evidence either
+   (its positives are judged by the same shapes); it
+   replays recorded multi-agent divergences against the SHIPPED operator
    rather than this reference implementation. A discrepancy there is a real
    finding; agreement here is not.
 

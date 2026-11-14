@@ -433,14 +433,31 @@ curl localhost:3030/stats
 Response:
 
 ```json
-{"facts": 1234, "entities": 56, "predicates": 12,
+{"facts": 1234, "root_live_triples": 1234, "entities": 56, "predicates": 12,
+ "counts_scope": {"graph": "ROOT", "population": "live_assertions",
+                  "unit": "distinct_subject_predicate_term_key",
+                  "facts_alias_for": "root_live_triples"},
  "store_id": "urn:uuid:...", "counts_as_of_tx": 9876, "counts_stale": false}
 ```
 
-`store_id` is always current. The counts are computed on a read connection, never
-the writer, and cached until the next write. `counts_as_of_tx` is the transaction
-they describe; `counts_stale` is `true` only when another request was already
-recomputing them and an earlier aggregate was returned instead of a second scan.
+`root_live_triples` counts distinct visible ROOT triples, deduplicating repeated
+assertions and equivalent value encodings by `(subject, predicate, term_key)`.
+`facts` is a compatibility alias for that count. Closed/retracted rows and all
+named graphs are excluded. Entities and predicates are distinct members of that
+same visible triple population. The MCP `quipu_stats` transport uses this route.
+
+`store_id` is always current. Counts use a read connection, never the writer.
+They are cached until a write changes the transaction generation, with aggregate
+recomputation spaced at least five minutes apart. `counts_as_of_tx` identifies
+the cached generation. `counts_stale` is true when a newer generation exists,
+including during that minimum interval or another request's recomputation.
+
+The metrics endpoint counts a different unit: physical live ROOT assertion
+rows. Repeated assertions count separately there. For one unchanged snapshot,
+`root_live_triples <= quipu_root_live_assertion_rows`; equality holds when there
+are no repeated/equivalently encoded live assertions. Separate cache generations
+and refresh times mean independently collected live responses cannot be used
+as an exact same-snapshot inequality check.
 
 ### `GET /query` and `POST /query`
 
@@ -2124,6 +2141,14 @@ background task scans the live root graph at startup and again five minutes
 after each refresh completes. Scrapes neither acquire database connections nor
 trigger scans. WAL size still comes from a current filesystem metadata read.
 
+`quipu_root_live_assertion_rows` counts physical assertion rows in ROOT with
+`op=1 AND valid_to IS NULL`. It includes repeated assertions, excludes closed
+or retracted rows and all named graphs, and does not deduplicate equivalent
+term encodings. `quipu_graph_facts` remains an equal-valued compatibility alias
+with explicit HELP text. Neither is the distinct-triple count returned by
+`GET /stats` as `root_live_triples` (legacy `facts`). Existing dashboards can
+keep the alias while migrating to the metric that names its unit.
+
 `quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
 including pending requests, cancelled requests and metrics scrapes. It has no
 labels and resets when the process restarts. Use it to measure arrival rate:
@@ -2636,8 +2661,32 @@ Event streams accept `types`, `group` and `graph` (one registered committed
 named graph, read from its own log as on `/events/graph`; a server that
 predates named-graph events refuses `graph` on an event stream with HTTP
 400); change streams accept `graph`, including a
-registered named graph. Unrelated filter kinds and invalid resume
-cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
+registered named graph, plus `predicate` and `subject`: each a
+comma-separated list of 1 to 64 IRIs. A change frame then carries only the
+records whose predicate (`attribute`) and subject (`entity`) are in the lists,
+renumbered from 0; a transaction with no such record sends no frame. Lists are
+OR within a parameter and AND across parameters and with `graph`. An IRI the
+store has never seen matches nothing. The same `predicate` and `subject`
+parameters narrow `GET /changes`.
+
+A change stream also accepts one `member` condition, `<predicate> <term>`:
+the predicate an IRI in angle brackets and the term one RDF term in N-Triples
+syntax, an IRI (`<urn:Class>`) or a quoted literal (`"alice"`, `"x"@en`,
+`"5"^^<datatype>`). A record is kept when its subject has that predicate and
+term in the record's own graph (so with `graph=X`, in X only) in the state
+just before the record's transaction OR just after it. The transaction that
+moves a subject out of the condition therefore still arrives, carrying the
+retract and its `old_value`; later ones on that subject do not. The term is
+matched exactly: `"alice"` matches neither `"alice"^^<other>` nor
+`"alice"@en`, with no case folding or numeric equivalence (`"alice"` and
+`"alice"^^xsd:string` are the same term). Blank nodes, quoted triples and
+Turtle shorthand (`5`, `true`, prefixed names) are refused. `member`
+combines with the other filters by AND, and also narrows `GET /changes`.
+A predicate or IRI term the store has never seen matches nothing. The server
+evaluates at most 64 distinct `member` conditions at once, each once per
+commit for all its subscribers; a stream with a 65th is refused with HTTP
+503 until one ends. Unrelated filter kinds, a malformed `member` and invalid
+resume cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
 
 Delivery does not acknowledge a consumer. Commit applied data and its cursor
 atomically, then reconnect from that cursor after a disconnect. A transaction
@@ -2699,7 +2748,9 @@ From the server:
   the SSE data as a string, not parsed, because the part digests of a chunked
   transaction (`quipu.changes.begin`/`.part`/`.commit`) hash those exact bytes.
 - A subscription takes the same scope as its SSE stream: change subscriptions
-  take `graph`; event subscriptions take `types` (a list), `group` and `graph`.
+  take `graph`, `predicate` and `subject` (lists of IRIs without commas) and
+  `member` (one `"<predicate> <term>"` string); event subscriptions take
+  `types` (a list), `group` and `graph`.
   An invalid scope, an unknown `feed`, a duplicate `sub`, a subscription over a
   limit and an unknown `op` are each answered with `quipu.error` for that
   message. The connection stays open.
@@ -2867,8 +2918,12 @@ Standards-flavoured read endpoints for semantic-web tooling.
 
 Returns fact-level change records after the optional `since` transaction.
 `capture` selects `new_values`, `old_and_new_values`, or `new_row`; `graph`
-optionally scopes the feed to one graph IRI. The response includes `next_tx`
+optionally scopes the feed to one graph IRI; `predicate`, `subject` and
+`member` narrow it as on `GET /changes/stream`. The response includes `next_tx`
 and a watermark so consumers can distinguish an idle feed from a stalled one.
+With `member`, one page walks at most 256 transactions: a page that reaches
+that bound returns what it kept (possibly no records) with `next_tx` at the
+last transaction walked, and the next page continues from there.
 
 ### `GET /entity/{iri}`
 

@@ -241,8 +241,7 @@ impl Validator {
                         r.component,
                         r.path
                             .as_ref()
-                            .map(|p| format!(", path: {p}"))
-                            .unwrap_or_default()
+                            .map_or_else(Default::default, |p| format!(", path: {p}"))
                     )
                 },
             );

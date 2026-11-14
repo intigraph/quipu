@@ -864,17 +864,27 @@ def render_markdown(data: dict) -> str:
     # An unjudged case (the gate answered CannotVerify, not a SHACL verdict) is
     # neither agreeing nor diverging, so it is counted on its own (aegis-1c8q option A).
     unjudged = sorted({case for case, _, _ in write.get("unjudged", [])} - set(diverging))
-    agree = write["cases"] - len(diverging) - len(unjudged)
+    atomic = write.get("atomic_documents", [])
+    independent_cases = write["cases"] - len(atomic)
+    agree = independent_cases - len(diverging) - len(unjudged)
     out += [
         "", "### Write-path conformance", "",
-        f"The same {write['cases']} Core cases are also written through the real `/knot` handler, "
+        f"The same {write['cases']} Core cases are also written through the real `/knot` handler. "
+        f"{independent_cases} cases exercise independent writes, "
         "whole and split across writes (subject halves, one write per subject, one write per triple, "
-        f"each in both orders). **{agree}/{write['cases']}** agree with the "
+        f"each in both orders). **{agree}/{independent_cases}** agree with the "
         f"W3C verdict under every split; **{len(diverging)}** diverge under at least one"
         + (f"; **{len(unjudged)}** could not be judged under at least one split (the write gate "
            "answered *cannot verify* instead of a SHACL verdict)" if unjudged else "") + ".",
-        "A divergence is a case whose final graph violates (or conforms) while the write gate "
-        "accepted (or refused) every write. These are known defects, listed in the ledger with "
+        *([f"**{len(atomic)} together-only document{'s' if len(atomic) != 1 else ''}** "
+           f"{'use' if len(atomic) != 1 else 'uses'} the existing atomic `/knot` commit instead. "
+           "The adapter stages each split as one complete document before submitting it; every atomic "
+           "commit must match the W3C verdict. Independent-prefix refusals remain in the raw results "
+           "as diagnostics, not over-refusal defects. Each independent write must be valid in its own "
+           "post-state; a valid final union does not make an incomplete prefix valid. "
+           "The component table includes the atomic contract in its Agree column."] if atomic else []),
+        "A divergence is a mismatch between the W3C verdict and the tested admission contract. "
+        "An independent split conforms only when every write was accepted. These are known defects, listed in the ledger with "
         "the splits that expose them; the CI gate fails on any new divergence and on any entry "
         "that no longer diverges, so this number can only fall.", "",
         "| Constraint component | Cases using it | Agree | Diverge | Unjudged |",

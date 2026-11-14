@@ -162,12 +162,11 @@ fn parse_query_response(body: &JsonValue) -> Result<QueryResult> {
         let variables: Vec<String> = body
             .get("variables")
             .and_then(|v| v.as_array())
-            .map(|a| {
+            .map_or_else(Default::default, |a| {
                 a.iter()
                     .filter_map(|x| x.as_str().map(String::from))
                     .collect()
-            })
-            .unwrap_or_default();
+            });
         let parsed = rows
             .iter()
             .filter_map(|r| r.as_object())

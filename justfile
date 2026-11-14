@@ -365,11 +365,10 @@ validator-observation command="embedding" *args="":
 conformance-report:
     python3 benchmark/public/conformance_report.py
 
-# Fail if the published page/badges disagree with the ledgers, then run the
-# benchmark unit tests. CI runs exactly this: a results page that has drifted
-# from its own evidence is worse than no page.
+# Fast expectation/inventory controls against historical fixtures. CI's
+# derive_expected.py also runs the actual pinned suites against its build.
 conformance-check:
-    python3 benchmark/public/conformance_report.py --check
+    python3 benchmark/public/expected_results.py --results-dir benchmark/public/results
     python3 -m unittest discover -s benchmark/public -p 'test_*.py'
 
 # === Release ===
@@ -385,6 +384,7 @@ changelog-verify *args:
 changelog-verify-test:
     ./scripts/test-verify-changelog.sh
     python3 scripts/test_changelog_scrub.py
+    python3 scripts/test_changelog_check_scope.py
 
 # Repository contributor graph: generate, prove the receiver, or build the release share.
 contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":

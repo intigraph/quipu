@@ -13,19 +13,33 @@ $A_x = G_x \setminus \base$ and $R_x = \base \setminus G_x$ for $x \in
 ``modified'' rather than removed and re-added, because at triple granularity
 there is no such distinction to make.
 
-\paragraph{Functional slots.} Let $\mathit{max}_S(s,p)$ be the maximum
+\paragraph{Bounded slots.} Let $\mathit{max}_S(s,p)$ be the maximum
 cardinality $S$ declares for $p$ on $s$, or $\infty$ where none is declared. A
-slot is \emph{contended} when
+slot is a candidate only when both sides changed it and disagree:
 \[
-  \mathit{max}_S(s,p) = 1
-  \;\wedge\;
   \ours[s,p] \neq \theirs[s,p]
   \;\wedge\;
   \ours[s,p] \neq \base[s,p]
   \;\wedge\;
   \theirs[s,p] \neq \base[s,p].
 \]
-Both sides must have moved. If only one side changed a functional slot, the
+For a candidate, let $M[s,p]$ be the slot's three-way set merge: the base
+values neither side removed, together with the values either side added. The
+slot is \emph{contended} when
+\[
+  |M[s,p]| > \mathit{max}_S(s,p)
+\]
+or when $\mathit{max}_S(s,p) = 1$, the base held a value, and one side emptied
+the slot while the other replaced its value. The predicate therefore yields
+three classes, which the evaluation reports separately. \emph{Functional
+divergence}: a slot bounded at one receives two different values.
+\emph{Cardinality overflow}: a slot bounded at $n > 1$ would exceed $n$ once
+both sides' additions are united. \emph{Delete/modify}: one side deleted a
+functional value that the other replaced; the set merge is within the bound, so
+the count alone would let the replacement silently override the deletion. An
+unbounded slot is never contended.
+
+Both sides must have moved. If only one side changed a bounded slot, the
 other side's value is still the base value, there is no disagreement, and the
 change applies --- a merge that stopped to ask about it would be charging a
 person for a decision nobody needs to make.
@@ -51,7 +65,10 @@ $\ours$ and $\theirs$ and independent of serialization.
 \paragraph{Post-merge validation.} $G_m$ is validated against $S$. This is not
 belt-and-braces: it is the falsifiable form of the design claim. If conflict
 semantics really are derivable from cardinality, then a merge that consulted the
-shapes should not be able to produce a graph those same shapes reject. Any
+shapes should not be able to produce a graph that breaks a \texttt{sh:maxCount}
+bound. The claim is scoped to that constraint: datatype, class and minimum-count
+constraints are outside the predicate, and \S\ref{sec:schema} reports a datatype
+violation that only this validation step catches. Any
 violation in $G_m$ is corruption the operator admitted without charging anyone
 for it, and \S\ref{sec:synthetic} reports that column for every strategy
 precisely so the claim can fail.

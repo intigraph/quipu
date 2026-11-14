@@ -243,8 +243,16 @@ impl McpServer {
     /// Serve local stdio without binding a network listener. An optional bearer
     /// is read from a file; it is never accepted as an argument value.
     pub async fn stdio(
+        self,
+        token_file: Option<&std::path::Path>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.stdio_with_ready(token_file, || {}).await
+    }
+
+    async fn stdio_with_ready(
         mut self,
         token_file: Option<&std::path::Path>,
+        ready: impl FnOnce(),
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(path) = token_file {
             let mut options = std::fs::OpenOptions::new();
@@ -280,6 +288,7 @@ impl McpServer {
                 .map_err(|_| "invalid MCP credential")?;
             self.stdio_headers.insert("authorization", header);
         }
+        ready();
         self.serve(rmcp::transport::stdio())
             .await?
             .waiting()
@@ -337,8 +346,21 @@ impl ServerHandler for McpServer {
 /// Serve local stdio or HTTP using the server's guarded application.
 /// Stdio returns after EOF without ever binding a listener.
 pub async fn serve(app: Router, args: &[String], origins: Vec<String>, bind: &str, db: &str) {
+    serve_with_ready(app, args, origins, bind, db, || {}).await;
+}
+
+/// Start maintenance only after a successful HTTP bind, or stdio readiness.
+/// A failed listener never invokes the callback.
+pub async fn serve_with_ready(
+    app: Router,
+    args: &[String],
+    origins: Vec<String>,
+    bind: &str,
+    db: &str,
+    ready: impl FnOnce() + Send + 'static,
+) {
     if args.iter().any(|a| a == "--mcp-stdio") {
-        serve_stdio(app, args).await;
+        serve_stdio(app, args, ready).await;
     } else {
         let native = http_router(app.clone(), origins);
         let listener = if std::env::var("QUIPU_READ_WORKER_LISTENER_FD").as_deref() == Ok("0") {
@@ -352,6 +374,7 @@ pub async fn serve(app: Router, args: &[String], origins: Vec<String>, bind: &st
         });
         // A failed bind must never record the process as serving.
         crate::metrics::init_start_time();
+        ready();
         eprintln!("quipu-server listening on {bind} (db: {db}); MCP at /mcp");
         axum::serve(
             listener,
@@ -386,7 +409,7 @@ fn inherited_reader_listener(bind: &str) -> std::io::Result<tokio::net::TcpListe
     }
 }
 
-async fn serve_stdio(app: Router, args: &[String]) {
+async fn serve_stdio(app: Router, args: &[String], ready: impl FnOnce()) {
     let token_file = args
         .windows(2)
         .find(|w| w[0] == "--mcp-token-file")
@@ -395,7 +418,10 @@ async fn serve_stdio(app: Router, args: &[String]) {
         eprintln!("error: --mcp-token-file requires a path");
         std::process::exit(2);
     }
-    if let Err(error) = McpServer::new(app).stdio(token_file).await {
+    if let Err(error) = McpServer::new(app)
+        .stdio_with_ready(token_file, ready)
+        .await
+    {
         eprintln!("MCP stdio stopped: {error}");
         std::process::exit(1);
     }

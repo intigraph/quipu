@@ -26,6 +26,7 @@ pub(super) fn same(a: &Value, b: &Value) -> bool {
         (Value::Float(a), Value::Float(b)) => float_same(*a, *b),
         (Value::Bool(a), Value::Bool(b)) => a == b,
         (Value::Bytes(a), Value::Bytes(b)) => a == b,
+        (Value::Triple(a), Value::Triple(b)) => a == b,
         (
             Value::Lang {
                 lexical: a,
@@ -60,6 +61,7 @@ pub(super) fn hash<H: Hasher>(value: &Value, state: &mut H) {
         Value::Float(f) => f.to_bits().hash(state),
         Value::Bool(b) => b.hash(state),
         Value::Bytes(b) => b.hash(state),
+        Value::Triple(t) => t.hash(state),
         Value::Lang { lexical, lang } => (lexical, lang).hash(state),
         Value::Typed { lexical, datatype } => (lexical, datatype).hash(state),
     }

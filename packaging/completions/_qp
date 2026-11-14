@@ -1906,7 +1906,23 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:qp-graph-command-$line[1]:"
         case $line[1] in
-            (create)
+            (writer-instance)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-iri:_default' \
+&& ret=0
+;;
+(writer-grant)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-grant-json:_default' \
+&& ret=0
+;;
+(create)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
@@ -2744,6 +2760,8 @@ _qp__subcmd__git-mergetool_commands() {
 (( $+functions[_qp__subcmd__graph_commands] )) ||
 _qp__subcmd__graph_commands() {
     local commands; commands=(
+'writer-instance:Read a local committed graph instance pin for owner enrollment' \
+'writer-grant:Apply an owner-local scoped writer grant revision or revocation' \
 'create:Register a committed named graph' \
 'label:Declare lattice labels on a registered graph' \
 'list:List registered named graphs' \
@@ -2800,6 +2818,16 @@ _qp__subcmd__graph__subcmd__overlay-write_commands() {
 _qp__subcmd__graph__subcmd__thaw_commands() {
     local commands; commands=()
     _describe -t commands 'qp graph thaw commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__writer-grant_commands] )) ||
+_qp__subcmd__graph__subcmd__writer-grant_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph writer-grant commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__writer-instance_commands] )) ||
+_qp__subcmd__graph__subcmd__writer-instance_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph writer-instance commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__hook_commands] )) ||
 _qp__subcmd__hook_commands() {

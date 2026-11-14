@@ -16,8 +16,10 @@ use crate::types::Value;
 use super::Bindings;
 
 mod cast_eval;
+pub(super) mod ebv;
+use ebv::effective_boolean_value;
 pub(super) mod eval_memo;
-mod operand;
+pub(super) mod operand;
 mod regex_cache;
 pub(super) use eval_memo::Scope as EvalMemo;
 pub(super) use regex_cache::build_regex;
@@ -196,41 +198,13 @@ fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Binding
         return Some(false);
     };
     let (a, b) = (&*a, &*b);
-    if a == b {
-        return Some(true);
-    }
-    if let Some(order) = temporal_equality_order(a, b) {
-        return order.map(|o| o == std::cmp::Ordering::Equal);
-    }
-    Some(crate::numeric_value::equal(a, b))
+    operand::equal(a, b)
 }
 
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
     match (eval_expr(store, left, row), eval_expr(store, right, row)) {
         (Some(l), Some(r)) => l == r,
         _ => false,
-    }
-}
-
-/// SPARQL effective boolean value for a bound value used directly as a FILTER.
-fn effective_boolean_value(v: &Value) -> Option<bool> {
-    match v {
-        Value::Bool(b) => Some(*b),
-        Value::Str(s) => Some(!s.is_empty()),
-        Value::Int(i) => Some(*i != 0),
-        Value::Float(f) => Some(*f != 0.0 && !f.is_nan()),
-        // SPARQL EBV: numeric literals test against zero, plain/lang strings
-        // against emptiness. Other datatypes have no EBV.
-        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(datatype) => Some(
-            lexical
-                .parse::<f64>()
-                .is_ok_and(|f| f != 0.0 && !f.is_nan()),
-        ),
-        Value::Typed { lexical, datatype } if datatype == namespace::XSD_BOOLEAN => {
-            Some(matches!(lexical.as_str(), "true" | "1"))
-        }
-        Value::Lang { lexical, .. } => Some(!lexical.is_empty()),
-        Value::Typed { .. } | Value::Ref(_) | Value::Bytes(_) => None,
     }
 }
 
@@ -248,7 +222,7 @@ fn eval_bool_function(
     let str_arg = |i: usize| -> Option<String> {
         args.get(i)
             .and_then(|e| eval_expr(store, e, row))
-            .map(|v| value_to_string(store, &v))
+            .and_then(|v| value_to_string(store, &v))
     };
     Ok(match func {
         Function::Contains => match (str_arg(0), str_arg(1)) {
@@ -283,7 +257,7 @@ fn eval_bool_function(
         // of silently answering "false" for it.
         Function::IsLiteral => matches!(
             args.first().and_then(|e| eval_expr(store, e, row)),
-            Some(v) if !matches!(v, Value::Ref(_))
+            Some(v) if !matches!(v, Value::Ref(_) | Value::Triple(_))
         ),
         // Numeric Typed literals (xsd:long, xsd:decimal, …) are numeric — they
         // only became `Typed` instead of `Int`/`Float` so their datatype IRI
@@ -309,7 +283,7 @@ fn eval_regex(store: &Store, args: &[Expression], row: &Bindings) -> Result<bool
     let arg_str = |i: usize| -> Option<String> {
         args.get(i)
             .and_then(|e| eval_expr(store, e, row))
-            .map(|v| value_to_string(store, &v))
+            .and_then(|v| value_to_string(store, &v))
     };
     // Unbound text or pattern → no match (cannot evaluate, but not an error).
     let (Some(text), Some(pattern)) = (arg_str(0), arg_str(1)) else {
@@ -322,10 +296,12 @@ fn eval_regex(store: &Store, args: &[Expression], row: &Bindings) -> Result<bool
 
 /// Render a Value as a string for string builtins (STR/CONTAINS/LCASE/…).
 /// Refs resolve to their IRI string.
-fn value_to_string(store: &Store, v: &Value) -> String {
+fn value_to_string(store: &Store, v: &Value) -> Option<String> {
     match v {
-        Value::Ref(id) => eval_memo::resolve(store, *id).unwrap_or_else(|_| format!("ref:{id}")),
-        other => lexical(other).unwrap_or_default(),
+        Value::Ref(id) => {
+            Some(eval_memo::resolve(store, *id).unwrap_or_else(|_| format!("ref:{id}")))
+        }
+        other => lexical(other),
     }
 }
 
@@ -338,7 +314,7 @@ pub(super) fn lexical(v: &Value) -> Option<String> {
         // SPARQL STR() yields the LEXICAL form — without the tag, without the
         // datatype. STR("hello"@en) is "hello", never "hello@en".
         Value::Lang { lexical, .. } | Value::Typed { lexical, .. } => lexical.clone(),
-        Value::Ref(_) => return None,
+        Value::Ref(_) | Value::Triple(_) => return None,
         Value::Int(i) => i.to_string(),
         Value::Float(f) => f.to_string(),
         Value::Bool(b) => b.to_string(),
@@ -458,7 +434,7 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::FunctionCall(Function::Str, args) => args
             .first()
             .and_then(|e| eval_expr(store, e, row))
-            .map(|v| Value::Str(value_to_string(store, &v))),
+            .and_then(|v| value_to_string(store, &v).map(Value::Str)),
         Expression::FunctionCall(Function::Lang, args) => {
             match eval_expr(store, args.first()?, row)? {
                 Value::Lang { lang, .. } => Some(Value::Str(lang)),
@@ -476,7 +452,7 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
                 Value::Typed { datatype, .. } => {
                     return eval_memo::query_ref(store, &datatype).ok().map(Value::Ref);
                 }
-                Value::Ref(_) | Value::Bytes(_) => return None,
+                Value::Ref(_) | Value::Bytes(_) | Value::Triple(_) => return None,
             };
             eval_memo::query_ref(store, datatype).ok().map(Value::Ref)
         }
@@ -495,7 +471,7 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::FunctionCall(Function::StrUuid, _) => Some(Value::Str(generated_uuid())),
         Expression::FunctionCall(Function::BNode, args) => {
             let suffix = if let Some(argument) = args.first() {
-                let lexical = value_to_string(store, &eval_expr(store, argument, row)?);
+                let lexical = value_to_string(store, &eval_expr(store, argument, row)?)?;
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
                 lexical.hash(&mut hasher);
                 let mut solution: Vec<_> = row
@@ -516,7 +492,7 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             Some(Value::Str(format!("_:quipu-query-{suffix}")))
         }
         Expression::FunctionCall(Function::Iri, args) => {
-            let lexical = value_to_string(store, &eval_expr(store, args.first()?, row)?);
+            let lexical = value_to_string(store, &eval_expr(store, args.first()?, row)?)?;
             let iri = resolve_query_iri(&lexical)?;
             store.intern(&iri).ok().map(Value::Ref)
         }

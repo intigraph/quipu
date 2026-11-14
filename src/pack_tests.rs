@@ -1367,6 +1367,10 @@ fn every_canonical_content_caller_scrubs_or_is_classified() {
         // Receiver-side inspection of immutable pack bytes before admission;
         // receive_pack enforces the independently configured receiver policy.
         "unpack_verified",
+        // Evidence-only receiver: recomputes the existing pendant hash without
+        // rewriting signed bytes, then receive_pack and carriers::enforce_destination
+        // enforce receiver policy, including decoded pending proofs. Emits no pack.
+        "materialize_pending_carriers",
         // The definition matches its own name. Named here rather than filtered
         // silently, so the list stays a record of every decision rather than of
         // the interesting ones.

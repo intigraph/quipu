@@ -1463,6 +1463,8 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('writer-instance', 'writer-instance', [CompletionResultType]::ParameterValue, 'Read a local committed graph instance pin for owner enrollment')
+            [CompletionResult]::new('writer-grant', 'writer-grant', [CompletionResultType]::ParameterValue, 'Apply an owner-local scoped writer grant revision or revocation')
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Register a committed named graph')
             [CompletionResult]::new('label', 'label', [CompletionResultType]::ParameterValue, 'Declare lattice labels on a registered graph')
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List registered named graphs')
@@ -1472,6 +1474,18 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('overlay-create', 'overlay-create', [CompletionResultType]::ParameterValue, 'Create an overlay graph bound to a committed parent')
             [CompletionResult]::new('overlay-write', 'overlay-write', [CompletionResultType]::ParameterValue, 'Assert, retract or tombstone a triple in an overlay')
             [CompletionResult]::new('overlay-compose', 'overlay-compose', [CompletionResultType]::ParameterValue, 'Resolve an overlay''s composed view over its parent')
+            break
+        }
+        'quipu;graph;writer-instance' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;graph;writer-grant' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'quipu;graph;create' {

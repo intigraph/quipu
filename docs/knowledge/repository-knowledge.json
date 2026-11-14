@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "638f346f5de7eded5d687a4125b954d7ea0502e718d256545da8c29699428939",
+      "source_sha256": "7f0e4e7941b1aa8a7cb7548aacb0a4470fba78b4e60d450d34c14c106bbb40e0",
       "type": "Concept"
     },
     {
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "9537583e3a3342e5352f4fc7e6573d7b6c88d2a48031f610c15e02735ee0b20c",
+      "source_sha256": "be6a1c6f70404e7f9cf5be6905b5f9988ac113107d45ab8e54c6c41ca2a2f992",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "04132b625f6e0e590cc0b13c663b47d65b45a049bc9c7b7fb930dac789bb04ed",
+      "source_sha256": "55c2cfb15215f19b351a1eb169f08414658915cd172dcdeb5046711700dbb763",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "62a0c19e1705578820cd52f4dd6b9d7db54dba0515b437cf98a404caa1fbe60a",
+      "source_sha256": "72bc7fb1bc11a746398f556aae5fd5f301d37ae1113b91c82e4b404bcee8314a",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "59095169e61b8e7ad3fb8e076a7c665cf79863dbce70cf6f892e197e671ed8e4",
+      "source_sha256": "004d22486062d9240cae7a6d7254e9aa28871b4456da4cf7691d2dd99a108e7e",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "47ec88a6232e0e5c574068536d80fcc02efb1b064d5786144783a9679bded7b4",
+      "source_sha256": "d6fa0ff3ad0d3de8471b123d131b9a39bc51af4f3620d693c5349376d0fee1b5",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"

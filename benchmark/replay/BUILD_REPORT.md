@@ -10,7 +10,7 @@ oracle's rules and the operator's coincide by construction. A synthetic arm can
 therefore measure what the alternatives *cost*, but it cannot be evidence that our
 operator is *correct*.
 
-This arm exists to remove that circularity twice over:
+This arm removes one half of that circularity, not both (the judgement is still derived from the shapes; see the paper's limitations section). What it changes:
 
 1. the corpus is **recorded production divergence**, not generated; and
 2. the operator under test is the **shipped** `quipu::share_merge`, driven through
@@ -55,7 +55,7 @@ sameas-repair            0         20    merged     repair survives (wanted)
 ```
 
 - **The operator is blind to the entire alias class — 0 of 93.** This reproduces
-  mergebench's synthetic 0/4 on a real corpus, and it is the honest false-negative
+  mergebench's synthetic 0 of 21 (five seeds) on recorded alias pairs, and it is the honest false-negative
   column: two names for one entity is invisible to *any* triple-level operator,
   shape-aware included. No amount of schema fixes this; it is a limit of the medium
   the operator works in.

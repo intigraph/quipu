@@ -45,3 +45,4 @@ docs/demos/knot-completion/output.log -text whitespace=cr-at-eol
 docs/demos/asof-rdf/output.log -text whitespace=cr-at-eol
 docs/demos/client-resolver-observation/output.log -text whitespace=cr-at-eol
 docs/demos/deploy-skip-prefixes/output.log -text whitespace=cr-at-eol
+docs/demos/expected-results/output.log -text whitespace=cr-at-eol

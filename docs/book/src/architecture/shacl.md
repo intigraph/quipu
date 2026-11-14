@@ -213,3 +213,36 @@ curl -s localhost:3030/shapes -X POST \
   -d "{\"action\": \"load\", \"name\": \"code-entities\", \
        \"turtle\": \"$(cat shapes/code-entities.ttl)\"}"
 ```
+
+## Legacy registry digests and readiness
+
+Opening a store adds registry digest metadata without parsing its historical
+Turtle. A writable primary starts a paced legacy backfill only after its HTTP
+listener binds (or its stdio transport is ready). Replicas, relays and read-only
+servers do not start it. Each turn snapshots one pending version, releases the
+writer mutex for canonicalization, and conditionally records the result under a
+fresh lock. Current versions in both registries precede historical versions.
+
+A turn copies at most 1 MiB of Turtle; larger legacy documents retain an explicit
+failure marker and a NULL digest. Malformed documents are also marked failed.
+This byte bound is not a canonicalization CPU deadline. The worker pauses 100 ms
+between attempts. Progress is in the registry database: a crash before recording
+a result retries that version; committed digests and failures are not processed
+again on reopen. A database or ownership error pauses the worker with a log
+message and retained progress. Version-attempt logs and the final persisted
+pending/complete/failed counts distinguish work attempted from work completed.
+
+Pending and failed versions cannot supply mapping pins. Pin reads report
+`backfill pending` or `backfill failed`; neither condition permits admission.
+Ordinary shape and ontology edits still compute a canonical digest before
+committing. A late backfill result cannot overwrite a concurrently replaced
+version: the name, version time, transaction, original content and NULL metadata
+must still match. Backfill changes no historical Turtle, timestamp, transaction
+identifier or provenance. Reloading corrected content uses the normal governed
+registry-edit path, with the existing mapping-change checks.
+
+Library callers may explicitly use `next_registry_digest_work`, compute the
+returned work outside their store lock, then apply its result. Opening a library
+store alone performs no background work. `registry_digest_backfill_status`
+reports durable progress. This mechanism does not increase a readiness timeout
+or claim that other startup stages are instantaneous.

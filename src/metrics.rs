@@ -622,10 +622,15 @@ impl Metrics {
             );
             let _ = writeln!(out, "quipu_graph_entities {entities}");
             out.push_str(
-                "# HELP quipu_graph_facts Live facts in the root graph.\n\
+                "# HELP quipu_graph_facts Compatibility alias for quipu_root_live_assertion_rows; physical live ROOT rows, including repeated assertions, not distinct triples.\n\
              # TYPE quipu_graph_facts gauge\n",
             );
             let _ = writeln!(out, "quipu_graph_facts {facts}");
+            out.push_str(
+                "# HELP quipu_root_live_assertion_rows Physical ROOT assertion rows with op=1 and valid_to NULL; repeated assertions count separately, closed/retracted rows and named graphs excluded.\n\
+                 # TYPE quipu_root_live_assertion_rows gauge\n",
+            );
+            let _ = writeln!(out, "quipu_root_live_assertion_rows {facts}");
             out.push_str(
                 "# HELP quipu_graph_predicates Distinct live predicates in the root graph.\n\
              # TYPE quipu_graph_predicates gauge\n",
