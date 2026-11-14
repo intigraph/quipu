@@ -62,9 +62,16 @@ fn local_cli_namespace_registry_is_readable_persistent_and_public_by_default() {
     std::fs::write(dir.path().join(".bobbin/config.toml"), "[quipu]\n").unwrap();
     let retained = run(&["namespaces", "list"]);
     assert!(retained.status.success());
+    let retained: serde_json::Value = serde_json::from_slice(&retained.stdout).unwrap();
+    assert_eq!(retained["namespaces"], value["namespaces"]);
+    // Persistence and minting advance the store-bound transaction receipt,
+    // even though removing config leaves the effective policy unchanged.
+    assert_ne!(retained["registry_hash"], value["registry_hash"]);
+    let unchanged = run(&["namespaces", "list"]);
+    assert!(unchanged.status.success());
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&retained.stdout).unwrap(),
-        value
+        serde_json::from_slice::<serde_json::Value>(&unchanged.stdout).unwrap(),
+        retained
     );
     std::fs::write(
         dir.path().join("bad.json"),

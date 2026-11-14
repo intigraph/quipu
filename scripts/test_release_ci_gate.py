@@ -16,7 +16,7 @@ release = Path(".github/workflows/release.yml").read_text()
 
 assert "  release-correctness:\n" in ci
 assert "    name: Release correctness\n" in ci
-assert "needs: [clippy, test, build, check, shacl-write-path, generated-docs]" in ci
+assert "needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance]" in ci
 aggregate_header = ci[ci.index("  release-correctness:\n") :].split("    runs-on:", 1)[0]
 for excluded in ("source-size", "fmt", "lint-markdown", "build-full", "wasm", "shapes"):
     assert excluded not in aggregate_header, f"housekeeping job {excluded} must not gate release"

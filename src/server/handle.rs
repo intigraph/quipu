@@ -238,7 +238,17 @@ impl StoreHandle {
     /// Every pre-existing `.lock()` call site means exactly what it meant
     /// before, which is why this refactor does not have to audit them.
     pub(crate) fn lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        self.lock_observed(|| {})
+    }
+
+    /// Observe acquisition before settlement, without changing writer custody.
+    /// The callback only records fixed-size timing; it must not acquire a store.
+    pub(crate) fn lock_observed(
+        &self,
+        acquired: impl FnOnce(),
+    ) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
         let guard = self.writer.lock();
+        acquired();
         // A signed write settles HERE, in the same lock hold as its work: its
         // binding is re-checked (a revocation that landed while it queued is
         // honoured) and its nonce spent, even if the work turns out to be a

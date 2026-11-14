@@ -24,6 +24,8 @@ class ChangelogScrubTests(unittest.TestCase):
         prefix = re.search(r"\(\?:([^|)]+)\|", patterns).group(1)
         ref = f"{prefix}-abc123"
         cases = [
+            ("Fix observer route inventory and refresh REST source witness",
+             "*(server)* Include the phase observer in route coverage and refresh the REST witness"),
             (f"fix: bare reference {ref}", "Bare reference"),
             (f"fix: bracket reference [{ref}]", "Bracket reference"),
             (f"fix: bracket child [{ref}.3]", "Bracket child"),
