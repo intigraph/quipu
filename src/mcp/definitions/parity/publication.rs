@@ -52,6 +52,16 @@ pub(super) fn defs() -> Vec<Value> {
                         "type": "string"
                     },
                     "competency_toml": {"type": "string"},
+                    "required_profile": {
+                        "type": "object",
+                        "description": "Require the recipient to have this exact reviewed profile before import; does not install incoming shapes.",
+                        "properties": {
+                            "reference": {"type": "string"},
+                            "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+                        },
+                        "required": ["reference", "digest"],
+                        "additionalProperties": false
+                    },
                     "parent_share": {
                         "type": "string"
                     },
