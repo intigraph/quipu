@@ -21,14 +21,24 @@ test -z "$(git -C "$SOURCE" status --porcelain --untracked-files=no)"
 
 PRIVATE=$(mktemp -d "$(dirname "$OUTPUT")/.quipu-publisher.XXXXXX")
 trap 'rm -rf "$PRIVATE"' EXIT
-bash "$SOURCE/scripts/build-repository-share.sh" \
-    "$QUIPU_BIN" "$BOBBIN_BIN" "$SOURCE" "$PRIVATE/share" "$REVISION"
+# Keep the deployed --prepare interface, but use the qualified builder and
+# flat, allowlisted package contract rather than the pre-recipe shell builder.
+python3 "$SOURCE/scripts/build-repository-share.py" \
+    "$REVISION" "$SOURCE" "$SOURCE" "$QUIPU_BIN" "$BOBBIN_BIN" "$PRIVATE/share"
 mkdir "$PRIVATE/artifacts"
 PACK="quipu-${TAG}-repository.pendant.tar.gz"
-tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
-    --numeric-owner -C "$PRIVATE/share" -czf "$PRIVATE/artifacts/$PACK" .
+python3 - "$SOURCE" "$PRIVATE/share" "$PRIVATE/artifacts/$PACK" <<'PACKAGE'
+import importlib.util
+import sys
+from pathlib import Path
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location("publisher", Path(sys.argv[1]) / "scripts/publish_repository_share.py")
+publisher = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(publisher)
+publisher.package(Path(sys.argv[2]), Path(sys.argv[3]))
+PACKAGE
 (cd "$PRIVATE/artifacts" && sha256sum "$PACK" > "$PACK.sha256")
-python3 - "$PRIVATE/artifacts/$PACK" "$QUIPU_BIN" "$REVISION" "$TAG" <<'PY'
+python3 - "$PRIVATE/artifacts/$PACK" "$QUIPU_BIN" "$REVISION" "$TAG" "$BOBBIN_BIN" <<'PY'
 import datetime
 import hashlib
 import json
@@ -43,6 +53,9 @@ proof = {
     "release_tag": sys.argv[4],
     "archive_sha256": hashlib.sha256(pack.read_bytes()).hexdigest(),
     "quipu_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+    "engine_source_revision": sys.argv[3],
+    "bobbin_sha256": hashlib.sha256(Path(sys.argv[5]).read_bytes()).hexdigest(),
+    "quipu_server_sha256": hashlib.sha256(binary.with_name("quipu-server").read_bytes()).hexdigest(),
     "destination": "outward",
     "verified_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
 }
