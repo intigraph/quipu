@@ -342,9 +342,11 @@ fn derived_manifest_and_lineage_tampering_are_detected() {
 #[test]
 fn repository_pendant_is_a_positive_control() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // Two committed pendants: the repository's own and the worked example in
+    // docs/examples/pendant-merge.
     assert_eq!(
         quipu::git_merge::check(repo, "HEAD", "HEAD", "HEAD", "HEAD").unwrap(),
-        1
+        2
     );
 }
 

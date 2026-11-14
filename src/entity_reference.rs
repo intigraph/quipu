@@ -41,12 +41,19 @@ pub fn tool_namespaces(store: &Store, input: &Value) -> Result<Value> {
             "namespaces supports only action=list".into(),
         ));
     }
-    Ok(json!({"namespaces":entity_namespaces::list(store)?}))
+    entity_namespaces::registry_receipt(store)
 }
 
 /// Registered identity write / resolution. HTTP uses the existing authenticated
 /// writer path; caller source hints never establish authority or fetch a URL.
 pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
+    if input.get("action").is_some_and(|action| action == "mint") {
+        return entity_namespaces::with_registry_lock(store, |store| entity_ref(store, input));
+    }
+    entity_ref(store, input)
+}
+
+fn entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
     let request: Request = serde_json::from_value(input.clone())
         .map_err(|e| Error::InvalidValue(format!("entity reference: {e}")))?;
     let namespaces = entity_namespaces::list(store)?;
