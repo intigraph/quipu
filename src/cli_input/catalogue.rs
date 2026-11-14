@@ -62,8 +62,6 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("namespaces", "", 0, 0, "", ""),
     spec!("namespaces list", "", 0, 0, "", ""),
     spec!("namespaces apply", "", 0, 0, "", ""),
-    spec!("namespaces remove", "<request.json>", 1, 1, "", ""),
-    spec!("namespaces apply-if", "<request.json>", 1, 1, "", ""),
     spec!("entity-ref mint", "<request.json>", 1, 1, "", ""),
     spec!("entity-ref resolve", "<request.json>", 1, 1, "", ""),
     spec!("entity-ref verify", "<request.json>", 1, 1, "", ""),

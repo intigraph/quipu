@@ -472,14 +472,8 @@ _qp() {
             qp__subcmd__namespaces,apply)
                 cmd="qp__subcmd__namespaces__subcmd__apply"
                 ;;
-            qp__subcmd__namespaces,apply-if)
-                cmd="qp__subcmd__namespaces__subcmd__apply__subcmd__if"
-                ;;
             qp__subcmd__namespaces,list)
                 cmd="qp__subcmd__namespaces__subcmd__list"
-                ;;
-            qp__subcmd__namespaces,remove)
-                cmd="qp__subcmd__namespaces__subcmd__remove"
                 ;;
             qp__subcmd__ontology,list)
                 cmd="qp__subcmd__ontology__subcmd__list"
@@ -3492,7 +3486,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__namespaces)
-            opts="-h --db --help list apply remove apply-if"
+            opts="-h --db --help list apply"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -3527,43 +3521,7 @@ _qp() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        qp__subcmd__namespaces__subcmd__apply__subcmd__if)
-            opts="-h --db --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --db)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         qp__subcmd__namespaces__subcmd__list)
-            opts="-h --db --help"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                --db)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        qp__subcmd__namespaces__subcmd__remove)
             opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
