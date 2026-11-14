@@ -13,6 +13,8 @@ const DATA: &[&str] = &[
     "transaction_declarations",
     "facts",
     "graphs",
+    // Caller-declared creation history survives retention; never local authority.
+    "graph_creators",
     "shapes",
     "ontologies",
     "schema_terms",
