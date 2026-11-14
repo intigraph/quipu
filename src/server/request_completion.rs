@@ -59,6 +59,7 @@ pub(super) fn cancellations() -> &'static Cancellations {
 
 pub(super) struct Completion<'a> {
     pub(super) search: Option<std::sync::Arc<super::super::search_observation::Call>>,
+    pub(super) auth_phases: Option<super::super::auth_phase::Observation>,
     pub(super) id: u64,
     pub(super) client: String,
     pub(super) task: String,
@@ -131,6 +132,9 @@ impl Completion<'_> {
         );
         let mut log: serde_json::Value = serde_json::from_str(&log).unwrap();
         log["completion_outcome"] = if cancelled { "cancelled" } else { "response" }.into();
+        if let Some(observation) = &self.auth_phases {
+            observation.annotate(&mut log);
+        }
         (self.emit)(self.command_context.annotate(log.to_string()));
     }
 }
