@@ -3,13 +3,13 @@ use crate::ownership_handoff_model::{Authority, AuthorityUnit, Journal, Placemen
 use crate::store::{ownership_journal, ownership_latch};
 
 fn pinned_fixture(root: &Path, journal: &Path) -> (Owner, Authority) {
-    let (store, mut route) = fixture(root, "a");
-    // The isolated in-memory witness starts at its admitted genesis.
-    route.generation = 0;
+    let (store, route) = fixture(root, "a");
     let authority = Authority {
         store_id: route.store_id.clone(),
         unit: AuthorityUnit::FullStore,
-        generation: route.generation,
+        // Lineage genesis is separate from the nonzero catalog route pin,
+        // as in ownership_admission_owner_tests.
+        generation: 0,
         epoch: route.log_epoch.clone(),
         owner: Placement {
             principal: "fixture-owner".into(),
@@ -38,12 +38,6 @@ fn pinned_fixture(root: &Path, journal: &Path) -> (Owner, Authority) {
     )
     .unwrap();
     (owner, authority)
-}
-
-fn request(owner: &Owner) -> WriteRequest<'_> {
-    let mut request = super::request(owner);
-    request.owner_generation = Some(owner.route.generation);
-    request
 }
 
 #[test]
