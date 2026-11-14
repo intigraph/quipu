@@ -328,6 +328,15 @@ fn representative_private_index_build_and_drop_preserve_all_rows() {
 fn native_creator_query_cost_is_bounded_with_positive_and_absence_controls() {
     for count in [100, 10_000] {
         let s = Store::open_in_memory().unwrap();
+        // The fallback must describe this registration, not an event for a
+        // missing graph or a prior incarnation with a different timestamp.
+        let g = s.graph_create(GRAPH).unwrap();
+        s.conn
+            .execute(
+                "UPDATE graphs SET created_at=?1 WHERE g=?2",
+                rusqlite::params![TIME, g],
+            )
+            .unwrap();
         let tx = s.conn.unchecked_transaction().unwrap();
         for i in 0..count {
             tx.execute(

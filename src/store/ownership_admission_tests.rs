@@ -53,6 +53,7 @@ fn certificate(op: &str) -> Certificate {
 
 struct Source {
     witness: InMemoryWitness,
+    nonces: std::sync::Mutex<Vec<[u8; 32]>>,
 }
 
 impl WitnessSource for Source {
@@ -61,7 +62,9 @@ impl WitnessSource for Source {
         profile: &str,
         store_id: &str,
         anchor: u64,
+        nonce: &[u8; 32],
     ) -> Reply<(WitnessHead, Vec<(String, String)>)> {
+        self.nonces.lock().unwrap().push(*nonce);
         if profile != PROFILE {
             return Reply::Unknown;
         }
@@ -107,7 +110,10 @@ impl Fixture {
             db,
             journal,
             inventory,
-            source: Source { witness },
+            source: Source {
+                witness,
+                nonces: std::sync::Mutex::new(Vec::new()),
+            },
         };
         f.enroll();
         f
@@ -236,6 +242,47 @@ fn every_startup_draws_a_fresh_nonce() {
     let second: serde_json::Value =
         serde_json::from_slice(&fs::read(f.receipt()).unwrap()).unwrap();
     assert_ne!(first["nonce"], second["nonce"]);
+    let observed = f.source.nonces.lock().unwrap();
+    assert_eq!(
+        observed.len(),
+        2,
+        "each startup consults the witness source"
+    );
+    assert_eq!(first["nonce"], hex::encode(observed[0]));
+    assert_eq!(second["nonce"], hex::encode(observed[1]));
+}
+
+#[test]
+fn opaque_admission_holds_the_lineage_latch_through_pin_installation() {
+    let f = Fixture::new();
+    let conn = Connection::open(&f.db).unwrap();
+    let fence = super::super::ownership_fence::CommitFence::new(&conn).unwrap();
+    let admission = admit(&f.db, &f.config()).unwrap();
+    assert!(ownership_latch::exclusive(&f.journal).is_err());
+    fence.pin_admitted(admission).unwrap();
+    assert_eq!(fence.journal_path(), Some(f.journal.as_path()));
+    assert!(fence.admitted().is_some());
+    assert!(ownership_latch::exclusive(&f.journal).is_ok());
+    fence.check_journal().unwrap();
+
+    let second = admit(&f.db, &f.config()).unwrap();
+    let binding = fence.admitted().cloned();
+    assert!(fence.pin_admitted(second).is_err(), "a pin installs once");
+    assert_eq!(fence.admitted(), binding.as_ref());
+    assert!(ownership_latch::exclusive(&f.journal).is_ok());
+}
+
+#[test]
+fn opaque_admission_cannot_revive_a_revoked_fence() {
+    let f = Fixture::new();
+    let conn = Connection::open(&f.db).unwrap();
+    let fence = super::super::ownership_fence::CommitFence::new(&conn).unwrap();
+    let admission = admit(&f.db, &f.config()).unwrap();
+    fence.revoke();
+    assert!(fence.pin_admitted(admission).is_err());
+    assert!(fence.journal_path().is_none());
+    assert!(fence.admitted().is_none());
+    assert!(ownership_latch::exclusive(&f.journal).is_ok());
 }
 
 #[test]
@@ -420,6 +467,7 @@ fn unknown_profile_refuses() {
             };
             w
         },
+        nonces: std::sync::Mutex::new(Vec::new()),
     };
     struct WrongProfile<'a>(&'a Source);
     impl WitnessSource for WrongProfile<'_> {
@@ -428,9 +476,10 @@ fn unknown_profile_refuses() {
             _: &str,
             store_id: &str,
             anchor: u64,
+            nonce: &[u8; 32],
         ) -> Reply<(WitnessHead, Vec<(String, String)>)> {
             self.0
-                .head_evidence("not-the-inventory-profile", store_id, anchor)
+                .head_evidence("not-the-inventory-profile", store_id, anchor, nonce)
         }
     }
     let config = EnrolledStartup {
@@ -470,6 +519,7 @@ fn admission_through_the_s3_witness_backend_and_emulator() {
             profile: &str,
             store_id: &str,
             anchor: u64,
+            _nonce: &[u8; 32],
         ) -> Reply<(WitnessHead, Vec<(String, String)>)> {
             if profile != PROFILE {
                 return Reply::Unknown;

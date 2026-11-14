@@ -220,15 +220,23 @@ fn frozen_source(conn: &Connection, graph: &str) -> Result<Option<(String, Strin
     }
 }
 
-fn creator(conn: &Connection, schema: &str, graph: &str) -> Result<Value> {
+pub(super) fn creator(conn: &Connection, schema: &str, graph: &str) -> Result<Value> {
     require_creator_index(conn, schema)?;
-    let payload: Option<String> = conn.query_row(
-        &format!("SELECT payload FROM {schema}.events INDEXED BY {INDEX} WHERE type='graph.created' AND subject=?1 ORDER BY offset DESC LIMIT 1"),
-        [graph], |r| r.get(0),
+    if let Some(actor) = super::graph_creators::creator(conn, schema, graph)? {
+        return Ok(actor);
+    }
+    event_creator(conn, schema, graph)
+}
+
+pub(super) fn event_creator(conn: &Connection, schema: &str, graph: &str) -> Result<Value> {
+    require_creator_index(conn, schema)?;
+    let payload: Option<(String, String)> = conn.query_row(
+        &format!("SELECT payload,ts FROM {schema}.events INDEXED BY {INDEX} WHERE type='graph.created' AND subject=?1 ORDER BY offset DESC LIMIT 1"),
+        [graph], |r| Ok((r.get(0)?, r.get(1)?)),
     ).optional()?;
     match payload {
         None => Ok(Value::Null),
-        Some(payload) => {
+        Some((payload, timestamp)) => {
             let value: Value = serde_json::from_str(&payload)
                 .map_err(|e| Error::Store(format!("invalid graph creation record: {e}")))?;
             if !value.is_object() {
@@ -243,11 +251,22 @@ fn creator(conn: &Connection, schema: &str, graph: &str) -> Result<Value> {
                     "graph creation record identity mismatch".into(),
                 ));
             }
-            match value.get("actor") {
-                None | Some(Value::Null) => Ok(Value::Null),
-                Some(Value::String(actor)) => Ok(json!(actor)),
-                _ => Err(Error::Store("invalid graph creation actor".into())),
-            }
+            let actor = match value.get("actor") {
+                None | Some(Value::Null) => Value::Null,
+                Some(Value::String(actor)) => json!(actor),
+                _ => return Err(Error::Store("invalid graph creation actor".into())),
+            };
+            // An IRI can be unregistered and recreated. An older incarnation's
+            // event is not evidence of this registration's original creator.
+            let matches: Option<bool> = conn.query_row(
+                &format!("SELECT julianday(g.created_at)=julianday(?2) FROM {schema}.graphs g JOIN {schema}.terms t ON t.id=g.g WHERE t.iri=?1"),
+                rusqlite::params![graph, timestamp], |r| r.get(0),
+            ).optional()?.flatten();
+            Ok(if matches == Some(true) {
+                actor
+            } else {
+                Value::Null
+            })
         }
     }
 }

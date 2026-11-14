@@ -14,6 +14,33 @@ pub struct Progress {
     pub stale_skipped: usize,
 }
 
+/// Prepare at most 32 subjects per pass and at most 32 passes. This keeps an
+/// explicit installer bounded; larger stores resume with [`batch`].
+pub fn prepare(store: &Store, max_batches: usize) -> Result<Progress> {
+    if !(1..=32).contains(&max_batches) {
+        return Err(Error::InvalidValue(
+            "preparation requires 1..=32 batches".into(),
+        ));
+    }
+    let mut total = Progress {
+        next_cursor: 0,
+        complete: false,
+        embedded: 0,
+        stale_skipped: 0,
+    };
+    for _ in 0..max_batches {
+        let progress = batch(store, total.next_cursor, 32)?;
+        total.next_cursor = progress.next_cursor;
+        total.complete = progress.complete;
+        total.embedded += progress.embedded;
+        total.stale_skipped += progress.stale_skipped;
+        if total.complete {
+            break;
+        }
+    }
+    Ok(total)
+}
+
 /// Fill missing embeddings without replacing existing vectors. Each call scans
 /// at most `limit + 1` distinct subjects and infers in batches of at most 32.
 pub fn batch(store: &Store, after: i64, limit: usize) -> Result<Progress> {
@@ -130,5 +157,36 @@ mod tests {
         assert_eq!(batch(&store, 0, 256).unwrap().embedded, 0);
         assert_eq!(store.vector_count().unwrap(), 2);
         assert!(batch(&store, 0, 257).is_err());
+    }
+    #[test]
+    fn installer_preparation_stops_at_its_budget_and_resumes_without_overwrite() {
+        let mut store = Store::open_in_memory().unwrap();
+        let source = (0..35).map(|id| format!(
+            "<urn:subject:{id}> <http://www.w3.org/2000/01/rdf-schema#label> \"Subject {id}\" .\n"
+        )).collect::<String>();
+        crate::ingest_rdf(
+            &mut store,
+            source.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        store.set_embedding_provider(std::sync::Arc::new(Provider));
+        assert!(prepare(&store, 0).is_err());
+        assert!(prepare(&store, 33).is_err());
+        let first = prepare(&store, 1).unwrap();
+        assert_eq!(first.embedded, 32);
+        assert!(!first.complete);
+        assert_eq!(store.vector_count().unwrap(), 32);
+        let rest = batch(&store, first.next_cursor, 32).unwrap();
+        assert_eq!(rest.embedded, 3);
+        assert!(rest.complete);
+        let again = prepare(&store, 2).unwrap();
+        assert_eq!(again.embedded, 0);
+        assert!(again.complete);
+        assert_eq!(store.vector_count().unwrap(), 35);
     }
 }

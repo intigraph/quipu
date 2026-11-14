@@ -1,8 +1,7 @@
 name: Docs
 
-# The two path lists are duplicated on purpose: GitHub Actions does not
-# support YAML anchors in workflow files, so an alias here would not expand.
-# Keep them identical.
+# PRs build the book for its sources and assets. Main keeps the broader
+# product-source list so published generated content follows core changes.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -24,14 +23,6 @@ on:
       - 'scripts/test-explore-default.cjs'
       - '.github/actions/wasm-explorer-build/**'
       - 'wasm/explorer/**'
-      - 'src/**'
-      - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'build.rs'
-      - 'shapes/**'
-      - 'hooks/**'
-      - '.cargo/**'
       # The Agent Primer page includes the primer source (aegis-t7h).
       - 'src/primer.md'
   push:
@@ -75,6 +66,8 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build docs
     runs-on: ubuntu-latest
+    outputs:
+      release_report_ready: ${{ steps.conformance.outputs.ready }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -152,6 +145,28 @@ jobs:
       - name: Require the validated default store and build-pinned proof
         run: node scripts/prepare-explorer-default.mjs docs/book/src/explore
 
+      - name: Stage the latest release conformance report
+        id: conformance
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TMP=$(mktemp -d)
+          trap 'rm -rf "$TMP"' EXIT
+          gh release view --json tagName,assets > "$TMP/release.json"
+          TAG=$(jq -er .tagName "$TMP/release.json")
+          if ! jq -e '[.assets[].name] | (index("conformance-report.tar.gz") != null and index("conformance-report.tar.gz.sha256") != null)' "$TMP/release.json" >/dev/null; then
+            echo "::notice::Public deployment held: latest release $TAG has no complete conformance report yet."
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh release download "$TAG" --pattern conformance-report.tar.gz --pattern conformance-report.tar.gz.sha256 --dir "$TMP"
+          (cd "$TMP" && sha256sum -c conformance-report.tar.gz.sha256)
+          python3 scripts/stage-conformance-release.py "$TMP/conformance-report.tar.gz" docs/book/src/benchmarks --tag "$TAG"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+
       - name: Build book
         run: mdbook build docs/book
 
@@ -196,7 +211,7 @@ jobs:
           node scripts/test-explore-cords.cjs
 
       - name: Upload artifact
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.conformance.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           # `docs/book/book`, not `docs/book/book/html`: mdbook nests output
@@ -207,7 +222,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.build.outputs.release_report_ready == 'true'
     needs: [build]
     runs-on: ubuntu-latest
     permissions:

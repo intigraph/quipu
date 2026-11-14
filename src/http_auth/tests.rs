@@ -308,6 +308,11 @@ fn routes_in_server_source() -> Vec<String> {
         ("server/mapping.rs", include_str!("../server/mapping.rs")),
         ("server/deck.rs", include_str!("../server/deck.rs")),
         ("server/attest.rs", include_str!("../server/attest.rs")),
+        // Timing-only today; scan it so future routes still require classification.
+        (
+            "server/auth_phase.rs",
+            include_str!("../server/auth_phase.rs"),
+        ),
         (
             "server/publication.rs",
             include_str!("../server/publication.rs"),

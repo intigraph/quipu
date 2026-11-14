@@ -223,3 +223,60 @@ fn explicit_false_preserves_fresh_store_opt_out() {
         0
     );
 }
+
+/// Uses a verified local fixture: download and bundled-runtime proofs are separate.
+#[test]
+#[ignore = "requires pinned QUIPU_TEST_MODEL_DIR and an ONNX-capable CLI runtime"]
+fn one_model_command_prepares_existing_root_facts() {
+    let fixture = std::path::PathBuf::from(
+        std::env::var_os("QUIPU_TEST_MODEL_DIR").expect("set QUIPU_TEST_MODEL_DIR"),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("sample.ttl"),
+        r#"<https://example.org/cats> <http://www.w3.org/2000/01/rdf-schema#label> "Cats are feline pets that hunt mice and other rodents" .
+<https://example.org/railway> <http://www.w3.org/2000/01/rdf-schema#label> "Railway locomotives pull passenger trains along steel tracks" ."#,
+    ).unwrap();
+    let loaded = run(dir.path(), &["knot", "sample.ttl", "--db", "fresh.db"]);
+    assert!(
+        loaded.status.success(),
+        "{}",
+        String::from_utf8_lossy(&loaded.stderr)
+    );
+    let before = success(&run(dir.path(), &["doctor", "search", "--db", "fresh.db"]));
+    assert_eq!(before["semantic_ready"], false);
+    assert_eq!(before["vector_rows"], 0);
+    let keyword = success(&run(dir.path(), &["search", "Cats", "--db", "fresh.db"]));
+    assert_eq!(keyword["ranking"], "keyword");
+    assert_eq!(keyword["count"], 1);
+
+    // Cache only after ingest: these facts must be prepared by the one command.
+    let cache = dir.path().join("data/quipu/models").join(format!(
+        "all-MiniLM-L6-v2-{}",
+        quipu::model_assets::REVISION
+    ));
+    std::fs::create_dir_all(&cache).unwrap();
+    for file in ["model.onnx", "tokenizer.json"] {
+        std::fs::copy(fixture.join(file), cache.join(file)).unwrap();
+    }
+    let installed = success(&run(dir.path(), &["model", "install", "--db", "fresh.db"]));
+    assert_eq!(installed["preparation"]["embedded"], 2);
+    assert_eq!(installed["preparation"]["complete"], true);
+    let after = success(&run(dir.path(), &["doctor", "search", "--db", "fresh.db"]));
+    assert_eq!(after["semantic_ready"], true);
+    assert_eq!(after["vector_rows"], 2);
+    let semantic = success(&run(
+        dir.path(),
+        &[
+            "search",
+            "feline pets hunt rodents",
+            "--mode",
+            "semantic",
+            "--db",
+            "fresh.db",
+        ],
+    ));
+    assert_eq!(semantic["ranking"], "semantic");
+    assert_eq!(semantic["results"][0]["entity"], "https://example.org/cats");
+    assert!(semantic["results"][0]["similarity"].as_f64().is_some());
+}

@@ -16,10 +16,10 @@ use crate::types::Value;
 use super::Bindings;
 
 mod cast_eval;
-mod ebv;
+pub(super) mod ebv;
 use ebv::effective_boolean_value;
 pub(super) mod eval_memo;
-mod operand;
+pub(super) mod operand;
 mod regex_cache;
 pub(super) use eval_memo::Scope as EvalMemo;
 pub(super) use regex_cache::build_regex;
@@ -198,13 +198,7 @@ fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Binding
         return Some(false);
     };
     let (a, b) = (&*a, &*b);
-    if a == b {
-        return Some(true);
-    }
-    if let Some(order) = temporal_equality_order(a, b) {
-        return order.map(|o| o == std::cmp::Ordering::Equal);
-    }
-    Some(crate::numeric_value::equal(a, b))
+    operand::equal(a, b)
 }
 
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {

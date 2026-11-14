@@ -263,8 +263,19 @@ async fn log_request_tracked_stores(
         )))
     );
     let completion_provenance = provenance.clone();
+    let auth_phases = super::auth_phase::Observation::for_request(
+        method.as_str(),
+        &endpoint,
+        req.headers()
+            .contains_key(super::auth::write_attest::HEADER),
+    );
+    let mut req = req;
+    if let Some(observation) = &auth_phases {
+        req.extensions_mut().insert(observation.clone());
+    }
     let mut completion = request_completion::Completion {
         search: search.clone(),
+        auth_phases,
         id,
         client: client.clone(),
         task,

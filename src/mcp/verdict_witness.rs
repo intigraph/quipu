@@ -6,12 +6,49 @@ use serde_json::Value as JsonValue;
 use crate::error::{Error, Result};
 use crate::governance::verifier_registry::{Scope, Witness};
 use crate::store::Store;
+use crate::types::Value;
+
+const LEGACY_SIGNATURE: &str = "http://aegis.gastown.local/ontology/signature";
+const CANONICAL_SIGNATURE: &str = "https://w3id.org/intigraph/camayoc/core/ns#signature";
+
+/// A verdict must have exactly one original signature assertion across the
+/// two published spellings. Do not let a caller select one conflicting value,
+/// pick the earlier of two transactions, or conceal a missing transaction.
+fn recorded_witness(store: &Store, verdict: &str, signature: &str) -> Result<Witness> {
+    let missing = || {
+        Error::InvalidValue(format!(
+            "verdict '{verdict}' has no unique recorded signature with that value; \
+             there is no unambiguous store-witnessed instant to verify it at"
+        ))
+    };
+    let entity = store.lookup(verdict)?.ok_or_else(missing)?;
+    let legacy = store.lookup(LEGACY_SIGNATURE)?;
+    let canonical = store.lookup(CANONICAL_SIGNATURE)?;
+    let mut stmt = store.prepare(
+        "SELECT f.tx, t.timestamp, f.v FROM facts f \
+         LEFT JOIN transactions t ON t.id = f.tx \
+         WHERE f.e = ?1 AND f.a IN (?2, ?3) AND f.op = 1 LIMIT 2",
+    )?;
+    let mut rows = stmt.query(rusqlite::params![entity, legacy, canonical])?;
+    let row = rows.next()?.ok_or_else(missing)?;
+    let tx = row.get(0)?;
+    let at: Option<String> = row.get(1)?;
+    let value: Vec<u8> = row.get(2)?;
+    if rows.next()?.is_some() || value != Value::Str(signature.to_string()).to_bytes() {
+        return Err(missing());
+    }
+    Ok(Witness {
+        tx: Some(tx),
+        at: at.ok_or_else(missing)?,
+    })
+}
 
 /// The registry instant a verification asks about (signing-plane S1).
 ///
 /// * `verdict` (an IRI): the store-witnessed instant at which that verdict's
-///   `aegis:signature` was recorded. This is the form a trust decision
-///   should use. The signer cannot choose it.
+///   legacy or canonical `signature` was recorded. Mixed or conflicting
+///   assertions refuse. This is the form a trust decision should use. The
+///   signer cannot choose it.
 /// * `signed_at` / `tx`: an explicit instant, for "would this have verified
 ///   then?" questions. The caller chose it, and the output says so.
 /// * neither: now.
@@ -22,18 +59,7 @@ pub(super) fn witness_from(
 ) -> Result<(Witness, &'static str)> {
     if let Some(verdict) = input.get("verdict").and_then(JsonValue::as_str) {
         super::governance::guard_iri(verdict)?;
-        let witness = Witness::of_fact(
-            store,
-            verdict,
-            "http://aegis.gastown.local/ontology/signature",
-            signature,
-        )?
-        .ok_or_else(|| {
-            Error::InvalidValue(format!(
-                "verdict '{verdict}' has no recorded aegis:signature with that value; \
-                 there is no store-witnessed instant to verify it at"
-            ))
-        })?;
+        let witness = recorded_witness(store, verdict, signature)?;
         return Ok((witness, "recorded"));
     }
     Ok(explicit_witness(input))

@@ -34,6 +34,7 @@ pub use attest::{tool_attest_challenge, tool_attest_commit, tool_attest_receipt}
 pub use datasets::tool_datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub use deck::{tool_deck_attest, tool_deck_present, tool_deck_receipt};
+pub use fresh_search::SERVER_DERIVED_EMBEDDING;
 pub use graphs::{tool_graph_create, tool_graph_freeze, tool_graph_list, tool_graph_thaw};
 pub use queries::tool_queries;
 pub use read::{tool_cord, tool_unravel};
