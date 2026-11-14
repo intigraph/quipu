@@ -469,7 +469,7 @@ fn membership_admits_only_the_typed_process_rulebook_document() {
     ] {
         let data = format!(
             "@prefix a: <http://aegis.gastown.local/ontology/> . \
-             a:rule a a:OperationalRule ; a:member_of a:{target} . a:{target} a a:{kind} ; \
+             a:rule a a:OperationalRule ; <http://www.w3.org/2000/01/rdf-schema#label> \"Rule\" ; a:member_of a:{target} . a:{target} a a:{kind} ; \
              <http://www.w3.org/2000/01/rdf-schema#label> \"Example\" ."
         );
         assert_eq!(
@@ -479,12 +479,12 @@ fn membership_admits_only_the_typed_process_rulebook_document() {
         );
     }
     let untyped = "@prefix a: <http://aegis.gastown.local/ontology/> . \
-                   a:rule a a:OperationalRule ; a:member_of a:aegis-crew-process-rules .";
+                   a:rule a a:OperationalRule ; <http://www.w3.org/2000/01/rdf-schema#label> \"Rule\" ; a:member_of a:aegis-crew-process-rules .";
     assert!(!quipu::validate_shapes(SHAPES, untyped).unwrap().conforms);
     for subject_kind in ["OperationalRule", "UnrelatedType"] {
         let mixed = format!(
             "@prefix a: <http://aegis.gastown.local/ontology/> . \
-             a:rule a a:{subject_kind} ; a:member_of a:aegis-crew-process-rules, a:other . \
+             a:rule a a:{subject_kind} ; <http://www.w3.org/2000/01/rdf-schema#label> \"Rule\" ; a:member_of a:aegis-crew-process-rules, a:other . \
              a:aegis-crew-process-rules a a:Document . a:other a a:Rig ; \
              <http://www.w3.org/2000/01/rdf-schema#label> \"Other\" ."
         );
