@@ -38,6 +38,15 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
         .into_iter().filter_map(|(name, mime, hash)| hash.as_ref().map(|hash| {
             format!(",\n  [ a dcat:Distribution ; dcat:mediaType {} ; dcat:downloadURL <payload:{name}> ; spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ; spdx:checksumValue {} ] ]", literal(mime), literal(hash.strip_prefix("sha256:").unwrap_or(hash)))
         })).collect::<String>();
+    let required_profile = manifest
+        .required_profile
+        .as_ref()
+        .map_or_else(String::new, |profile| {
+            format!(
+                " ;\n  quipu:requiredProfile {}",
+                literal(&serde_json::to_string(profile).expect("profile JSON"))
+            )
+        });
     let destination = manifest.destination.as_ref().map_or_else(String::new, |d| {
         let text = serde_json::to_string(d).expect("destination JSON");
         format!(
@@ -61,7 +70,7 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
   dct:identifier {} ;
   prov:generatedAtTime {}^^xsd:dateTime ;
   prov:wasAttributedTo [ a prov:SoftwareAgent ;
-    dct:title {} ; quipu:version {} ]{parent}{merge_parents}{destination} ;
+    dct:title {} ; quipu:version {} ]{parent}{merge_parents}{destination}{required_profile} ;
   dcat:distribution [ a dcat:Distribution ;
     dcat:mediaType "application/n-triples" ;
     dcat:downloadURL <payload:export.nt> ;
