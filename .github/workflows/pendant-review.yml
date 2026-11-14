@@ -58,6 +58,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Outside-contributor comment controls
+        run: python3 scripts/test-pendant-comment-guard.py
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
       # `shacl` is required: without it the report says NOT CHECKED and the
@@ -86,13 +88,14 @@ jobs:
 
   # OFF unless the repository variable QPACK_REVIEW_COMMENT is "true". This is
   # the only job holding a write permission, it runs no repository code, and it
-  # never runs for a fork (whose token cannot write anyway).
+  # never runs for a fork or an outside author (Stiwi 2026-11-14).
   comment:
     name: pendant review comment
     needs: review
     if: >-
       always() && vars.QPACK_REVIEW_COMMENT == 'true'
       && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login == 'scbrown'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -107,6 +110,14 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          # Recheck forge metadata at the write boundary. Maintainer-edit and a
+          # crew-looking branch do not change an outside contributor's author.
+          eligible=$(gh api "repos/$REPO/pulls/$PR" --jq \
+            '.user.login == "scbrown" and .base.repo.full_name != null and .head.repo.full_name == .base.repo.full_name')
+          if [ "$eligible" != true ]; then
+            echo 'Outside or unknown contributor: no comment.'
+            exit 0
+          fi
           test -s pendant-review.md
           id=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
             --jq '.[] | select(.body | startswith("<!-- quipu-qpack-review -->")) | .id' | head -n1)
