@@ -2,17 +2,18 @@ use super::*;
 use crate::ownership_handoff_model::{Authority, AuthorityUnit, Journal, Placement};
 use crate::store::{ownership_journal, ownership_latch};
 
-fn pin(owner: &Owner, journal: &Path) -> Authority {
+fn pinned_fixture(root: &Path, journal: &Path) -> (Owner, Authority) {
+    let (store, route) = fixture(root, "a");
     let authority = Authority {
-        store_id: owner.route.store_id.clone(),
+        store_id: route.store_id.clone(),
         unit: AuthorityUnit::FullStore,
-        generation: owner.route.generation,
-        epoch: owner.route.log_epoch.clone(),
+        generation: route.generation,
+        epoch: route.log_epoch.clone(),
         owner: Placement {
             principal: "fixture-owner".into(),
             native: [1; 32],
         },
-        policy: owner.route.policy.clone(),
+        policy: route.policy.clone(),
         predecessor: Some([2; 32]),
     };
     ownership_journal::create(
@@ -22,24 +23,27 @@ fn pin(owner: &Owner, journal: &Path) -> Authority {
         },
     )
     .unwrap();
-    // Existing P1 TEST-ONLY pin, never a production startup/admission path.
-    owner
-        .writer
-        .lock()
-        .ownership_fence
-        .as_ref()
-        .unwrap()
-        .pin_journal(journal.to_owned(), authority.clone());
-    authority
+    drop(store);
+    // Traverse real S1 admission before claiming the owner lease; no test pin.
+    let store =
+        crate::store::ownership_admission_fixture::open(&root.join("a.db"), journal, &authority);
+    let owner = Owner::prepare(
+        catalog(vec![route.clone()]),
+        root,
+        &route.graph,
+        store,
+        "policy-v1",
+    )
+    .unwrap();
+    (owner, authority)
 }
 
 #[test]
 fn pinned_owner_knot_holds_shared_lineage_latch_through_physical_commit() {
     use std::sync::atomic::AtomicBool;
     let temp = tempfile::tempdir().unwrap();
-    let (a, _) = strict_fixture(temp.path());
     let journal = temp.path().join("owner.journal");
-    pin(&a, &journal);
+    let (a, _) = pinned_fixture(temp.path(), &journal);
     let observed = Arc::new(AtomicBool::new(false));
     {
         let store = a.writer.lock();
@@ -129,9 +133,8 @@ impl crate::EmbeddingProvider for ScopedEmbeddingProvider {
 fn pinned_owner_embedding_reenters_same_scope_after_inference() {
     use crate::vector::KnowledgeVectorStore;
     let temp = tempfile::tempdir().unwrap();
-    let (a, _) = strict_fixture(temp.path());
     let journal = temp.path().join("embedding.journal");
-    let authority = pin(&a, &journal);
+    let (a, authority) = pinned_fixture(temp.path(), &journal);
     let calls = Arc::new(AtomicUsize::new(0));
     let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
@@ -183,9 +186,8 @@ fn pinned_owner_embedding_reenters_same_scope_after_inference() {
 fn retirement_during_inference_refuses_vector_write_without_retrying_fact_commit() {
     use crate::vector::KnowledgeVectorStore;
     let temp = tempfile::tempdir().unwrap();
-    let (a, _) = strict_fixture(temp.path());
     let journal = temp.path().join("retiring.journal");
-    let authority = pin(&a, &journal);
+    let (a, authority) = pinned_fixture(temp.path(), &journal);
     let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
     {
         let mut store = a.writer.lock();
