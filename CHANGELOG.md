@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Size SQLite connections from one aggregate budget and support bounded RDF result serialization without returning a partial body.
+
 ### Fixed
 
 - Remove a temporary native writer-lease sibling after pack export succeeds or refuses; retain the original export error and the single-file artifact contract.
