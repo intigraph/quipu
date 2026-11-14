@@ -21,6 +21,8 @@ mod attest;
 mod auth;
 #[path = "server/auth_guard.rs"]
 mod auth_guard;
+#[path = "server/auth_phase.rs"]
+mod auth_phase;
 #[path = "server/auth_response.rs"]
 mod auth_response;
 #[path = "server/background.rs"]
