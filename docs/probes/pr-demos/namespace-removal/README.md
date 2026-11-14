@@ -11,15 +11,14 @@ Its namespace implementation files are byte-identical to main `bdb34e93`.
 Candidate executable: source `415c564c44203dd26ac0cf7cae804a1317bf6a8d`; subsequent generated documentation
 commits do not change its Rust input. This is candidate behavior, not deployment.
 
-Download [the output log](output.log.gz) and [timing](timing.log), then replay:
+Download [the output log](output.log) and [timing](timing.log), then replay:
 
 ```sh
-gzip -dc output.log.gz > output.log
 scriptreplay --log-out output.log --log-timing timing.log
 ```
 
 This is a replayable terminal recording, requiring util-linux `scriptreplay`.
-The decompressed output is also the readable transcript. To repeat with local
+The output is committed as a UTF-8 transcript. To repeat with local
 executables, set `NAMESPACE_BASELINE` and `NAMESPACE_CANDIDATE`, then run
 `bash docs/probes/pr-demos/namespace-removal/run.sh`. The baseline probe uses
 an earlier source executable with identical namespace implementation, rather
