@@ -5,6 +5,10 @@ import re
 from .contract import readiness, validate
 
 MAX_AGE_SECONDS = 300
+def absolute_iri(value):
+    return isinstance(value, str) and bool(re.fullmatch(r'[A-Za-z][A-Za-z0-9+.-]*:[^\s<>"{}|\\^`]+', value))
+
+
 PLAN = ['quiesce-scoped-writer', 'restore-test-backup', 'install-alias-readers-and-shapes',
         'prove-old-and-canonical-fixtures', 'deploy-content-bound-writer',
         'verify-one-native-canary', 'resume-original-schedule']
@@ -55,10 +59,10 @@ def assess(record, digest, evidence, candidate_id=None, artifact_sha256=None, no
         if not isinstance(scope, dict) or set(scope) != fields:
             raise ValueError('unknown installed scope')
         if (not isinstance(scope['datasets'], list) or not scope['datasets']
-                or any(not isinstance(v, str) or not v for v in scope['datasets'])
+                or any(not absolute_iri(v) for v in scope['datasets'])
                 or len(set(scope['datasets'])) != len(scope['datasets'])):
             raise ValueError('explicit unique datasets required')
-        if not isinstance(scope['subject_iri'], str) or not scope['subject_iri']:
+        if not absolute_iri(scope['subject_iri']):
             raise ValueError('known subject identity required')
         controls = evidence['positive_controls']
         if (not isinstance(controls, list) or len(controls) != len(scope['datasets'])

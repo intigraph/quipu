@@ -159,6 +159,15 @@ class Contracts(unittest.TestCase):
         evidence = copy.deepcopy(self.evidence)
         evidence['scope']['datasets'].append('urn:missing-control')
         self.unknown(evidence)
+        invalid = copy.deepcopy(self.evidence)
+        invalid['scope']['datasets'] = ['not-an-iri']
+        invalid['positive_controls'][0]['dataset'] = 'not-an-iri'
+        invalid['rows'][0]['dataset'] = 'not-an-iri'
+        self.unknown(invalid)
+        invalid = copy.deepcopy(self.evidence)
+        invalid['scope']['subject_iri'] = 'not-an-iri'
+        invalid['rows'][0]['subject'] = 'not-an-iri'
+        self.unknown(invalid)
 
     def test_partial_denied_stale_future_and_bad_time_refuse(self):
         for key, values in [('read_status', ['denied', 'timeout', 'error', '']),
