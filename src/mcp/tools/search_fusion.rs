@@ -41,7 +41,16 @@ pub(super) fn fusion_with_candidates(
     let configured_mode = if config.mode == "hybrid" && !config.hybrid {
         "semantic"
     } else if config.mode == "auto" {
-        if store.has_embedding_provider() || input.get("embedding").is_some() {
+        if config.hybrid
+            && config.keyword
+            && input["ranking"] == "content"
+            && (store.has_embedding_provider() || input.get("embedding").is_some())
+            && store
+                .lexical_progress()?
+                .is_some_and(|state| state.complete)
+        {
+            "hybrid"
+        } else if store.has_embedding_provider() || input.get("embedding").is_some() {
             "semantic"
         } else {
             "keyword"
@@ -103,15 +112,11 @@ pub(super) fn fusion_with_candidates(
         }
         return Ok(response);
     }
-    if input.get("anchor").is_some()
-        || input
-            .get("ranking")
-            .and_then(JsonValue::as_str)
-            .is_some_and(|r| r != "semantic")
-    {
-        return Err(invalid(
-            "hybrid fusion does not accept anchor or content ranking",
-        ));
+    // Content ranking applies to the semantic leg before fusion, while the
+    // lexical leg retains its own score scale.
+    super::search_ranking::ranking_mode(input)?;
+    if input.get("anchor").is_some() {
+        return Err(invalid("hybrid fusion does not accept anchor ranking"));
     }
     // Both branches must use the same type-inference contract, temporal point,
     // graph and group scopes. Semantic's historical default is inference-on.
@@ -142,6 +147,9 @@ pub(super) fn fusion_with_candidates(
         super::search_anchor_mix::anchor_text_candidates(store, &request, neighbours, true)?;
     request["mode"] = json!("keyword");
     request.as_object_mut().unwrap().remove("embedding");
+    // Content demotion belongs only to the vector leg. Standalone keyword
+    // requests still reject content ranking; fusion passes a lexical request.
+    request.as_object_mut().unwrap().remove("ranking");
     request["explain"] = json!(explain);
     let keyword =
         super::search_anchor_mix::anchor_text_candidates(store, &request, neighbours, false)?;
@@ -296,8 +304,9 @@ pub(super) fn fuse(
     }
     let mut ranked: Vec<_> = candidates.into_iter().collect();
     ranked.sort_by(|a, b| b.1.score.total_cmp(&a.1.score).then_with(|| a.0.cmp(&b.0)));
-    ranked.into_iter().take(limit).map(|(_, Candidate {mut row,score,cosine,bm25,semantic_rank:srank,keyword_rank:krank})| {
+    ranked.into_iter().take(limit).enumerate().map(|(index, (_, Candidate {mut row,score,cosine,bm25,semantic_rank:srank,keyword_rank:krank}))| {
         row["score"]=json!(score); row["similarity"]=json!(cosine); row["bm25"]=json!(bm25); row["ranking_reason"]=json!("hybrid");
+        row["fusion_rank"]=json!(index + 1);
         if explain {
             row["explain"]=json!({"cosine":cosine,"bm25":bm25,"fused_score":score,
                 "semantic_rank":srank,"keyword_rank":krank,"matched_fields":row.get("matched_fields").cloned().unwrap_or(json!([])),"applied_filters":filters(input)});
