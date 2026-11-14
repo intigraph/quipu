@@ -6,7 +6,7 @@ fn memory_fixture() -> Fixture {
     let mut fixture = Fixture::new("hidden-other-graph");
     // Memory commits reuse the configured Artifact vocabulary IRI.
     // The generic query fixture has no namespace; populate this fixture with one.
-    fixture.source.lock().base_ns = "https://example.org/".into();
+    fixture.source.lock().set_base_ns("https://example.org/");
     fixture.profile.memory_rpc = Some(quipu::config::MemoryFilesConfig {
         enabled: true,
         graph: "urn:a".into(),
