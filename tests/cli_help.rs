@@ -370,10 +370,6 @@ fn help_describes_options_in_their_command_context() {
             vec!["project", "--help"],
             "--from <VALUE>: Start entity IRI for shortest-path projection",
         ),
-        (
-            vec!["memory", "commit", "--help"],
-            "--local-authority: Explicitly authorize a local memory commit",
-        ),
     ] {
         let output = run(dir.path(), &args);
         assert!(output.status.success(), "{output:?}");

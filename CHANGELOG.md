@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking changes
+
+- Remove the memory-files library, `quipu memory` CLI, `/memory/*` RPCs,
+  `memory_files` configuration and `quipu-memory` credential audience. Crew
+  memory belongs to clients using ordinary shapes and graph operations. Existing
+  Artifact/RDF-value records remain untouched and readable through normal graph
+  query/export; no store migration or record deletion is performed. Old scoped
+  memory credentials are refused rather than promoted to ordinary credentials.
+  Rollback is a normal source revert and CD of the previous build. Client
+  adoption is tracked separately from this removal.
+
 ### Added
 
 - *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.

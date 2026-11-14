@@ -168,7 +168,7 @@ mod tests {
         }
         assert!(page.contains("qp shapes load <name> <file.ttl>"));
         assert!(page.contains("`--limit <VALUE>`: Maximum number of results"));
-        assert!(page.contains("`--local-authority`: Explicitly authorize a local memory commit"));
+        assert!(!page.contains("qp memory"));
         assert!(page.ends_with('\n') && !page.ends_with("\n\n"));
     }
 

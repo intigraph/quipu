@@ -53,8 +53,6 @@
 - [REST API](reference/rest-api.md)
 - [Scoped machine writers](reference/scoped-writers.md)
   - [Scoped current reads](reference/scoped-reads.md)
-  - [Versioned file memory](reference/memory-files.md)
-  - [Expiring memory-only credentials](reference/memory-credentials.md)
 - [Atomic source acquisition](reference/acquisition.md)
 - [Explicit substring search](reference/substring-search.md)
 - [Python Client](reference/python-client.md)

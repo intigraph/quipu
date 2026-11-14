@@ -161,7 +161,6 @@ fn common(name: &str) -> Option<&'static str> {
         "layout" => "Render layout",
         "limit" => "Maximum number of results",
         "list" => "List registered items",
-        "local-authority" => "Explicitly authorize a local memory commit",
         "max-hops" => "Maximum graph-search traversal hops",
         "max-iters" => "Maximum algorithm iterations",
         "max-txs" => "Maximum transactions to evaluate",

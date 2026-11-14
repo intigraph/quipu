@@ -71,7 +71,6 @@ mod cli_ingest;
 mod cli_input;
 mod cli_knot;
 mod cli_mcp;
-mod cli_memory_files;
 mod cli_merge;
 mod cli_model;
 mod cli_namespaces;
@@ -226,7 +225,6 @@ fn main() {
         "export" => cli_export::cmd_export(&args, db_path),
         "databook" => cli_databook::cmd_databook(&args, db_path),
         "namespaces" | "entity-ref" => cli_namespaces::run(&args, db_path),
-        "memory" => cli_memory_files::command(&args),
         "prime" => cli_prime::cmd_prime(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),
@@ -442,7 +440,6 @@ COMMANDS:
     qp databook export [--graph <iri>] [--tx N] [--valid-at ISO] [--with-shapes] [--out <file>] [--db <path>]
     qp databook import <file.databook.md> [--graph <iri>] [--with-shapes] [--actor <id>] [--db <path>]
     qp acquire scope --source-store-id <id> --graph <iri>... [--tx <n>] --max-vm-steps <n> --deadline-ms <n> [--db <path>]
-    qp memory read|export|commit <input.json> --graph IRI --db PATH [--local-authority]
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     qp stats [--db <path>]
     qp search <query> [--mode keyword|semantic|hybrid] [--limit N] [--valid-at ISO] [--db <path>]

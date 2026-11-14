@@ -58,8 +58,6 @@ mod knot_completion;
 mod knot_completion_tests;
 #[path = "server/mapping.rs"]
 mod mapping;
-#[path = "server/memory_files.rs"]
-mod memory_files;
 #[cfg(test)]
 #[path = "server/namespace_tests.rs"]
 mod namespace_tests;
@@ -431,7 +429,7 @@ async fn main() {
     }
 
     let attest_store = state.clone();
-    let app = api_routes(config.memory_files.clone());
+    let app = api_routes();
     let app = protected_app(
         app,
         &workers,
@@ -512,16 +510,8 @@ async fn main() {
 /// Every HTTP route the server registers. Serve it only through
 /// [`protected_app`]; a route merged after that call would not meet the
 /// scoped-read guard or authentication (aegis-44r).
-fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedStore> {
+fn api_routes() -> Router<SharedStore> {
     Router::new()
-        .route("/memory/read", post(memory_files::read))
-        .route("/memory/export", post(memory_files::export))
-        .route("/memory/projection", post(memory_files::projection))
-        .route("/memory/commit", post(memory_files::commit))
-        .route("/memory/receipt", post(memory_files::receipt))
-        .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
-        .layer(axum::middleware::from_fn(memory_files::scope_guard))
-        .layer(axum::Extension(memory_files))
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())

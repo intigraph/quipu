@@ -194,21 +194,6 @@
   "/mapping/propose": [
     "post"
   ],
-  "/memory/commit": [
-    "post"
-  ],
-  "/memory/export": [
-    "post"
-  ],
-  "/memory/projection": [
-    "post"
-  ],
-  "/memory/read": [
-    "post"
-  ],
-  "/memory/receipt": [
-    "post"
-  ],
   "/merge/apply": [
     "post"
   ],

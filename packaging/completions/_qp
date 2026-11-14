@@ -1567,62 +1567,6 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(memory)
-_arguments "${_arguments_options[@]}" : \
-'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'-h[Print help]' \
-'--help[Print help]' \
-":: :_qp__subcmd__memory_commands" \
-"*::: :->memory" \
-&& ret=0
-
-    case $state in
-    (memory)
-        words=($line[1] "${words[@]}")
-        (( CURRENT += 1 ))
-        curcontext="${curcontext%:*:*}:qp-memory-command-$line[1]:"
-        case $line[1] in
-            (read)
-_arguments "${_arguments_options[@]}" : \
-'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
-'-h[Print help]' \
-'--help[Print help]' \
-':arg-owner-json:_default' \
-&& ret=0
-;;
-(export)
-_arguments "${_arguments_options[@]}" : \
-'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
-'-h[Print help]' \
-'--help[Print help]' \
-':arg-owner-json:_default' \
-&& ret=0
-;;
-(receipt)
-_arguments "${_arguments_options[@]}" : \
-'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
-'-h[Print help]' \
-'--help[Print help]' \
-':arg-request-json:_default' \
-&& ret=0
-;;
-(commit)
-_arguments "${_arguments_options[@]}" : \
-'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
-'--local-authority[Explicitly authorize a local memory commit]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':arg-request-json:_default' \
-&& ret=0
-;;
-        esac
-    ;;
-esac
-;;
 (attest)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
@@ -2324,7 +2268,6 @@ _qp_commands() {
 'path:Golden-path analysis\: provenance cone, backtest and draft' \
 'align:Propose, decide and apply cross-graph alignments' \
 'propose:List, submit, plan, accept or reject schema change proposals' \
-'memory:Read, export, receipt or commit versioned file memory' \
 'attest:Register and manage attested session bindings' \
 'signer:Enroll and manage hardware signers for attested writes' \
 'deck:Configure and enroll the Decision Deck' \
@@ -2955,36 +2898,6 @@ _qp__subcmd__load_commands() {
 _qp__subcmd__mcp_commands() {
     local commands; commands=()
     _describe -t commands 'qp mcp commands' commands "$@"
-}
-(( $+functions[_qp__subcmd__memory_commands] )) ||
-_qp__subcmd__memory_commands() {
-    local commands; commands=(
-'read:Read a versioned memory file for an owner' \
-'export:Export an owner'\''s memory files as a file-data envelope' \
-'receipt:Compute the receipt a memory commit request would produce' \
-'commit:Commit a versioned memory file change' \
-    )
-    _describe -t commands 'qp memory commands' commands "$@"
-}
-(( $+functions[_qp__subcmd__memory__subcmd__commit_commands] )) ||
-_qp__subcmd__memory__subcmd__commit_commands() {
-    local commands; commands=()
-    _describe -t commands 'qp memory commit commands' commands "$@"
-}
-(( $+functions[_qp__subcmd__memory__subcmd__export_commands] )) ||
-_qp__subcmd__memory__subcmd__export_commands() {
-    local commands; commands=()
-    _describe -t commands 'qp memory export commands' commands "$@"
-}
-(( $+functions[_qp__subcmd__memory__subcmd__read_commands] )) ||
-_qp__subcmd__memory__subcmd__read_commands() {
-    local commands; commands=()
-    _describe -t commands 'qp memory read commands' commands "$@"
-}
-(( $+functions[_qp__subcmd__memory__subcmd__receipt_commands] )) ||
-_qp__subcmd__memory__subcmd__receipt_commands() {
-    local commands; commands=()
-    _describe -t commands 'qp memory receipt commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__merge_commands] )) ||
 _qp__subcmd__merge_commands() {

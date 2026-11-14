@@ -11,8 +11,6 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 mod attachments;
-mod memory_files;
-pub use memory_files::MemoryFilesConfig;
 mod federation;
 mod query_capture;
 mod vector_backend;
@@ -563,8 +561,6 @@ pub struct QuipuConfig {
     pub namespaces: Vec<crate::entity_namespaces::Namespace>,
     /// Operator-approved destination store IDs and audiences.
     pub namespace_destinations: Vec<crate::entity_namespaces::DestinationBinding>,
-    /// Versioned-file RPC; disabled until its explicit deployment scope is set.
-    pub memory_files: MemoryFilesConfig,
     /// Path to the triple store database (default: `.bobbin/quipu/quipu.db`).
     pub store_path: PathBuf,
 
@@ -687,7 +683,6 @@ impl Default for QuipuConfig {
         Self {
             namespaces: Vec::new(),
             namespace_destinations: Vec::new(),
-            memory_files: MemoryFilesConfig::default(),
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
             base_ns: String::new(),
