@@ -39,6 +39,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: breaking-change-contract
+        name: breaking-change records, doctor controls and generated corrections
+        entry: just breaking test
+        language: python
+        additional_dependencies: [jsonschema==4.23.0]
+        pass_filenames: false
+        files: ^(cliff\.toml|CHANGELOG\.md|releases/|scripts/(breaking-changes|breaking_changes/|test_breaking_changes)|docs/book/src/reference/breaking-changes\.md|justfile)
       - id: pinned-ci-asset-mirror
         name: pinned CI mirror acquisition controls
         entry: python3 scripts/test-ci-asset-mirror.py

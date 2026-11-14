@@ -17,22 +17,18 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
-      - "src/**"
-      - "build.rs"
-      - "Cargo.toml"
-      - "Cargo.lock"
+      - "python/**"
       - "bindings/python/**"
       - "tests/fixtures/bindings-conformance/**"
       - ".github/workflows/python-bindings.yml"
       - "scripts/python-wheel-platforms.py"
       - "scripts/test_python_wheel_platforms.py"
-  schedule:
-    - cron: "41 5 * * *"
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
-  group: python-bindings-${{ github.ref }}
-  cancel-in-progress: true
+  group: python-bindings-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

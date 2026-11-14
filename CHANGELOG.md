@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
+[Breaking changes and running-system corrections](releases/BREAKING-CHANGES.md)
+are generated from the versioned release records.
+
 ## [Unreleased]
 
 ### Added
