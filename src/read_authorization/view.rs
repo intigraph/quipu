@@ -69,6 +69,7 @@ impl AuthorizedRead {
         let mut store = Store::open_in_memory()?;
         let mut graph_ids = Vec::new();
         let mut exports = BTreeMap::new();
+        let mut snapshot_graphs = Vec::new();
         let mut bytes = 0usize;
         let mut facts = 0usize;
         for graph in &self.graphs {
@@ -123,19 +124,11 @@ impl AuthorizedRead {
             } else {
                 format!("{}\n", lines.join("\n"))
             };
-            let destination = if root { 0 } else { store.graph_create(graph)? };
-            crate::rdf::ingest_assigned_rdf(
-                &mut store,
-                canonical.as_bytes(),
-                oxrdfio::RdfFormat::NTriples,
-                None,
-                "1970-01-01T00:00:00Z",
-                None,
-                None,
-                destination,
-            )?;
-            graph_ids.push(destination);
+            snapshot_graphs.push((graph.clone(), canonical.clone()));
             exports.insert(graph.clone(), canonical);
+        }
+        if !native {
+            (store, graph_ids) = crate::memory_files::read_snapshot::materialize(&snapshot_graphs)?;
         }
         if let Some(read) = read {
             read.commit()?;

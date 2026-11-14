@@ -350,3 +350,24 @@ async fn valid_signed_session_remains_query_capable_but_is_not_a_private_memory_
         StatusCode::OK
     );
 }
+
+#[tokio::test]
+async fn generic_reserved_memory_ingest_stays_forbidden_beside_owner_read() {
+    let fixture = memory_fixture();
+    let request = Request::post("/load")
+        .header("authorization", "Bearer p")
+        .header("content-type", "text/turtle")
+        .body(Body::from(
+            "<urn:quipu:memory:owner:forged> <https://quipu.dev/memory#head> \"forged\" .",
+        ))
+        .unwrap();
+    let response = fixture.real_app(true).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        fixture
+            .call("POST", "/memory/read", Some("p"), owner("urn:p"))
+            .await
+            .0,
+        StatusCode::OK
+    );
+}

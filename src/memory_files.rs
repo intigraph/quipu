@@ -17,6 +17,7 @@ pub const MAX_FILES: usize = 128;
 pub const MAX_OWNER_BYTES: usize = 4 * 1024 * 1024;
 
 mod model;
+pub(crate) mod read_snapshot;
 pub(crate) mod write_scope;
 pub use model::*;
 
