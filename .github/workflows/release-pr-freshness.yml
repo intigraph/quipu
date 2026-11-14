@@ -44,6 +44,10 @@ jobs:
     # release-plz branches are in scope; a fork PR named release-plz-* gets no say
     # in the verdict (and GitHub gives fork PRs a read-only token regardless).
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-release-pr-freshness-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 10
     permissions:
       actions: write

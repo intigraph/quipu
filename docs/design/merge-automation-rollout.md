@@ -170,3 +170,38 @@ acceptance window begins after activation, not at this branch's preparation.
 - [GitHub approving-review restrictions](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews)
 - [Release-plz command separation](https://release-plz.dev/docs/github/quickstart)
 - [Release PR update behavior](https://release-plz.dev/docs/usage/release-pr)
+
+## Runner capacity for the merge queue
+
+Ordinary pull-request jobs across this repository share four runner slots.
+Each job's concurrency group uses one slot for `pull_request`; merge-group,
+main-push, release and scheduled jobs use a distinct key for each run, attempt,
+job and matrix arm. Existing tests, feature matrices and correctness summaries
+remain intact. The CI workflow still cancels superseded runs of the same PR.
+
+Each slot uses `queue: max` and does not cancel running jobs. GitHub retains up
+to 100 pending jobs per slot; exceeding that bound cancels additional jobs and
+requires fresh qualification. Cancellation is never a passing result. See
+[GitHub's concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+The budget limits this repository's ordinary PR load; other repositories and
+non-PR workloads can still consume the account's hosted capacity.
+
+Aggregate jobs keep `always()` to report upstream failures, with an explicit
+PR-only `!cancelled()` guard so superseded PR runs can stop. Main, release and
+merge-group verdicts keep their existing behavior. Artifact-upload cleanup
+steps may still use `always()` within a job. See
+[GitHub workflow cancellation](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-cancellation).
+
+Run `just ci-pr-budget check` and `just ci-pr-budget test` to audit every
+PR-triggered workflow and reject jobs that escape the budget, replace pending
+work, or accidentally serialize merge-group matrix arms.
+
+The initial observed queue timeout was 60 minutes; #1188 was ejected without a
+merge after its group could not obtain a runner. The owner raised the ruleset's
+status-check timeout to 180 minutes. Rollback restores that field to 60; the
+queue remains SQUASH/ALLGREEN/max-one and branch protection remains intact.
+
+Accept the scheduling change only after two consecutive queue entries merge
+without timeout ejection while ordinary PR CI runs. Record each group's
+creation, first job start, required-check completion, merge timestamp and exact
+commit. Measure actual latency; an offline budget audit is not that proof.

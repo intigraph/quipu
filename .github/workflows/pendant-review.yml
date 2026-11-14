@@ -50,6 +50,10 @@ jobs:
   review:
     name: pendant review
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-review-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -93,7 +97,12 @@ jobs:
     if: >-
       always() && vars.QPACK_REVIEW_COMMENT == 'true'
       && github.event.pull_request.head.repo.full_name == github.repository
+      && (github.event_name != 'pull_request' || !cancelled())
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-comment-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     permissions:
       pull-requests: write
     steps:

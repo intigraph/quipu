@@ -161,3 +161,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^(docs/knowledge/|scripts/(build-contributor|check-explorer|build-repository-share|private-share-policy|publish-repository-share|verify-repository-share|test_private_share|test_repository_share)|shapes/contributor|queries/repository-share|\.github/workflows/(docs|release)\.yml)
+
+      - id: pr-runner-budget
+        name: ordinary PR jobs leave capacity for the merge queue
+        entry: python3 scripts/check-pr-runner-budget.py
+        language: system
+        pass_filenames: false
+        files: ^(\.github/workflows/|scripts/(check|test)-pr-runner-budget\.py$)
