@@ -44,6 +44,7 @@
 
 # Reference
 
+- [Breaking changes and corrections](reference/breaking-changes.md)
 - [CLI Commands](reference/cli.md)
   - [Competency contracts](reference/competency.md)
   - [CLI Command Index](reference/cli-commands.md)
