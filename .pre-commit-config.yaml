@@ -45,7 +45,7 @@ repos:
         language: python
         additional_dependencies: [jsonschema==4.23.0]
         pass_filenames: false
-        files: ^(releases/|scripts/(breaking-changes|breaking_changes/|test_breaking_changes)|docs/book/src/reference/breaking-changes\.md|justfile)
+        files: ^(cliff\.toml|CHANGELOG\.md|releases/|scripts/(breaking-changes|breaking_changes/|test_breaking_changes)|docs/book/src/reference/breaking-changes\.md|justfile)
       - id: pinned-ci-asset-mirror
         name: pinned CI mirror acquisition controls
         entry: python3 scripts/test-ci-asset-mirror.py

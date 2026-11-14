@@ -37,10 +37,10 @@ def load(path):
 def validate(record):
     schema, _ = load(ROOT / 'releases/schemas/breaking-change-v1.schema.json')
     Draft202012Validator.check_schema(schema)
-    errors = list(Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(record))
-    if errors:
+    error = next(Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(record), None)
+    if error is not None:
         # Never echo untrusted field values or an entire supplied observation.
-        raise ValueError('record violates breaking-change/v1: ' + errors[0].validator)
+        raise ValueError('record violates breaking-change/v1: ' + error.validator)
     detection = record['detection']
     if set(detection['canonical_terms']) & set(detection['legacy_terms']):
         raise ValueError('canonical and historical term sets overlap')

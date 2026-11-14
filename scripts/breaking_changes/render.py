@@ -1,4 +1,6 @@
 """One deterministic correction body for the changelog and book."""
+import tomllib
+
 from .contract import ROOT, readiness, records
 
 OUTPUTS = [ROOT / 'releases/BREAKING-CHANGES.md',
@@ -48,3 +50,10 @@ def render():
                                                    else 'structurally complete; approval unverified'), '',
                       '**Required release approver:** ' + record['required_approver'] + '.', ''])
     return '\n'.join(lines)
+
+
+def check_references():
+    link = '[Breaking changes and running-system corrections](releases/BREAKING-CHANGES.md)'
+    header = tomllib.loads((ROOT / 'cliff.toml').read_text())['changelog']['header']
+    if link not in header or link not in (ROOT / 'CHANGELOG.md').read_text():
+        raise ValueError('correction link missing from changelog or its generator header')

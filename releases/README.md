@@ -7,7 +7,7 @@ affected releases, platform bindings and native command packets remain unknown.
 It must not ship as a complete correction record.
 
 From this source checkout, install the pinned authoring dependency in an isolated
-Python environment (`jsonschema==4.23.0`). CI and the pre-commit hook declare it.
+Python 3.11+ environment (`jsonschema==4.23.0`). CI and the pre-commit hook declare it.
 For example, prefix the following commands with
 `uv run --no-project --with jsonschema==4.23.0 --` if it is not installed.
 
@@ -46,7 +46,9 @@ and envelope authenticity are verified by that consumer, not reimplemented here.
 
 One deterministic renderer produces [the correction changelog](BREAKING-CHANGES.md)
 and the book's breaking-change page. The root changelog links to these records.
-`render --check` and the behavioural controls run in the existing required
+`render --check` also requires the correction link in both the root changelog
+and its git-cliff generator header. This prevents a fresh release regeneration
+from dropping the link. It and the behavioural controls run in the existing required
 Pre-commit checks path; stale output fails. `render --write` is an explicit local
 authoring operation that writes those two documentation files only.
 

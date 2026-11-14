@@ -264,7 +264,7 @@ class Contracts(unittest.TestCase):
     def test_real_cli_rejects_generated_drift_in_an_isolated_source_copy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            paths = [ROOT / 'scripts/breaking-changes.py', FIXTURE,
+            paths = [ROOT / 'scripts/breaking-changes.py', FIXTURE, ROOT / 'cliff.toml', ROOT / 'CHANGELOG.md',
                      ROOT / 'releases/schemas/breaking-change-v1.schema.json', *OUTPUTS,
                      *(ROOT / 'scripts/breaking_changes').glob('*.py')]
             for source in paths:
@@ -273,6 +273,12 @@ class Contracts(unittest.TestCase):
                 target.write_bytes(source.read_bytes())
             command = [sys.executable, '-B', str(root / 'scripts/breaking-changes.py'), 'render']
             self.assertEqual(subprocess.run(command + ['--check'], capture_output=True).returncode, 0)
+            for relative in ['cliff.toml', 'CHANGELOG.md']:
+                target = root / relative
+                original = target.read_text()
+                target.write_text(original.replace('releases/BREAKING-CHANGES.md', 'missing.md'))
+                self.assertEqual(subprocess.run(command + ['--check'], capture_output=True).returncode, 2)
+                target.write_text(original)
             drift = root / OUTPUTS[0].relative_to(ROOT)
             drift.write_text('stale correction')
             self.assertEqual(subprocess.run(command + ['--check'], capture_output=True).returncode, 2)

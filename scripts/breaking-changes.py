@@ -8,7 +8,7 @@ sys.dont_write_bytecode = True
 
 from breaking_changes.contract import ROOT, load, readiness, records, validate
 from breaking_changes.doctor import assess, timestamp
-from breaking_changes.render import OUTPUTS, render
+from breaking_changes.render import OUTPUTS, check_references, render
 
 
 def main():
@@ -64,6 +64,7 @@ def main():
         if args.command == 'render':
             body = render()
             if args.check:
+                check_references()
                 if any(p.is_symlink() or not p.is_file() or p.read_text() != body for p in OUTPUTS):
                     raise ValueError('generated breaking-change documentation is stale')
             elif args.write:
