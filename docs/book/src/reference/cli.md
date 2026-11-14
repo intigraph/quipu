@@ -1305,3 +1305,30 @@ of enrollment and the store switch. The HTTP transport also requires its own
 `attest_http` switch. No command enrolls through HTTP or activates a browser;
 store-file access remains the operator authority. Existing domain-specific
 registries are retained separately during migration.
+
+### Required recipient profile for project bundles
+
+A producer can declare an exact, reviewed recipient profile when sharing:
+
+```bash
+quipu share --project --require-profile seeds-v0.22.1@30e17964 --require-profile-sha256 "sha256:<64-lowercase-hex>"
+```
+
+The optional `manifest.json` member `required_profile` contains `reference`
+(the exact recipient shapes registry name, including the released version/ref)
+and `digest` (`sha256:` of the exact reviewed Turtle file bytes). The declaration
+is sealed by `share_id`. It is a prerequisite, not authority to install policy.
+The same optional declaration is available to share API/library producers.
+
+Before staging an import, Quipu requires exactly one current local shape set
+with that name and byte digest. Missing, different, malformed or ambiguous
+profiles refuse without staging graph data or a review record. The error names
+the explicit setup step: verify the released profile file's SHA256, then run
+`quipu shapes load <reference> <verified-profile.ttl> --db <recipient-db>`
+through the recipient's governed shapes path. Then retry the ordinary
+`quipu load .quipu/graph --db <recipient-db>`. No profile is downloaded,
+installed, trusted or promoted automatically; there is no bypass flag.
+
+Without the declaration, existing import/quarantine behavior is unchanged.
+An off-vocabulary bundle still quarantines; its carried shapes never become
+recipient policy merely because they arrived with data.

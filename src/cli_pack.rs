@@ -95,7 +95,24 @@ pub fn cmd_share(args: &[String], db_path: &str) {
             std::process::exit(1)
         })
     });
+    let required_profile = match (
+        flag_value(args, "--require-profile"),
+        flag_value(args, "--require-profile-sha256"),
+    ) {
+        (None, None) => None,
+        (Some(reference), Some(digest)) => Some(quipu::share::RequiredProfile {
+            reference: reference.into(),
+            digest: digest.into(),
+        }),
+        _ => {
+            eprintln!(
+                "share requires both --require-profile <registry-ref> and --require-profile-sha256 <sha256:hex>"
+            );
+            std::process::exit(1);
+        }
+    };
     let opts = quipu::share::ShareOptions {
+        required_profile,
         observable_configs: Vec::new(),
         fluent_proofs: Vec::new(),
         competency_toml,
