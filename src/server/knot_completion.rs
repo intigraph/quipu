@@ -213,6 +213,9 @@ pub(crate) async fn status(
     State(store): State<SharedStore>,
     Json(input): Json<Value>,
 ) -> Result<Json<Value>, AppError> {
+    if input.get("contract").and_then(Value::as_str) == Some(super::knot_durable::CONTRACT) {
+        return super::knot_durable::status(store, input).await;
+    }
     let id = input
         .get("write_id")
         .and_then(Value::as_str)
