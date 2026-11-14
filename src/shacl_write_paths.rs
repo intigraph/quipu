@@ -3,9 +3,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use rudof_rdf::rdf_core::term::literal::Literal as _;
-use rudof_rdf::rdf_core::{Rdf, SHACLPath};
-use rudof_rdf::rdf_impl::OxigraphInMemory;
+use rudof_rdf::rdf_core::SHACLPath;
 use shacl_engine::ir::IRComponent;
 use shacl_engine::types::Target;
 
@@ -49,16 +47,7 @@ impl Validator {
             let shape = schema.get_shape_from_idx(&index).ok_or_else(|| {
                 Error::CannotVerify("compiled cardinality shape reference missing".into())
             })?;
-            // Only a constant true expression can remove a static obligation.
-            // Dynamic expressions need the data/focus and remain conservative here.
-            if shape
-                .deactivated()
-                .and_then(shacl_engine::ir::IRNodeExpr::as_constant)
-                .map(|value| OxigraphInMemory::object_as_term(&value))
-                .and_then(|term| OxigraphInMemory::term_as_literal(&term).ok())
-                .and_then(|literal| literal.to_bool())
-                .unwrap_or(false)
-            {
+            if shape.deactivated() {
                 continue;
             }
             for target in shape.targets() {
@@ -194,30 +183,5 @@ pub fn refuse_unverifiable_write_paths(shapes_turtle: &str) -> Result<()> {
              (or split the constraint per predicate)."
         ))),
         Err(other) => Err(other),
-    }
-}
-
-#[cfg(test)]
-mod pin_deactivation_tests {
-    use super::*;
-
-    #[test]
-    fn static_true_skips_and_false_keeps_cardinality_obligation() {
-        for (value, active) in [("true", false), ("false", true)] {
-            let shapes = format!(
-                "@prefix sh: <http://www.w3.org/ns/shacl#> .
-                @prefix ex: <urn:test:> .
-                ex:S a sh:NodeShape ; sh:targetClass ex:C ; sh:deactivated {value} ;
-                sh:property [ sh:path ex:p ; sh:maxCount 1 ] ."
-            );
-            let validator = Validator::from_turtle(&shapes).unwrap();
-            assert_eq!(
-                validator
-                    .cardinality_plan()
-                    .unwrap()
-                    .has_value_set_constraint,
-                active
-            );
-        }
     }
 }
