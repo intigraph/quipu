@@ -1,4 +1,4 @@
-# Fluent HTTP adapter
+# Fluent HTTP and CLI adapter
 
 This adapter implements [the fluent contract](fluents-v1-contract.md). It adds
 no schema loader, credential issuer or alternate local database write path.
@@ -37,3 +37,15 @@ retain the event ID and bytes for an idempotent retry.
 current value, producing event IDs, producing transaction IDs and store snapshot
 transaction. An unknown fluent or graph refuses. This read creates nothing.
 Existing scoped-read authorization still applies.
+
+The CLI requires the `remote` feature and an explicit server origin:
+
+```sh
+quipu fluent append observation.json --server https://example.org
+quipu fluent current --server https://example.org --graph urn:example:graph --fluent urn:example:count
+```
+
+The append credential comes from `QUIPU_AUTH_TOKEN`, then
+`QUIPU_AUTH_TOKEN_FILE`; credentials never appear in command arguments.
+The CLI calls these HTTP routes only, refuses `--db`, disables redirects,
+bounds request/response sizes and uses a 30-second transport timeout.

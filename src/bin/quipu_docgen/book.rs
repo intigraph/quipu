@@ -20,8 +20,9 @@ pub fn cli_page() -> String {
     out.push_str(
         "Every `quipu` command path with its syntax, generated from the same catalogue \
          that admits arguments, so it cannot list a command the binary refuses or miss \
-         one it accepts. `qp` is the same binary. Every command also takes `--db <path>` \
-         (default `.bobbin/quipu/quipu.db`). For explanations and examples see \
+         one it accepts. `qp` is the same binary. Local-store commands take `--db <path>` \
+         (default `.bobbin/quipu/quipu.db`); HTTP-only `fluent` commands use `--server` \
+         and refuse `--db`. For explanations and examples see \
          [CLI Commands](cli.md); `man quipu-<command>` prints the same syntax.\n",
     );
     for spec in SPECS {

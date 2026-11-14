@@ -47,7 +47,11 @@ fn db_arg() -> Arg {
 fn insert(mut cmd: Command, words: &[&str], depth: usize, spec: &Spec) -> Command {
     let head = words[depth - 1];
     if !cmd.get_subcommands().any(|c| c.get_name() == head) {
-        let mut child = Command::new(head.to_string()).arg(db_arg());
+        let mut child = Command::new(head.to_string());
+        // Fluent commands are HTTP-only and explicitly refuse a local store.
+        if words[0] != "fluent" {
+            child = child.arg(db_arg());
+        }
         if let Some(text) = about(&words[..depth].join(" ")) {
             child = child.about(text);
         }
@@ -172,5 +176,9 @@ mod tests {
             about("shapes load").unwrap()
         );
         assert!(load.get_arguments().any(|a| a.get_long() == Some("db")));
+        let fluent = cmd.find_subcommand("fluent").unwrap();
+        for command in std::iter::once(fluent).chain(fluent.get_subcommands()) {
+            assert!(!command.get_arguments().any(|a| a.get_long() == Some("db")));
+        }
     }
 }
