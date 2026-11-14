@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "638f346f5de7eded5d687a4125b954d7ea0502e718d256545da8c29699428939",
+      "source_sha256": "7f0e4e7941b1aa8a7cb7548aacb0a4470fba78b4e60d450d34c14c106bbb40e0",
       "type": "Concept"
     },
     {
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "be6a1c6f70404e7f9cf5be6905b5f9988ac113107d45ab8e54c6c41ca2a2f992",
+      "source_sha256": "16822b9c2a16e0eb7f90a34f17f208d527f897ae3e2a18c76c3fc5f29da74d51",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "cb80057863a91400ac95fa9f4cabadc00daf700c76236569988960b4f8da1f65",
+      "source_sha256": "9c0d380f6912d8d85ff7ea31093d39d7371d615df227c5dfe933a7d8feda734e",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

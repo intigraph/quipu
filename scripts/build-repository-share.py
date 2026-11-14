@@ -545,6 +545,19 @@ def build(revision, source, tooling, binary, bobbin, output):
     references = agent_references(source, paths)
     private = output.parent / "build-private"
     private.mkdir(mode=0o700)
+    # The scheduled prepare interface must use declared provider bytes, too.
+    import importlib.util
+    provider_spec = importlib.util.spec_from_file_location(
+        "repository_share_embedding", source / "scripts/repository_share_embedding.py"
+    )
+    provider = importlib.util.module_from_spec(provider_spec)
+    previous_bytecode = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        provider_spec.loader.exec_module(provider)
+    finally:
+        sys.dont_write_bytecode = previous_bytecode
+    expected_provider = provider.configure(private)
 
     def run(args, *, env=None):
         return command(args, env=env, cwd=private)
@@ -565,6 +578,7 @@ def build(revision, source, tooling, binary, bobbin, output):
     index = private / "index"
     (index / ".bobbin").mkdir(parents=True)
     (index / ".bobbin/config.toml").write_text(INDEX_CONFIG)
+    provider.configure_indexer(index, private, expected_provider)
     env = isolated_environment(private)
     run(
         [
@@ -691,6 +705,7 @@ def build(revision, source, tooling, binary, bobbin, output):
         + (["--alignments", alignments] if native else [])
         + ["--db", database]
     )
+    provider.verify_manifest(stage, expected_provider)
     if native:
         verify_carried_alignments(stage, alignments)
     if (

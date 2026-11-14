@@ -2281,6 +2281,26 @@ use `completion_outcome: "response"`. This records abandonment of the HTTP
 future, including cancellation during shutdown; it does not prove that a blocking
 worker stopped or that a write did not commit. Response-body streaming after the
 handler returns is outside this measurement.
+Signed `GET /health` and `POST /identity` requests also add fixed-size numeric
+phase observations to that same terminal event. Header presence selects this
+observation; it does not authenticate the request. `auth_phase_us` contains eight
+microsecond durations in this order: verification, pre-handler blocking dispatch,
+pre-handler writer-lock wait, pre-handler lock hold, handler, post-handler blocking
+dispatch, post-handler writer-lock wait, and post-handler lock hold. Verification
+includes body decoding, read admission and signature checks; these inner costs
+are not separated. Lock holds include existing nonce settlement. The observer
+changes no nonce, timeout, retry or authorization policy.
+
+`auth_phase_started` and `auth_phase_complete` are bit masks with bit zero naming
+the first array entry. An unstarted phase is `null`. An unfinished phase reports
+elapsed time at the snapshot with its completion bit unset; a completed zero is
+a measured sub-microsecond duration. Cancellation can leave a detached blocking
+worker running beyond that snapshot. These values are diagnostic timings, not
+proof of worker termination or a complete decomposition of request duration.
+The three fields add fewer than 256 JSON bytes per selected terminal event,
+with no extra events or metric labels. No signature, nonce, key, session, body
+or header value is added by the phase observer.
+
 Completed `/search`, `/hybrid-search`, and `/search-query` pipelines exceeding 500 ms also emit
 `search_phase_slow`. This anonymous record reports `pipeline_ms`, combined
 `admission_dispatch_ms`, and `phase_ms` for embedding, reader acquisition,

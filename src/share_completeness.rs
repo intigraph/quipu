@@ -64,6 +64,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("transaction_declarations", Disposition::Content),
     ("terms", Disposition::Content),
     ("graphs", Disposition::Content),
+    // Original caller-declared creator provenance survives event retention.
+    // Historical content, never receiver-local authentication or write authority.
+    ("graph_creators", Disposition::Content),
     ("shapes", Disposition::Content),
     ("ontologies", Disposition::Content),
     ("queries", Disposition::Content),

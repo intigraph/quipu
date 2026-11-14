@@ -3,6 +3,37 @@
 This directory runs version-pinned, public benchmark material against an
 ephemeral Quipu store. It does not use a production graph.
 
+## CI expectations and release reports
+
+`expected-results.json` is the stable regression contract: exact suite pins,
+test identities, and expected pass or known failure. CI re-runs the suites and
+fails on regressions, unexpected passes, missing/extra cases, or unknown result
+states. An intentional behaviour change updates expectations in its reviewed
+PR. CI never regenerates that file automatically. Review an explicit author
+update with `python3 benchmark/public/expected_results.py --results-dir PATH --write`.
+
+The v2 file groups repeated class and manifest prefixes; each outcome list
+still contains every exact test ID. `prove_expected_compaction.py` independently
+expands it and checks the canonical v1 SHA-256, suite count and case count in
+CI. For the migration, `--legacy OLD.json` additionally checks literal equality
+with the archived v1 file from commit `1d3909ff`. Future intentional expectation
+changes must also review and update the proof anchor; no gate updates it.
+
+Measured results, source revisions, timestamps and timings are retained in the
+`conformance-run-SHA` CI artifact. Release runs publish the report and its
+checksum as `conformance-report.tar.gz` release assets. Public docs stage the
+latest release's verified report. Missing assets hold public deployment while
+the source preview still builds; download or validation failures fail the job.
+The release publisher rebuilds docs after publishing the assets. PR previews retain
+the committed historical page. The committed `results/` files are historical
+fixtures for renderer and expectation tests, not per-commit freshness claims.
+Competitor ledgers remain pinned, committed data.
+
+The stamp-provenance CI job and bot artifact contract are retired by this
+workflow. Deployment still must retire the old bot, its cron and helper
+admission exceptions through the normal reviewed paths. A source change alone
+does not prove that retirement or the required seven days without chore PRs.
+
 ## SPARQL 1.1 syntax
 
 The first executable slice scores the W3C RDF Tests SPARQL 1.1 query-syntax

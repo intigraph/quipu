@@ -35,7 +35,39 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
+  pr-paths:
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    name: Select optional PR surfaces
+    runs-on: ubuntu-latest
+    outputs:
+      wasm: ${{ steps.paths.outputs.wasm }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: paths
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/ci/pr-surfaces.py >> "$GITHUB_OUTPUT"
+
+  deploy-skip-proof:
+    name: Deployment skip prefix proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: extractions/setup-just@v2
+      - run: just deploy-skip test
+      - run: just deploy-skip check
+
   query-builders:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Typed SPARQL client builders
@@ -75,7 +107,7 @@ jobs:
       - run: cargo fmt --check
 
   bundled-runtime:
-    if: ${{ github.event_name != 'push' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     name: Bundled ONNX runtime (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -114,7 +146,7 @@ jobs:
           # superset of shacl+onnx. Before it existed NOTHING linted quipu-server
           # (required-features shacl+onnx) nor the owl / reactive-reasoner code —
           # adding it turned up 11 findings on first run. It now runs in the
-          # serial extended-features job on PRs/nightly.
+          # serial extended-features job nightly.
           # `remote` WITHOUT `server`: the federation HTTP client on its own.
           # `full` implies both, so without the extended job the standalone-client
           # cfg combination — the one a wasm-adjacent build would select — is
@@ -245,7 +277,7 @@ jobs:
           path: target/evidence/lattice-proptest.*
           if-no-files-found: error
 
-  # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
+  # Unique but non-CD-gating cfg surfaces. Run them serially nightly so
   # they remain release evidence without competing with a pushed head's six
   # required checks for account runners.
   generated-docs:
@@ -280,7 +312,7 @@ jobs:
 
   extended-features:
     name: Extended feature surfaces
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
       # Serial feature builds need headroom for tests and cache compression.
@@ -424,7 +456,7 @@ jobs:
   # the worst possible place to find it.
   build-full:
     name: Build (full bundle)
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -442,7 +474,23 @@ jobs:
         uses: ./.github/actions/pinned-ci-onnx
         with:
           mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
-      - run: cargo build --locked --features full --bin quipu --bin quipu-server
+      - run: cargo build --release --locked --features full --bin quipu --bin quipu-server
+      - name: Package exact nightly binaries
+        run: |
+          mkdir -p nightly
+          cp target/release/quipu target/release/quipu-server nightly/
+          nightly/quipu --help > /dev/null
+          nightly/quipu-server --help > /dev/null
+          cp LICENSE nightly/
+          printf '%s\n' 'Experimental full-feature Linux nightly.' 'ONNX embeddings need libonnxruntime.so via ORT_DYLIB_PATH plus model/config files.' 'Keep a store backup and previous installation; stable promotion needs a separate seven-day soak.' > nightly/FEATURES.txt
+          printf '%s\n' "$GITHUB_SHA" > nightly/SOURCE_SHA
+          tar -czf quipu-nightly-linux-x86_64.tar.gz -C nightly .
+          sha256sum quipu-nightly-linux-x86_64.tar.gz > quipu-nightly-linux-x86_64.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-linux-${{ github.sha }}
+          path: quipu-nightly-linux-x86_64.tar.gz*
+          if-no-files-found: error
 
   # The wasm32 target and browser harness (docs/design/wasm-support.md;
   # quipu-qd2/ajz/2l5). Per AGENTS.md a feature does not ship dark: this job
@@ -453,9 +501,13 @@ jobs:
   # quipu CLI + sqlite3, browser-produced pack → native attach, native .db →
   # browser import). Steps mirror `just wasm check|test|roundtrip` without a
   # just dependency, matching the raw-cargo style of the other jobs.
+  # Keep heavy browser coverage at queue admission and nightly/manual runs.
+  # Event-only conditions let the review gate prove PR skips from source;
+  # unobservable path-selector outputs cannot establish a skipped verdict.
   wasm:
     name: Wasm (browser harness)
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    needs: pr-paths
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
@@ -531,7 +583,8 @@ jobs:
   # and merging them would hide which of the two went red.
   wasm-explorer:
     name: Wasm (browser bundle)
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ !cancelled() && (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    needs: pr-paths
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
@@ -600,6 +653,7 @@ jobs:
       # no model call and no build.
       - name: Verify the CI to Release contract
         run: |
+          python3 scripts/test_ci_fanout.py
           python3 scripts/test_release_ci_gate.py
           python3 docs/demos/terminal/test_harness_origin.py -v
           python3 scripts/test_release_schedule.py
@@ -689,7 +743,7 @@ jobs:
 
   load-test:
     name: Mixed load performance ratchet
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -751,7 +805,7 @@ jobs:
   # control, so runner speed cancels out. Release build, as served.
   query-perf:
     name: String filter query performance gate
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
@@ -899,10 +953,16 @@ jobs:
           path: /tmp/shacl-write-path.json
           if-no-files-found: warn
 
+  conformance:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    uses: ./.github/workflows/conformance.yml
+    with:
+      rederive: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+
   release-correctness:
     name: Release correctness
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
-    needs: [clippy, test, build, check, shacl-write-path, generated-docs]
+    needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance, deploy-skip-proof]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass
@@ -919,7 +979,7 @@ jobs:
 
   extended-correctness:
     name: Extended correctness
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always() && !contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
     steps:
@@ -952,3 +1012,62 @@ jobs:
           python3 scripts/test-repository-share-query.py
           python3 scripts/test-repository-knowledge.py
           python3 scripts/test-repository-share-publication.py
+
+  nightly-wheels:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/python-bindings.yml
+
+  nightly-merge-load:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/merge-load.yml
+
+  nightly-gate:
+    name: Nightly correctness
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    needs: [fmt, query-builders, release-correctness, extended-correctness, bundled-runtime, wasm-explorer, nightly-wheels, nightly-merge-load, repository-pendant-source]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse failed, skipped or missing nightly suites
+        id: gate
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/nightly-result.py gate
+
+  nightly-publish:
+    name: Publish experimental nightly
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    needs: nightly-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: nightly-linux-${{ github.sha }}
+          path: nightly-assets
+      - name: Publish only the exact green run's package
+        env:
+          GATE_RESULT: ${{ needs.nightly-gate.result }}
+          GATE_SHA: ${{ needs.nightly-gate.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/nightly-result.py publish nightly-assets
+
+  nightly-failure:
+    name: Track red nightly
+    if: ${{ always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (needs.nightly-gate.result != 'success' || needs.nightly-publish.result != 'success') }}
+    needs: [nightly-gate, nightly-publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update the single nightly failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/nightly-result.py track
