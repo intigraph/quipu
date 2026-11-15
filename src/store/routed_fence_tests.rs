@@ -69,6 +69,7 @@ fn inventory_classifies_every_graph_bearing_column() {
             ("forks", "g", FenceClass::All),
             ("frozen_packs", "graph_iri", FenceClass::All),
             ("graph_consumers", "graph", FenceClass::WritesOnly),
+            ("graph_creators", "g", FenceClass::All),
             ("graph_events", "graph", FenceClass::WritesOnly),
             ("graphs", "g", FenceClass::All),
             ("pendant_repo_graphs", "graph", FenceClass::All),
@@ -482,4 +483,42 @@ fn producer_cutover_needs_the_graph_fence_and_a_snapshot_tag() {
         "generation differs from the graph fence"
     );
     assert!(store.routed_source_fence_rows().unwrap().is_empty());
+}
+
+#[test]
+fn creator_provenance_is_frozen_only_for_routed_graphs() {
+    let (_dir, _path, store) = legacy();
+    let routed = store.graph_create(ROUTED).unwrap();
+    let other = store.graph_create(OTHER).unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT OR REPLACE INTO graph_creators(g,actor) VALUES(?1,'original')",
+            [routed],
+        )
+        .unwrap();
+    store.fence_routed_graph(ROUTED, 7, 4).unwrap();
+    for sql in [
+        "UPDATE graph_creators SET actor='changed' WHERE g=?1",
+        "DELETE FROM graph_creators WHERE g=?1",
+        "INSERT OR REPLACE INTO graph_creators(g,actor) VALUES(?1,'changed')",
+    ] {
+        assert_fenced(store.conn.execute(sql, [routed]).map_err(Error::from), sql);
+    }
+    store
+        .conn
+        .execute(
+            "INSERT OR REPLACE INTO graph_creators(g,actor) VALUES(?1,'unrouted')",
+            [other],
+        )
+        .unwrap();
+    let actor: String = store
+        .conn
+        .query_row(
+            "SELECT actor FROM graph_creators WHERE g=?1",
+            [routed],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(actor, "original");
 }

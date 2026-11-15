@@ -49,6 +49,9 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
+    # Preserve graph-owner residual history in generated release notes.
+    { pattern = '(?m)^Capture bounded strict snapshots across native graph owners$', replace = "feat(store): capture bounded strict snapshots across native graph owners" },
+    { pattern = '(?m)^Fence native graph owners against cooperating Store writers$', replace = "fix(store): fence native graph owners against cooperating writers" },
     # Preserve the observer source-control correction without rewriting history.
     { pattern = '(?m)^Fix observer route inventory and refresh REST source witness$', replace = "fix(server): include the phase observer in route coverage and refresh the REST witness" },
     # Preserve the ownership admission entry without rewriting published history.

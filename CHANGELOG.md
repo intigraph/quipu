@@ -9,6 +9,9 @@ are generated from the versioned release records.
 
 ### Added
 
+- Capture bounded strict snapshots across native graph owners ([18d6d6e](https://github.com/intigraph/quipu/commit/18d6d6e12d22305cbd56ae5a2193ea5cc32241dc)).
+- Fence native graph owners against cooperating Store writers ([2aab097](https://github.com/intigraph/quipu/commit/2aab097310ff29120cb53bacf92d78b60c93d318)).
+
 - Prepare bounded native owner leases, enrolled reader admission and strict-cut snapshots while preserving ordinary multi-handle writers.
 
 - Add immutable graph-owner catalog plans with bounded fan-out, placement and write-target admission; no route is activated.

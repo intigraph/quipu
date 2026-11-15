@@ -44,6 +44,8 @@ const CLASSES: &[(&str, &str, FenceClass)] = &[
     // Native append removes these transaction-local permits on completion.
     ("fluent_write_permits", "g", FenceClass::WritesOnly),
     ("graphs", "g", FenceClass::All),
+    // Durable creator provenance is authoritative graph state, not a cache.
+    ("graph_creators", "g", FenceClass::All),
     ("forks", "g", FenceClass::All),
     ("writer_graph_instances", "g", FenceClass::All),
     ("frozen_packs", "graph_iri", FenceClass::All),
