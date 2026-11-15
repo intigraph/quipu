@@ -42,6 +42,12 @@ source links, summary metadata and freshness checks apply in both modes. New
 exceptions require separate evidence and review; this is not a general
 regenerate-all-witnesses mode.
 
+Branches that still edit a removed strict digest can need one ordinary migration
+resolution when adopting this mode. Keep the reviewed mode, remove its old digest,
+and preserve any actual summary edits. Once adopted, source-only changes stop
+editing those registry scalars. Competing summary changes still require normal
+resolution; no local merge driver or queue-side source rewrite is installed.
+
 `alignments.ttl` is currently a valid empty SSSOM/RDF carrier. Its accompanying
 status file explicitly records zero approved mappings and seals those bytes.
 This is not evidence of global absence. Missing, changed or malformed input
