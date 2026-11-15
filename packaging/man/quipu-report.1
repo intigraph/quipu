@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH QUIPU-REPORT 1 "" quipu "Quipu Manual"
 .SH NAME
-quipu\-report \- Report hubs, surprising links and open questions in the graph
+quipu\-report \- Report graph hubs and questions, or public operational SLO history
 .SH SYNOPSIS
-\fBquipu report\fR [\fB\-\-db\fR] [\fB\-\-type\fR] [\fB\-\-predicate\fR] [\fB\-\-hubs\fR] [\fB\-\-surprises\fR] [\fB\-\-questions\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+\fBquipu report\fR [\fB\-\-db\fR] [\fB\-\-type\fR] [\fB\-\-predicate\fR] [\fB\-\-hubs\fR] [\fB\-\-surprises\fR] [\fB\-\-questions\fR] [\fB\-\-prometheus\fR] [\fB\-\-days\fR] [\fB\-\-end\fR] [\fB\-\-public\fR] [\fB\-h\fR|\fB\-\-help\fR] 
 .SH DESCRIPTION
-Report hubs, surprising links and open questions in the graph
+Report graph hubs and questions, or public operational SLO history
 .SH OPTIONS
 .TP
 \fB\-\-db\fR \fI<PATH>\fR
@@ -26,6 +26,18 @@ Number of surprising relationships in the report
 .TP
 \fB\-\-questions\fR \fI<VALUE>\fR
 Number of suggested questions in the report
+.TP
+\fB\-\-prometheus\fR \fI<VALUE>\fR
+Prometheus base URL for a public SLO report (no credentials in URL)
+.TP
+\fB\-\-days\fR \fI<VALUE>\fR
+Public SLO report window in complete UTC days (1\-90; default 30)
+.TP
+\fB\-\-end\fR \fI<VALUE>\fR
+Public SLO report end at a past RFC3339 UTC midnight
+.TP
+\fB\-\-public\fR
+Read public operational SLO history without opening the graph
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
