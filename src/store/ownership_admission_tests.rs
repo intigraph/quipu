@@ -86,9 +86,14 @@ fn mode(path: &Path, mode: u32) {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_setup(|db| drop(Store::open(db).unwrap()))
+    }
+
+    /// `setup` prepares the ordinary database before enrollment (D4 order).
+    fn with_setup(setup: impl FnOnce(&str)) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("store.db");
-        drop(Store::open(db.to_str().unwrap()).unwrap());
+        setup(db.to_str().unwrap());
         let protected = dir.path().join("protected");
         fs::create_dir(&protected).unwrap();
         mode(&protected, 0o700);
@@ -569,3 +574,49 @@ fn refused_without_receipt_with(f: &Fixture, config: &EnrolledStartup<'_>, why: 
     );
     assert!(!f.receipt().exists(), "{why}: no receipt on refusal");
 }
+
+/// 4qv: the S1 route is a writable route, so it must take the same shared
+/// native writer lease as ordinary open. Otherwise an enrolled handle could
+/// write while a graph Owner holds exclusive admission on the same file.
+#[test]
+fn enrolled_handle_takes_the_native_writer_lease() {
+    use rustix::fs::{FlockOperation, flock};
+    let f = Fixture::new();
+    // The lease is the sibling file; never open the database outside SQLite.
+    let lease = ownership_latch::sibling(&f.db, ".writer-lease").unwrap();
+    let exclusive = || {
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lease)
+            .unwrap()
+    };
+
+    // Exclusive admission held elsewhere (what Owner::prepare takes): S1 refuses.
+    let owner = exclusive();
+    flock(&owner, FlockOperation::NonBlockingLockExclusive).unwrap();
+    assert!(
+        f.open().is_err(),
+        "S1 open while exclusive admission is held"
+    );
+    drop(owner);
+
+    // An admitted enrolled handle holds the shared lease, so exclusive
+    // admission is refused until the handle is gone.
+    let store = f.open().expect("S1 admission");
+    assert!(
+        store.writer_lease.is_some(),
+        "enrolled handle holds a lease"
+    );
+    let probe = exclusive();
+    assert!(
+        flock(&probe, FlockOperation::NonBlockingLockExclusive).is_err(),
+        "exclusive admission while an enrolled handle is open"
+    );
+    drop(store);
+    flock(&probe, FlockOperation::NonBlockingLockExclusive)
+        .expect("exclusive admission after the enrolled handle drops");
+}
+
+#[path = "ownership_admission_owner_tests.rs"]
+mod graph_owner_startup;

@@ -295,15 +295,7 @@ async fn main() {
         Some(reasoner)
     };
 
-    // Apply the governance enforcement policy: when enabled, `boundary:"action"`
-    // policies gate every write (the loom's write-time gate, see
-    // docs/design/policy-edit-hooks.md).
-    store.governance_config_mut().clone_from(&config.governance);
-    if config.governance.enforce_on_write {
-        eprintln!(
-            "Governance write-enforcement enabled (action-boundary policies gate every write)"
-        );
-    }
+    base::apply_governance(&mut store, &config);
 
     match quipu::embedding_runtime::configure_provider(&mut store, &config.embedding) {
         Ok(status) => eprintln!("{status}"),
@@ -488,6 +480,7 @@ async fn main() {
             push_store_outer,
             config.events.retention_days,
             &config.embedding,
+            read_only,
         );
     }
 

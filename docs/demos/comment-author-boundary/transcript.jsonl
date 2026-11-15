@@ -1,0 +1,4 @@
+{"fixture": "private fake forge, actual workflow shell", "version": "before", "author": "outside", "exit": 0, "comment_writes": 1}
+{"fixture": "private fake forge, actual workflow shell", "version": "before", "author": "scbrown", "exit": 0, "comment_writes": 1}
+{"fixture": "private fake forge, actual workflow shell", "version": "candidate", "author": "outside", "exit": 0, "comment_writes": 0}
+{"fixture": "private fake forge, actual workflow shell", "version": "candidate", "author": "scbrown", "exit": 0, "comment_writes": 1}
