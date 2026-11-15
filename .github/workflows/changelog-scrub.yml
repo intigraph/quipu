@@ -24,6 +24,10 @@ permissions:
 jobs:
   scrub:
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-scrub-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

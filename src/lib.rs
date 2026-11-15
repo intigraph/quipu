@@ -54,6 +54,10 @@ pub mod memory_files;
 pub mod merge3;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_adapters;
+/// Opt-in diagnostic projection of the common planner, without writer authority.
+#[cfg(feature = "merge-benchmark")]
+#[doc(hidden)]
+pub mod merge_benchmark;
 /// One merge write core: the merge spec's time, sequencing and report rules (aegis-karb.2).
 mod merge_core;
 #[cfg(not(target_arch = "wasm32"))]

@@ -17,6 +17,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-build-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
