@@ -469,16 +469,20 @@ fn membership_admits_only_the_typed_process_rulebook_document() {
     ] {
         let data = format!(
             "@prefix a: <http://aegis.gastown.local/ontology/> . \
-             a:rule a:member_of a:{target} . a:{target} a a:{kind} ; \
+             a:rule <http://www.w3.org/2000/01/rdf-schema#label> \"Rule\" ; \
+             a:member_of a:{target} . a:{target} a a:{kind} ; \
              <http://www.w3.org/2000/01/rdf-schema#label> \"Example\" ."
         );
+        let report = quipu::validate_shapes(SHAPES, &data).unwrap();
         assert_eq!(
-            quipu::validate_shapes(SHAPES, &data).unwrap().conforms,
+            report.conforms,
             accepted,
-            "{target} / {kind}"
+            "{target} / {kind}: {:#?}",
+            report.results
         );
     }
     let untyped = "@prefix a: <http://aegis.gastown.local/ontology/> . \
-                   a:rule a:member_of a:aegis-crew-process-rules .";
+                   a:rule <http://www.w3.org/2000/01/rdf-schema#label> \"Rule\" ; \
+                   a:member_of a:aegis-crew-process-rules .";
     assert!(!quipu::validate_shapes(SHAPES, untyped).unwrap().conforms);
 }
