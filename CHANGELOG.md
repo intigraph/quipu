@@ -7,24 +7,54 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-11-15
+
 ### Added
 
-- Capture bounded strict snapshots across native graph owners ([18d6d6e](https://github.com/intigraph/quipu/commit/18d6d6e12d22305cbd56ae5a2193ea5cc32241dc)).
-- Fence native graph owners against cooperating Store writers ([2aab097](https://github.com/intigraph/quipu/commit/2aab097310ff29120cb53bacf92d78b60c93d318)).
+- *(namespaces)* Add owner-local conditional inverse core (#1213)([5983f4e](https://github.com/scbrown/quipu/commit/5983f4eb29773761bc0cdbd852d82e1870a040ac))
+- *(observability)* Observe auth phases for signed health and identity requests (#1215)([83fe6d1](https://github.com/scbrown/quipu/commit/83fe6d1b0a511e4a28d6e99677a64cb5566eaee4))
+- *(projections)* Certify an aggregate's model compatibility in one snapshot (#1187)([df443f6](https://github.com/scbrown/quipu/commit/df443f6481416517ac09bb03be487b890e0578a9))
+- *(release)* Version breaking changes and read-only correction plans (#1234)([777e974](https://github.com/scbrown/quipu/commit/777e974dbf897eda3077586f142daa43e6f4b95c))
+- *(share)* Require exact recipient profile before import (#1228)([5e225a2](https://github.com/scbrown/quipu/commit/5e225a230ae1140dafa222ce71746f87a2a4f0e5))
+- *(memory)* Bound connection budgets and RDF serialization (#1223)([cd2523d](https://github.com/scbrown/quipu/commit/cd2523d29b528af17bf816c81f2dd743ea8cd590))
+- *(cli)* Produce public daily SLO history (#1227)([a21ab30](https://github.com/scbrown/quipu/commit/a21ab30c7f1c8da20a9da656474ac21811edafc0))
+- *(store)* Add graph owner catalog admission (#1224)([744ce71](https://github.com/scbrown/quipu/commit/744ce7134786101b580ac447fa786cdf86ac7777))
+- *(knot)* Retain durable admission and atomic completion evidence (#1202)([1a343d4](https://github.com/scbrown/quipu/commit/1a343d4100d1ad5a79704cb0784a6fad90b8ca0d))
+- *(review)* Attach before and after pendant graph views (#1212)([7719ede](https://github.com/scbrown/quipu/commit/7719ede6fb762266c067b88feadad5b139334078))
+- *(fluent)* Add authenticated HTTP observation adapter (#1236)([e44c612](https://github.com/scbrown/quipu/commit/e44c6127213b405a63d50111a7817c8c8d50a054))
+- *(store)* Add leased graph owners and strict-cut reads (#1225)([1435aef](https://github.com/scbrown/quipu/commit/1435aef8949e91c0e87e7fee49b48242bd4bda6b))
+- *(merge)* Add independent oracle and benchmark adapters (#1189)([9647618](https://github.com/scbrown/quipu/commit/9647618d9119d9e984dbc8f1a3f829110e88e642))
+- *(store)* Per-graph ingest pilot primitives: owners, legacy fence, router, parity (#1190)([13e8ca1](https://github.com/scbrown/quipu/commit/13e8ca17e36babd34c87d9e8caf4bd316bcfa22b))
 
-- Prepare bounded native owner leases, enrolled reader admission and strict-cut snapshots while preserving ordinary multi-handle writers.
+### CI/CD
 
-- Add immutable graph-owner catalog plans with bounded fan-out, placement and write-target admission; no route is activated.
+- Prove deployment skip prefixes before consumer adoption (#1164)([72b4f30](https://github.com/scbrown/quipu/commit/72b4f30d4e5c507e719132808b470dc09266ffab))
 
-- Size SQLite connections from one aggregate budget and support bounded RDF result serialization without returning a partial body.
-- *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
+### Changed
+
+- *(server)* Extract governance startup policy to restore size invariant (#1241)([f59787a](https://github.com/scbrown/quipu/commit/f59787ab21a551cbdf517f5a48ba8490b16252c2))
+
+### Documentation
+
+- *(examples)* A two-sided pendant merge, end to end (#1216)([b996981](https://github.com/scbrown/quipu/commit/b996981dd21f14b1db9b527cc400a93aa00317c4))
 
 ### Fixed
 
-- Derive release-byte witnesses for the library and REST reference summaries to avoid hash-only registry merge conflicts; retain strict witnesses for other summaries.
-- Format benchmark module exports and borrow native requests ([a3ddab5](https://github.com/intigraph/quipu/commit/a3ddab5b7be4a3adf078f75866d3b07c76d23d46)).
-- Remove a temporary native writer-lease sibling after pack export succeeds or refuses; retain the original export error and the single-file artifact contract.
-- Include the phase observer in route classification coverage and refresh the REST source witness ([b7c5c01](https://github.com/intigraph/quipu/commit/b7c5c0196308f06b9b591c75d413ab25033bd08a)).
+- *(store)* Preserve graph creators across event retention (#1210)([e60a2ed](https://github.com/scbrown/quipu/commit/e60a2ed8037968d803f6d4f34536941cf6387bfe))
+- *(governance)* Resolve recorded verdict witnesses across signature spellings (#1214)([521b87e](https://github.com/scbrown/quipu/commit/521b87ebeac6eca308ecc3f9a2173ce93e8de503))
+- *(search)* Say which backends are live on HTTP /search (#1185)([1cc4d58](https://github.com/scbrown/quipu/commit/1cc4d58be744900f93e0bdc957079aef5c24e176))
+- *(pack)* Clean temporary writer lease before graph-owner adoption (#1218)([90b3988](https://github.com/scbrown/quipu/commit/90b39880ebb9efb4b058e530ac283e4c8d3c05c9))
+- *(shacl)* Adopt rudof 0.3.36 path-error propagation (#1153)([cad71e3](https://github.com/scbrown/quipu/commit/cad71e39f59c945c8cc9be81d6a4f2ce0ab3b178))
+- *(search)* Admit content-ranked hybrid context (#1207)([147b745](https://github.com/scbrown/quipu/commit/147b74554a72504f96a508c9731af36d0c3667d0))
+- *(bindings)* Share native database writer ownership with server (#1120)([3d47a0a](https://github.com/scbrown/quipu/commit/3d47a0a7629f8b03d2894f6864291036c4ccff10))
+- *(shapes)* Admit the exact typed process rulebook membership (#1238)([e715342](https://github.com/scbrown/quipu/commit/e715342b312f1832eaee7e1bfe08cd2b0664b91c))
+- *(ci)* Skip comments on outside contributor pull requests (#1230)([012c405](https://github.com/scbrown/quipu/commit/012c405311f86294dadd8a61cddf6aff74fa02c9))
+- *(server)* Suppress retention workers in configured read-only mode (#1076)([b461cd7](https://github.com/scbrown/quipu/commit/b461cd78aa519c840c7b19106bbada60b14204d1))
+- *(knowledge)* Derive release-byte hashes for high-churn source records (#1240)([a25abd9](https://github.com/scbrown/quipu/commit/a25abd996c85fc075e7d2db26148fa5576e2606c))
+
+### Miscellaneous
+
+- Add flake for nix build (#1194)([7d3ba5d](https://github.com/scbrown/quipu/commit/7d3ba5d4a62e62e65f50197efd53bdf065046216))
 
 ## [0.18.0] - 2026-11-13
 
