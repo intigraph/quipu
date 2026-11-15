@@ -71,7 +71,7 @@ stops being read.
 | `server.auth_token` | unset | Bearer token required on write endpoints when set |
 | `server.previous_auth_token` | unset | Previous write bearer accepted temporarily during rotation; requires `server.auth_token` and a positive grace duration |
 | `server.previous_auth_token_expires_at_epoch_secs` | unset | Absolute UTC Unix epoch expiry for the previous bearer; at most 24 hours away when starting; expired previous bearers are ignored |
-| `server.read_only` | `false` | Refuse all write endpoints |
+| `server.read_only` | `false` | Refuse all write endpoints and suppress event and superseded-vector retention workers. Writable servers retain their configured policy; zero retention disables the corresponding worker |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
 | `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap; initially accepts only `["owner-rows"]`. Does not classify undeclared queries or grant permissions. |

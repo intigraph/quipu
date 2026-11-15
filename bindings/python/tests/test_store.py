@@ -1,6 +1,9 @@
 """The Pythonic surface over the shared engine facade."""
 
 import json
+import sqlite3
+import subprocess
+import sys
 
 import pytest
 
@@ -8,6 +11,37 @@ import quipu
 from conftest import RECORD_SHAPE, TS
 
 GOOD = '<urn:good> a <urn:Record>; <urn:title> "Before" .'
+
+
+def test_file_ownership_survives_unrelated_sqlite_close_and_releases_on_close(tmp_path):
+    path = tmp_path / "ownership.db"
+    program = """
+import sys
+import quipu
+try:
+    store = quipu.Store.open(sys.argv[1])
+except quipu.QuipuError as error:
+    assert sys.argv[2] == "refuse", str(error)
+    assert "single-writer lock" in str(error), str(error)
+else:
+    store.close()
+    assert sys.argv[2] == "open", "second writer unexpectedly opened"
+"""
+
+    def child(expect):
+        result = subprocess.run(
+            [sys.executable, "-c", program, str(path), expect],
+            capture_output=True, text=True, timeout=15,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    with quipu.Store.open(path):
+        child("refuse")
+        connection = sqlite3.connect(path)
+        assert connection.execute("PRAGMA schema_version").fetchone() is not None
+        connection.close()
+        child("refuse")
+    child("open")
 
 
 def test_import_name_version_and_engine_identity(store):

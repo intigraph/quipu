@@ -96,6 +96,32 @@ fn resolve_committed_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
 /// - **Refusal records.** A gate refusal is an event in this store's own life,
 ///   so it is stamped when it happened, never with the payload's valid-time.
 pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    tool_knot_bound(store, input, None)
+}
+
+/// Exact receiver-bound knot write. Ordinary gates and post-commit hooks keep
+/// their original boundary; only the intended native effect gets the ticket.
+pub fn tool_knot_with_completion(
+    store: &mut Store,
+    input: &JsonValue,
+    ticket: &crate::store::knot_completion::Ticket,
+) -> Result<JsonValue> {
+    tool_knot_bound(store, input, Some(ticket))
+}
+
+fn tool_knot_bound(
+    store: &mut Store,
+    input: &JsonValue,
+    ticket: Option<&crate::store::knot_completion::Ticket>,
+) -> Result<JsonValue> {
+    if let Some(ticket) = ticket {
+        if !store.conn.is_autocommit() {
+            return Err(Error::InvalidValue(
+                "knot completion: bound write requires an outermost commit boundary".into(),
+            ));
+        }
+        ticket.check_request(input)?;
+    }
     crate::promotion_control::check()?;
     let turtle = input
         .get("turtle")
@@ -312,13 +338,14 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 actor,
                 Some(&source_tag),
             )?;
-            let tx_id = store.transact_to_graph_scoped(
+            let tx_id = store.transact_knot_to_graph(
                 &datums,
                 timestamp,
                 actor,
                 Some(&source_tag),
                 graph,
                 Some(&source_tag),
+                ticket,
             )?;
             (tx_id, count)
         } else {
@@ -349,18 +376,25 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 None => crate::store::source_tag::resolve("knot", actor, source),
             };
             written_source = tagged.clone();
-            crate::rdf::ingest_rdf_bitemporal_with_scope(
+            let datums = crate::rdf::parse_rdf_scoped(
                 store,
                 turtle.as_bytes(),
                 oxrdfio::RdfFormat::Turtle,
                 None,
                 &valid_from,
+                graph,
+                input.get("blank_node_scope").and_then(JsonValue::as_str),
+            )?;
+            let tx = store.transact_knot_to_graph(
+                &datums,
                 timestamp,
                 actor,
                 Some(&tagged),
                 graph,
-                input.get("blank_node_scope").and_then(JsonValue::as_str),
-            )?
+                None,
+                ticket,
+            )?;
+            (tx, datums.len())
         })
     })?;
 
