@@ -21,6 +21,7 @@ are generated from the versioned release records.
 
 ### Fixed
 
+- Derive release-byte witnesses for the library and REST reference summaries to avoid hash-only registry merge conflicts; retain strict witnesses for other summaries.
 - Format benchmark module exports and borrow native requests ([a3ddab5](https://github.com/intigraph/quipu/commit/a3ddab5b7be4a3adf078f75866d3b07c76d23d46)).
 - Remove a temporary native writer-lease sibling after pack export succeeds or refuses; retain the original export error and the single-file artifact contract.
 - Include the phase observer in route classification coverage and refresh the REST source witness ([b7c5c01](https://github.com/intigraph/quipu/commit/b7c5c0196308f06b9b591c75d413ab25033bd08a)).
