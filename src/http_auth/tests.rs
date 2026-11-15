@@ -368,6 +368,12 @@ fn routes_in_server_source() -> Vec<String> {
             include_str!("../server/knot_durable.rs"),
         ),
         ("server/base.rs", include_str!("../server/base.rs")),
+        // Handler-only today; scan future route additions too.
+        ("server/fluents.rs", include_str!("../server/fluents.rs")),
+        (
+            "server/service_description.rs",
+            include_str!("../server/service_description.rs"),
+        ),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is
     // invisible to both tests here: its routes are never seen, so they are
@@ -401,7 +407,6 @@ fn routes_in_server_source() -> Vec<String> {
         "server/projections.rs",  // handler only; route registered in server.rs
         "server/reason.rs",
         "server/request_middleware.rs",
-        "server/service_description.rs",
         "server/tests.rs",
         "server/knot_completion_tests.rs", // test-only, no route registration
         "server/namespace_tests.rs",       // test-only handlers, no route registration

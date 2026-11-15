@@ -1,0 +1,9 @@
+Script started on 2026-11-13 10:19:28-05:00 [COMMAND="bash docs/probes/pr-demos/pendant-graph/run.sh" <not executed on terminal>]
+Same local Person fixture: Alice age 30 -> 31.
+BEFORE: installed 99c777; report has no neighborhood.
+{"summary": "pendant review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates", "neighborhood_available": false}
+AFTER: local candidate from the PR implementation; no service deployment.
+{"summary": "pendant review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates", "touched": ["<http://example.org/people/alice>"], "before_context_edges": 4, "after_context_edges": 4, "truncated": false}
+Open graph.html: unchanged adjacent facts remain; Before and After share positions.
+
+Script done on 2026-11-13 10:19:28-05:00 [COMMAND_EXIT_CODE="0"]
