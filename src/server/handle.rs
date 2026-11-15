@@ -76,6 +76,8 @@ pub(crate) struct StoreHandle {
     /// runtime needed a server restart to take effect.
     #[cfg(feature = "reactive-reasoner")]
     pub(crate) reasoner: Option<Arc<quipu::ReactiveReasoner>>,
+    // Last field: detached request/job handles retain ownership until stores close.
+    pub(crate) process_writer_lock: Option<quipu::writer_lock::WriterLock>,
 }
 
 /// A fixed set of read-only connections, each owned exclusively while in use.
@@ -183,6 +185,7 @@ impl StoreHandle {
             federation,
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
+            process_writer_lock: None,
         }
     }
 
@@ -227,6 +230,7 @@ impl StoreHandle {
             federation: quipu::config::FederationConfig::default(),
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
+            process_writer_lock: None,
         }
     }
 
