@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Pendant graph diff</title>
+<style>
+body { font: 16px system-ui,sans-serif; margin: 2rem auto; padding: 0 1rem; max-width: 100rem; color: #182b3a; background: #f7f9fc; }
+main { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1.5rem; }
+svg { width: 100%; background: white; border-radius: .5rem; }
+svg text { font: 12px system-ui,sans-serif; }
+article { padding: 1rem; margin: .7rem 0; border: 2px solid #9ba9b6; border-radius: .5rem; background: white; overflow-wrap: anywhere; }
+.edge { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; padding: .5rem 0; }
+.edge span { padding: .4rem; background: #eef2f7; border-radius: .3rem; }
+.added { border-color: #19733b; } .removed { border-color: #ab2828; }
+.uncompared,.warning { border-color: #916600; color: #654600; }
+small,details { display: block; margin-top: .5rem; }
+@media(max-width: 700px) { main { grid-template-columns: 1fr; } }
+</style>
+<h1>Pendant graph diff</h1>
+<p>pendant review: 1 entity changed (1 changed, 0 added, 0 removed facts); SHACL 0 introduced; no merge decisions; 0 alias candidates</p>
+<p>One-hop incoming and outgoing context around 1 touched subjects.
+Unchanged adjacent facts remain visible. Arrows show subject → predicate → object;
+graph names and exact identity keys remain available on every edge.</p>
+<p>Semantic projection: referenced blank nodes are folded inline, with the same structural
+identity and multiplicity limits as the text diff. This is not a complete raw RDF graph.</p>
+<p><strong>Alias caveat:</strong> different IRIs for one real entity can remain invisible
+to triple-level comparison. This view grants no merge, import, shape adoption or class-B authority;
+hardware-signed human verdicts remain separate.</p>
+<main><section><h2>Before</h2>
+<p>4 of 4 context edges shown.</p>
+<svg viewBox="0 0 700 640" role="img" aria-label="Directed neighborhood graph"><defs><marker id="before" viewBox="0 0 10 10" refX="19" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<path d="M595.0,320.0 Q350,320 472.5,532.2" fill="none" stroke="#ab2828" stroke-width="2" marker-end="url(#before)"><title>age @ default graph</title></path>
+<path d="M595.0,320.0 Q350,320 227.5,107.8" fill="none" stroke="#76889b" stroke-width="2" marker-end="url(#before)"><title>email @ default graph</title></path>
+<path d="M595.0,320.0 Q350,320 472.5,107.8" fill="none" stroke="#76889b" stroke-width="2" marker-end="url(#before)"><title>rdf:type @ default graph</title></path>
+<path d="M595.0,320.0 Q350,320 105.0,320.0" fill="none" stroke="#76889b" stroke-width="2" marker-end="url(#before)"><title>rdfs:label @ default graph</title></path>
+<g><title>Alice Smith (people/alice) — &lt;http://example.org/people/alice&gt;</title><circle cx="595.0" cy="320.0" r="10" fill="#bcd9f7" stroke="#334b63"/><text x="595.0" y="344.0" text-anchor="middle">Alice Smith (people/alice)</text></g>
+<g><title>&quot;30&quot;^^xsd:integer — &quot;30&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt;</title><circle cx="472.5" cy="532.2" r="10" fill="#e8edf3" stroke="#334b63"/><text x="472.5" y="556.2" text-anchor="middle">&quot;30&quot;^^xsd:integer</text></g>
+<g><title>&quot;alice@example.org&quot; — &quot;alice@example.org&quot;</title><circle cx="227.5" cy="107.8" r="10" fill="#e8edf3" stroke="#334b63"/><text x="227.5" y="131.8" text-anchor="middle">&quot;alice@example.org&quot;</text></g>
+<g><title>Person — &lt;http://example.org/vocab#Person&gt;</title><circle cx="472.5" cy="107.8" r="10" fill="#e8edf3" stroke="#334b63"/><text x="472.5" y="131.8" text-anchor="middle">Person</text></g>
+<g><title>&quot;Alice Smith&quot; — &quot;Alice Smith&quot;</title><circle cx="105.0" cy="320.0" r="10" fill="#e8edf3" stroke="#334b63"/><text x="105.0" y="344.0" text-anchor="middle">&quot;Alice Smith&quot;</text></g>
+</svg>
+<p>Diagram: 5 nodes, 4 of 4 context edges. At most 40 nodes and 80 edges; full retained edge details follow. Blue nodes are touched subjects; hover nodes and arrows for identity and predicate.</p>
+<article class="removed"><strong>removed</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ age →</span><span>&quot;30&quot;^^xsd:integer</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://example.org/vocab#age | &quot;30&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt; | </code></details></article>
+<article class="unchanged"><strong>unchanged</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ email →</span><span>&quot;alice@example.org&quot;</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://example.org/vocab#email | &quot;alice@example.org&quot; | </code></details></article>
+<article class="unchanged"><strong>unchanged</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ rdf:type →</span><span>Person</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://www.w3.org/1999/02/22-rdf-syntax-ns#type | &lt;http://example.org/vocab#Person&gt; | </code></details></article>
+<article class="unchanged"><strong>unchanged</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ rdfs:label →</span><span>&quot;Alice Smith&quot;</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://www.w3.org/2000/01/rdf-schema#label | &quot;Alice Smith&quot; | </code></details></article>
+</section><section><h2>After</h2>
+<p>4 of 4 context edges shown.</p>
+<svg viewBox="0 0 700 640" role="img" aria-label="Directed neighborhood graph"><defs><marker id="after" viewBox="0 0 10 10" refX="19" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<path d="M595.0,320.0 Q350,320 227.5,532.2" fill="none" stroke="#19733b" stroke-width="2" marker-end="url(#after)"><title>age @ default graph</title></path>
+<path d="M595.0,320.0 Q350,320 227.5,107.8" fill="none" stroke="#76889b" stroke-width="2" marker-end="url(#after)"><title>email @ default graph</title></path>
+<path d="M595.0,320.0 Q350,320 472.5,107.8" fill="none" stroke="#76889b" stroke-width="2" marker-end="url(#after)"><title>rdf:type @ default graph</title></path>
+<path d="M595.0,320.0 Q350,320 105.0,320.0" fill="none" stroke="#76889b" stroke-width="2" marker-end="url(#after)"><title>rdfs:label @ default graph</title></path>
+<g><title>Alice Smith (people/alice) — &lt;http://example.org/people/alice&gt;</title><circle cx="595.0" cy="320.0" r="10" fill="#bcd9f7" stroke="#334b63"/><text x="595.0" y="344.0" text-anchor="middle">Alice Smith (people/alice)</text></g>
+<g><title>&quot;31&quot;^^xsd:integer — &quot;31&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt;</title><circle cx="227.5" cy="532.2" r="10" fill="#e8edf3" stroke="#334b63"/><text x="227.5" y="556.2" text-anchor="middle">&quot;31&quot;^^xsd:integer</text></g>
+<g><title>&quot;alice@example.org&quot; — &quot;alice@example.org&quot;</title><circle cx="227.5" cy="107.8" r="10" fill="#e8edf3" stroke="#334b63"/><text x="227.5" y="131.8" text-anchor="middle">&quot;alice@example.org&quot;</text></g>
+<g><title>Person — &lt;http://example.org/vocab#Person&gt;</title><circle cx="472.5" cy="107.8" r="10" fill="#e8edf3" stroke="#334b63"/><text x="472.5" y="131.8" text-anchor="middle">Person</text></g>
+<g><title>&quot;Alice Smith&quot; — &quot;Alice Smith&quot;</title><circle cx="105.0" cy="320.0" r="10" fill="#e8edf3" stroke="#334b63"/><text x="105.0" y="344.0" text-anchor="middle">&quot;Alice Smith&quot;</text></g>
+</svg>
+<p>Diagram: 5 nodes, 4 of 4 context edges. At most 40 nodes and 80 edges; full retained edge details follow. Blue nodes are touched subjects; hover nodes and arrows for identity and predicate.</p>
+<article class="added"><strong>added</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ age →</span><span>&quot;31&quot;^^xsd:integer</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://example.org/vocab#age | &quot;31&quot;^^&lt;http://www.w3.org/2001/XMLSchema#integer&gt; | </code></details></article>
+<article class="unchanged"><strong>unchanged</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ email →</span><span>&quot;alice@example.org&quot;</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://example.org/vocab#email | &quot;alice@example.org&quot; | </code></details></article>
+<article class="unchanged"><strong>unchanged</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ rdf:type →</span><span>Person</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://www.w3.org/1999/02/22-rdf-syntax-ns#type | &lt;http://example.org/vocab#Person&gt; | </code></details></article>
+<article class="unchanged"><strong>unchanged</strong><div class="edge"><span>Alice Smith (people/alice)</span><span class="arrow">→ rdfs:label →</span><span>&quot;Alice Smith&quot;</span></div><small>Graph: default graph</small><details><summary>Identity keys</summary><code>&lt;http://example.org/people/alice&gt; | http://www.w3.org/2000/01/rdf-schema#label | &quot;Alice Smith&quot; | </code></details></article>
+</section></main></html>
