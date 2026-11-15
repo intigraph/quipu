@@ -56,25 +56,6 @@ are generated from the versioned release records.
 
 - Add flake for nix build (#1194)([7d3ba5d](https://github.com/scbrown/quipu/commit/7d3ba5d4a62e62e65f50197efd53bdf065046216))
 
-### Added
-
-- Capture bounded strict snapshots across native graph owners ([18d6d6e](https://github.com/intigraph/quipu/commit/18d6d6e12d22305cbd56ae5a2193ea5cc32241dc)).
-- Fence native graph owners against cooperating Store writers ([2aab097](https://github.com/intigraph/quipu/commit/2aab097310ff29120cb53bacf92d78b60c93d318)).
-
-- Prepare bounded native owner leases, enrolled reader admission and strict-cut snapshots while preserving ordinary multi-handle writers.
-
-- Add immutable graph-owner catalog plans with bounded fan-out, placement and write-target admission; no route is activated.
-
-- Size SQLite connections from one aggregate budget and support bounded RDF result serialization without returning a partial body.
-- *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
-
-### Fixed
-
-- Derive release-byte witnesses for the library and REST reference summaries to avoid hash-only registry merge conflicts; retain strict witnesses for other summaries.
-- Format benchmark module exports and borrow native requests ([a3ddab5](https://github.com/intigraph/quipu/commit/a3ddab5b7be4a3adf078f75866d3b07c76d23d46)).
-- Remove a temporary native writer-lease sibling after pack export succeeds or refuses; retain the original export error and the single-file artifact contract.
-- Include the phase observer in route classification coverage and refresh the REST source witness ([b7c5c01](https://github.com/intigraph/quipu/commit/b7c5c0196308f06b9b591c75d413ab25033bd08a)).
-
 ## [0.18.0] - 2026-11-13
 
 ### Added
