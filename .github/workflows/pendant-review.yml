@@ -21,6 +21,8 @@ on:
       - "**/shapes.ttl"
       - "**/decisions.json"
       - "scripts/ci/pendant-review.py"
+      - "scripts/ci/pendant-graph.py"
+      - "scripts/ci/test-pendant-graph.py"
       - ".github/workflows/pendant-review.yml"
       - "src/share_pack_review*.rs"
       - "src/cli_share_diff.rs"
@@ -32,6 +34,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "tests/share_review*.rs"
+      - "tests/share_diff_neighborhood.rs"
+      - "docs/probes/pr-demos/pendant-graph/**"
 
 # READ-ONLY by default. Posting a PR comment needs a write token, which is a
 # security-posture decision, so it lives in the separate `comment` job below and
@@ -66,6 +70,10 @@ jobs:
         run: cargo test --locked --no-default-features --test share_review_no_shacl
       - name: Gate regression controls
         run: cargo test --locked --features shacl --test share_review
+      - name: Graph neighborhood and display controls
+        run: |
+          cargo test --locked --features shacl --test share_diff_neighborhood
+          python3 scripts/ci/test-pendant-graph.py
       - run: cargo build --locked --features shacl --bin quipu
       - name: Review changed packs
         env:
@@ -76,7 +84,25 @@ jobs:
             --base "$BASE_SHA" --head "$HEAD_SHA" \
             --binary target/debug/quipu \
             --summary "$GITHUB_STEP_SUMMARY" \
-            --comment-body pendant-review.md
+            --comment-body pendant-review.md \
+            --graph-dir pendant-graphs
+      - name: Upload graph diff views
+        id: graphs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pendant-graph-diffs
+          path: |
+            pendant-graphs/
+            docs/probes/pr-demos/pendant-graph/graph.html
+            docs/probes/pr-demos/pendant-graph/report.json
+          if-no-files-found: ignore
+      - name: Link graph diff views from the check
+        if: always() && steps.graphs.outputs.artifact-url != ''
+        env:
+          GRAPH_URL: ${{ steps.graphs.outputs.artifact-url }}
+        run: |
+          printf '\n[Download before/after graph diff views](%s) — open the HTML files locally; JSON reports accompany them. Includes the labeled reference example in docs/probes/pr-demos/pendant-graph; changed-pack reports are listed above.\n' "$GRAPH_URL" >> "$GITHUB_STEP_SUMMARY"
       - if: always() && vars.QPACK_REVIEW_COMMENT == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

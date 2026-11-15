@@ -4,7 +4,6 @@
 //! Also owns two things every other handler module depends on: [`blocking`],
 //! which keeps store work off the async reactor, and [`AppError`], the
 //! error-to-response mapping.
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -241,6 +240,7 @@ pub(crate) async fn version() -> impl IntoResponse {
         ],
         "write_contracts": [
             crate::knot_completion::CONTRACT,
+            crate::knot_durable::CONTRACT,
             quipu::episode::EXPLICIT_ADDRESS_CONTRACT,
             quipu::episode::STRICT_NEW_CONTRACT,
         ],

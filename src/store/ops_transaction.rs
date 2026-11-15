@@ -55,6 +55,7 @@ impl Store {
             window_guard,
             None,
             None,
+            None,
         )
     }
 
@@ -99,11 +100,11 @@ impl Store {
             None,
             Some(receipt),
             None,
+            None,
         )
     }
 
-    /// Source-stage fluent entry: no HTTP/CLI adapter is admitted yet.
-    #[allow(dead_code)]
+    /// Fluent entry shared by the HTTP adapter and native library operations.
     pub(crate) fn append_fluent_native(
         &mut self,
         request: &crate::fluent::writer::Append,
@@ -122,6 +123,7 @@ impl Store {
             None,
             None,
             Some(crate::fluent::writer::NativeWrite::Append(request)),
+            None,
         )
     }
 
@@ -145,6 +147,7 @@ impl Store {
             None,
             None,
             Some(crate::fluent::writer::NativeWrite::Import(proof)),
+            None,
         )
     }
 
@@ -168,6 +171,7 @@ impl Store {
             None,
             None,
             Some(crate::fluent::writer::NativeWrite::ImportBatch(proofs)),
+            None,
         )
     }
 
@@ -191,6 +195,7 @@ impl Store {
             None,
             None,
             Some(crate::fluent::writer::NativeWrite::Register(request)),
+            None,
         )
     }
 
@@ -217,11 +222,12 @@ impl Store {
             Some(crate::fluent::writer::NativeWrite::PendingConfig(
                 request, approval,
             )),
+            None,
         )
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn transact_with_owl_receipt(
+    pub(in crate::store) fn transact_with_owl_receipt(
         &mut self,
         datums: &[Datum],
         timestamp: &str,
@@ -235,6 +241,7 @@ impl Store {
         window_guard: Option<&crate::store::source_claims::WindowGuard>,
         receipt: Option<(&str, &str)>,
         fluent: Option<crate::fluent::writer::NativeWrite<'_>>,
+        knot: Option<&crate::store::knot_completion::Ticket>,
     ) -> Result<i64> {
         let observation_guards =
             crate::write_observation::stage(crate::write_observation::Stage::Guards);
@@ -320,6 +327,9 @@ impl Store {
                         "INSERT INTO owl_batch_receipts(batch,digest,tx) VALUES(?1,?2,?3)",
                         params![batch, digest, staged.tx_id],
                     )?;
+                }
+                if let Some(ticket) = knot {
+                    self.commit_knot_attempt(ticket, staged.tx_id)?;
                 }
                 crate::promotion_control::claim_commit(source)?;
                 Ok(staged)
