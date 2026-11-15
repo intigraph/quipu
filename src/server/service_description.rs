@@ -286,7 +286,12 @@ mod tests {
         let auth = std::fs::read_to_string(root.join("src/http_auth.rs")).unwrap();
         let book =
             std::fs::read_to_string(root.join("docs/book/src/reference/rest-api.md")).unwrap();
-        for source in [&server, &auth, &book] {
+        let fragment =
+            std::fs::read_to_string(root.join("src/server/service_description.rs")).unwrap();
+        let production = fragment.split("#[cfg(test)]").next().unwrap();
+        assert!(server.contains(".merge(service_description::routes())"));
+        assert!(production.contains(".route(\"/.well-known/void\","));
+        for source in [&auth, &book] {
             assert!(source.contains("/.well-known/void"));
         }
     }
