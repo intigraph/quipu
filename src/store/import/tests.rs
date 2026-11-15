@@ -153,3 +153,214 @@ fn import_carries_embeddings_re_keyed_by_iri() {
         "re-keyed onto THIS store's id for that IRI"
     );
 }
+
+fn protected_destination_must_refuse(lifecycle: Option<&str>, source: Option<&str>) {
+    let (temp, local, foreign) = paths("protected-destination");
+    let mut dst = Store::open(local.to_str().unwrap()).unwrap();
+    let graph = dst.graph_create("urn:protected-import").unwrap();
+    if lifecycle == Some("frozen") {
+        let entity = dst.intern("urn:existing-frozen-subject").unwrap();
+        let attribute = dst.intern("urn:existing-frozen-predicate").unwrap();
+        dst.transact_to_graph(
+            &[Datum {
+                entity,
+                attribute,
+                value: Value::Str("retained".into()),
+                valid_from: "2026-01-01T00:00:00Z".into(),
+                valid_to: None,
+                op: crate::Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+        let archive = temp.path().join("archive");
+        fs::create_dir(&archive).unwrap();
+        let frozen = dst
+            .freeze_graph(
+                "urn:protected-import",
+                archive.to_str().unwrap(),
+                "2026-01-02T00:00:00Z",
+                None,
+            )
+            .unwrap();
+        assert_eq!(frozen.facts, 1, "freeze did not relocate populated graph");
+        let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
+            &dst, "SELECT ?value WHERE { GRAPH <urn:protected-import> { <urn:existing-frozen-subject> <urn:existing-frozen-predicate> ?value } }",
+        ).unwrap() else { panic!("expected SELECT") };
+        assert_eq!(rows.len(), 1, "frozen graph is not readable in fixture");
+    } else {
+        dst.conn
+            .execute(
+                "UPDATE graphs SET source=?1 WHERE g=?2",
+                rusqlite::params![source, graph],
+            )
+            .unwrap();
+    }
+    let mut src = Store::open(foreign.to_str().unwrap()).unwrap();
+    let subject = src.intern("urn:import-must-not-land").unwrap();
+    let predicate = src.intern("urn:import-predicate").unwrap();
+    src.transact(
+        &[Datum {
+            entity: subject,
+            attribute: predicate,
+            value: Value::Str("probe".into()),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: crate::Op::Assert,
+        }],
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        src.conn
+            .query_row("SELECT COUNT(*) FROM facts", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    drop(src);
+    let counts = |store: &Store| {
+        store.conn.query_row(
+        "SELECT (SELECT COUNT(*) FROM terms), (SELECT COUNT(*) FROM transactions), (SELECT COUNT(*) FROM facts)",
+        [], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)),
+    ).unwrap()
+    };
+    let before = counts(&dst);
+    let result = import_graph(&local, &foreign, "urn:protected-import");
+    assert!(result.is_err(), "protected target imported: {result:?}");
+    let error = result.unwrap_err().to_string();
+    assert!(
+        error.contains("FROZEN") || error.contains("mounted read-only"),
+        "{error}"
+    );
+    assert_eq!(counts(&dst), before, "refused import mutated destination");
+    assert!(dst.lookup("urn:import-must-not-land").unwrap().is_none());
+}
+
+#[test]
+fn offline_import_refuses_frozen_destination_before_copy() {
+    protected_destination_must_refuse(Some("frozen"), None);
+}
+
+#[test]
+fn offline_import_refuses_attached_destination_before_copy() {
+    protected_destination_must_refuse(None, Some("synthetic_read_only_attachment"));
+}
+
+#[test]
+fn offline_import_refuses_lost_native_ownership_before_dictionary_copy() {
+    let (_tmp, local, foreign) = paths("lost-ownership");
+    drop(Store::open(local.to_str().unwrap()).unwrap());
+    Store::adopt(local.to_str().unwrap()).unwrap();
+    let source = Store::open(foreign.to_str().unwrap()).unwrap();
+    source.intern("urn:owned-initial-probe").unwrap();
+    drop(source);
+    let accepted = import_graph(&local, &foreign, "urn:owned-positive").unwrap();
+    assert!(accepted.terms > 0, "valid owned destination did not import");
+    let source = Store::open(foreign.to_str().unwrap()).unwrap();
+    source.intern("urn:ownership-import-probe").unwrap();
+    drop(source);
+    std::fs::remove_file(local.with_extension("db.ownership.json")).unwrap();
+    let inspect = Store::open(local.to_str().unwrap()).unwrap();
+    assert!(
+        inspect.ensure_ownership_writable().is_err(),
+        "fixture still writable"
+    );
+    let before: i64 = inspect
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    let error = import_graph(&local, &foreign, "urn:ownership-import-target")
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("store ownership"), "{error}");
+    let after: i64 = inspect
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(after, before);
+    assert!(
+        inspect
+            .lookup("urn:ownership-import-probe")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn offline_import_refuses_attached_iri_absent_from_main_dictionary() {
+    let (temp, local, foreign) = paths("external-only-dictionary");
+    drop(Store::open(local.to_str().unwrap()).unwrap());
+    let mut layer = Store::open(foreign.to_str().unwrap()).unwrap();
+    let graph = layer.graph_create("urn:external-only-graph").unwrap();
+    let entity = layer.intern("urn:external-only-subject").unwrap();
+    let attribute = layer.intern("urn:external-only-predicate").unwrap();
+    layer
+        .transact_to_graph(
+            &[Datum {
+                entity,
+                attribute,
+                value: Value::Str("foreign fact".into()),
+                valid_from: "2026-01-01T00:00:00Z".into(),
+                valid_to: None,
+                op: crate::Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+    drop(layer);
+    let pack = temp.path().join("layer.db");
+    crate::store::respace::respace_file(&foreign, &pack, 1).unwrap();
+    let attached = Store::open_with_attachments(
+        local.to_str().unwrap(),
+        &[crate::store::attach::Attachment::read_only(
+            "external_layer",
+            pack.to_str().unwrap(),
+        )],
+    )
+    .unwrap();
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
+        &attached, "SELECT ?value WHERE { GRAPH <urn:external-only-graph> { <urn:external-only-subject> <urn:external-only-predicate> ?value } }",
+    ).unwrap() else { panic!("expected SELECT") };
+    assert_eq!(rows.len(), 1, "actual attached layer not served");
+    let in_main = attached
+        .conn
+        .prepare("SELECT 1 FROM main.terms WHERE iri=?1")
+        .unwrap()
+        .exists(["urn:external-only-graph"])
+        .unwrap();
+    assert!(
+        !in_main,
+        "fixture accidentally gave main a graph dictionary entry"
+    );
+    drop(attached);
+    let inspect = Store::open(local.to_str().unwrap()).unwrap();
+    assert!(inspect.lookup("urn:external-only-graph").unwrap().is_none());
+    let before: i64 = inspect
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    let result = import_graph(&local, &foreign, "urn:external-only-graph");
+    assert!(
+        result.is_err(),
+        "unresolved attached graph imported: {result:?}"
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("unmounted attached graph registry")
+    );
+    let after: i64 = inspect
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(after, before);
+}

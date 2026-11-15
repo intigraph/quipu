@@ -9,6 +9,9 @@ are generated from the versioned release records.
 
 ### Added
 
+- Capture bounded strict snapshots across native graph owners ([18d6d6e](https://github.com/intigraph/quipu/commit/18d6d6e12d22305cbd56ae5a2193ea5cc32241dc)).
+- Fence native graph owners against cooperating Store writers ([2aab097](https://github.com/intigraph/quipu/commit/2aab097310ff29120cb53bacf92d78b60c93d318)).
+
 - Prepare bounded native owner leases, enrolled reader admission and strict-cut snapshots while preserving ordinary multi-handle writers.
 
 - Add immutable graph-owner catalog plans with bounded fan-out, placement and write-target admission; no route is activated.
@@ -57,6 +60,8 @@ are generated from the versioned release records.
 - *(merge)* Plan risk before native automatic persistence (#1122)([70e7b23](https://github.com/scbrown/quipu/commit/70e7b2348748b5ed11c84e27535f8655de8021af))
 - *(merge)* Merge declared DataBooks on the shared Git core (#1119)([576537d](https://github.com/scbrown/quipu/commit/576537d8a887b899b77b84075d900fc12610fda1))
 - *(client)* Admit ROOT changesets under exact local grants (#1132)([effd3c4](https://github.com/scbrown/quipu/commit/effd3c419a43f988aba77ed3c37e0ad7795f7c56))
+- *(store)* Fence native graph owners against cooperating Store writers (aegis-4qv)([2aab097](https://github.com/scbrown/quipu/commit/2aab097310ff29120cb53bacf92d78b60c93d318))
+- *(store)* Capture bounded strict snapshots across native graph owners (aegis-4qv)([18d6d6e](https://github.com/scbrown/quipu/commit/18d6d6e12d22305cbd56ae5a2193ea5cc32241dc))
 - Request-scoped strict new-entity admission (#1147)([db455df](https://github.com/scbrown/quipu/commit/db455df82380c3c0ad8d3d9c7920d725302fca3a))
 - *(share)* Carry and verify competency contracts (#1160)([ce86ba4](https://github.com/scbrown/quipu/commit/ce86ba4cc1b5bf0bcf98a67c2de8a6e1f075946b))
 - *(store)* Hold ownership fences through commit completion (#1165)([3880a29](https://github.com/scbrown/quipu/commit/3880a2981f3df7e6bd27c1758f54ca703a44d77e))
