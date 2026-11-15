@@ -22,7 +22,7 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("impact", "Walk what depends on an entity, optionally after a speculative removal"),
     ("explain", "Trace a derived fact back to its premises"),
     ("project", "Project the graph and run a graph algorithm such as PageRank"),
-    ("report", "Report hubs, surprising links and open questions in the graph"),
+    ("report", "Report graph hubs and questions, or public operational SLO history"),
     ("reason", "Run Datalog rules to a fixpoint and persist the derivations"),
     ("demotions", "Read preserved unsupported demotions without materializing a closure"),
     ("episode", "Ingest a structured episode of nodes and edges from JSON"),
