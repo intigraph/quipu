@@ -135,6 +135,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("snapshot?#%.db");
         drop(quipu::Store::open(path.to_str().unwrap()).unwrap());
+        // Whatever the writable setup left (e.g. a writer-lease sibling), the
+        // read-only export must add nothing to the directory.
+        let entries = std::fs::read_dir(dir.path()).unwrap().count();
         let before = std::fs::read(&path).unwrap();
         let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
         let store = open_snapshot(path.to_str().unwrap(), &quipu::QuipuConfig::default()).unwrap();
@@ -145,7 +148,7 @@ mod tests {
             std::fs::metadata(&path).unwrap().modified().unwrap(),
             modified
         );
-        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), entries);
         // The default writable API retains its existing behavior.
         let store = quipu::Store::open(path.to_str().unwrap()).unwrap();
         store.graph_create("urn:can-write").unwrap();

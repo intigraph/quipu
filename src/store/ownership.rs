@@ -274,6 +274,43 @@ impl Store {
         self.ownership_state().map(|_| ())
     }
 
+    /// Extend this handle's S1 admission to a read-only handle on the SAME
+    /// file (4qv owner read pool). The reader shares the one admitted fence:
+    /// its ownership checks read the marker on its own connection against the
+    /// writer's admitted binding and pinned journal, and any revocation is
+    /// shared. Unadmitted handles share nothing, so ordinary owners keep
+    /// today's behaviour. A reader that already has a fence is refused.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn share_admission_with(&self, reader: &mut Self) -> Result<()> {
+        let Some(fence) = self
+            .ownership_fence
+            .as_ref()
+            .filter(|fence| fence.admitted().is_some())
+        else {
+            return Ok(());
+        };
+        let path = |store: &Self| {
+            store
+                .conn
+                .path()
+                .filter(|path| !path.is_empty())
+                .map(|path| Path::new(path).canonicalize())
+        };
+        match (path(self), path(reader)) {
+            (Some(Ok(writer)), Some(Ok(read))) if writer == read => {}
+            _ => {
+                return Err(failure(
+                    "admission is shared only with a reader of the same file",
+                ));
+            }
+        }
+        if reader.ownership_fence.is_some() {
+            return Err(failure("reader already carries an ownership fence"));
+        }
+        reader.ownership_fence = Some(fence.clone());
+        Ok(())
+    }
+
     /// Ownership-authorized capability check. Legacy/in-memory/browser INACTIVE
     /// operation must never pass this check merely because it can serve reads.
     pub fn require_ownership(&self) -> Result<()> {
@@ -343,6 +380,10 @@ impl Store {
             rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
         )?;
         super::ownership_startup::require_unenrolled(&conn)?;
+        // Adoption mutates lineage and sidecar authority; an active graph
+        // owner excludes it just as it excludes another ordinary writer.
+        #[cfg(unix)]
+        let _writer_lease = super::writer_lease::Lease::claim(&conn)?;
         host()?;
         let recognizable: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('facts', 'attestation_bindings'))",
