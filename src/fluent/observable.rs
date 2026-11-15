@@ -139,6 +139,18 @@ impl Registry {
         self.evaluate(name, log, &mut BTreeMap::new(), &mut 1024)
     }
 
+    pub(super) fn policy(&self, name: &str) -> Result<Policy> {
+        self.bases
+            .get(name)
+            .map(|binding| binding.declaration.policy)
+            .or_else(|| {
+                self.definitions
+                    .get(name)
+                    .map(|definition| definition.computed_by)
+            })
+            .ok_or_else(|| invalid("unknown fluent"))
+    }
+
     fn evaluate(
         &self,
         name: &str,
