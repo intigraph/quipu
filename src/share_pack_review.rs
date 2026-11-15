@@ -137,6 +137,7 @@ pub struct AliasCandidate {
 #[derive(Debug, Clone, Serialize)]
 pub struct Review {
     pub diff: PackDiff,
+    pub neighborhood: crate::share_diff::Neighborhood,
     pub shacl: ShaclReview,
     pub decisions: Option<DecisionsReview>,
     pub alias_candidates: Vec<AliasCandidate>,
@@ -429,8 +430,12 @@ fn summary(r: &Review) -> String {
 /// an unevaluable gate must not read as a pass.
 pub fn review(input: &ReviewInput<'_>) -> Result<Review> {
     let labels = Labels::new(&[input.new, input.old]);
+    let (old, new) = (Snapshot::new(input.old), Snapshot::new(input.new));
+    let diff = diff(&old, &new);
+    let neighborhood = crate::share_diff::neighborhood(&old, &new, &diff);
     let mut r = Review {
-        diff: diff(&Snapshot::new(input.old), &Snapshot::new(input.new)),
+        diff,
+        neighborhood,
         shacl: check_shacl(input, &labels)?,
         decisions: input.decisions.map(|d| review_decisions(d, &labels)),
         alias_candidates: alias_candidates(input.old, input.new, &labels),

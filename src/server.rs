@@ -1,12 +1,10 @@
 //! Quipu REST API server — HTTP interface to the knowledge graph.
 //! Usage: `quipu-server [--db <path>] [--bind <addr>]`
-
-use std::sync::Arc;
-
 use axum::{
     Router,
     routing::{get, post},
 };
+use std::sync::Arc;
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -39,6 +37,8 @@ mod deck;
 mod entity;
 #[path = "server/feed.rs"]
 mod feed;
+#[path = "server/fluents.rs"]
+mod fluents;
 #[path = "server/graph_backfill.rs"]
 mod graph_backfill;
 #[path = "server/graph_metrics.rs"]
@@ -56,6 +56,8 @@ mod knot_completion;
 #[cfg(test)]
 #[path = "server/knot_completion_tests.rs"]
 mod knot_completion_tests;
+#[path = "server/knot_durable.rs"]
+mod knot_durable;
 #[path = "server/mapping.rs"]
 mod mapping;
 #[path = "server/memory_files.rs"]
@@ -152,13 +154,12 @@ async fn main() {
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
 
-    // warn LOUDLY about documented, settable knobs this server does not
-    // act on (vector.backend = lancedb, federation.remotes), rather than accepting
-    // them and silently doing nothing.
+    // Warn about configured knobs this build does not act on.
     for warning in config.unwired_warnings() {
         eprintln!("warning: {warning}");
     }
 
+    let _writer_lock = replica::claim_writer_lock(&db_path, &config);
     let mut store = replica::open_store(&db_path, &config).unwrap_or_else(|e| {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);
@@ -363,6 +364,7 @@ async fn main() {
 
     let relay = relay::open_configured(&store, &config);
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    handle.process_writer_lock = _writer_lock;
     handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
     handle.log_query_phases = config.server.log_query_phases;
@@ -525,11 +527,9 @@ fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedSt
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())
-        .route(
-            "/.well-known/void",
-            get(service_description::service_description),
-        )
+        .merge(service_description::routes())
         .route("/metrics", get(metrics_handler))
+        .merge(fluents::routes())
         .merge(query_endpoint::routes())
         .route("/update", post(update::update_post))
         .route("/patch", post(patch::patch_post))

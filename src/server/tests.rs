@@ -1130,8 +1130,27 @@ pub(super) fn pooled_handle_with_provider(
         },
         #[cfg(feature = "reactive-reasoner")]
         reasoner: None,
+        process_writer_lock: None,
     };
     (dir, handle)
+}
+
+#[test]
+fn process_writer_lock_survives_shared_handle_clones() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("process-lock.db");
+    let path = path.to_str().unwrap();
+    let guard = super::replica::writer_lock(path, &quipu::config::QuipuConfig::default())
+        .unwrap()
+        .expect("writer mode must acquire ownership");
+    let mut handle = super::StoreHandle::writer_only(Store::open(path).unwrap());
+    handle.process_writer_lock = Some(guard);
+    let first = std::sync::Arc::new(handle);
+    let background = first.clone();
+    drop(first);
+    assert!(quipu::bindings::Engine::open(path).is_err());
+    drop(background);
+    assert!(quipu::bindings::Engine::open(path).is_ok());
 }
 
 /// A pooled reader must see what the writer COMMITTED. This is the failure that

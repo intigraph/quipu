@@ -302,3 +302,9 @@ fn every_table_created_anywhere_in_the_source_is_classified() {
          Classify each in `DECLARED`, with the reason beside it when Excluded."
     );
 }
+
+#[test]
+fn receiver_attempt_authority_is_never_carried() {
+    assert_eq!(disposition("knot_attempts"), Some(Disposition::Excluded));
+    assert!(!carried().contains(&"knot_attempts"));
+}

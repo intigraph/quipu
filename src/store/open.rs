@@ -21,13 +21,7 @@ impl Store {
         &self,
         allocation: crate::memory_budget::MemoryAllocation,
     ) -> Result<()> {
-        let cache = i64::try_from(allocation.cache_kib)
-            .map_err(|_| Error::InvalidValue("cache allocation overflow".into()))?;
-        let mmap = i64::try_from(allocation.mmap_bytes)
-            .map_err(|_| Error::InvalidValue("mmap allocation overflow".into()))?;
-        self.conn.pragma_update(None, "cache_size", -cache)?;
-        self.conn.pragma_update(None, "mmap_size", mmap)?;
-        Ok(())
+        allocation.apply_connection(&self.conn)
     }
 
     /// Open (or create) a Quipu store at the given path.

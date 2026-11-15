@@ -718,6 +718,54 @@ reuse a write ID. A still-retained duplicate ID is refused before dispatch.
 Callers omitting the header retain the ordinary write interface and have no
 per-write completion proof. No maximum write lifetime is promised.
 
+#### Durable completion evidence (v2)
+
+New callers may opt in to durable admission by sending both
+`X-Quipu-Write-Id` and
+`X-Quipu-Completion-Contract: quipu.knot-completion/v2`. This requires a named,
+stable authenticated credential; a declared agent header or a shared bearer
+without a credential identity is insufficient. Keep the original request and ID
+before sending. The server consumes the ID before dispatch and records its
+commit witness in the same transaction as the ordinary governed write. Ordinary
+SHACL, policy, ownership and writer-scope gates still apply.
+
+Status uses the existing read-only route with an explicit contract:
+
+```json
+{"contract": "quipu.knot-completion/v2", "write_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "request": {"turtle": "<urn:example:item> <urn:example:label> \"example\" ."}}
+```
+
+Use the same principal, credential, authentication class and original JSON
+object. The result binds the current store identity and log epoch; foreign
+bindings or absent evidence remain UNKNOWN. Status reads never admit, seal or
+replay a write. Malformed or unreadable evidence is an error, not an empty result.
+
+| State | Meaning |
+| --- | --- |
+| `admitted` | The ID is consumed; there is no completed-effect proof. Retain custody. |
+| `committed` | `commit.tx_id` was recorded atomically with the native effect. Worker or deferred work may remain. Do not replay. |
+| `finished` | All synchronous and deferred work ended; validate the bounded native `receipt` and exact effect. |
+| `stopped` | The worker ended in error; an optional `commit` witness survives. This is not rollback proof. |
+| `sealed` | An explicitly authorized native operation fenced this attempt at its commit boundary. Do not automatically resend. |
+| `unknown` | There is no usable evidence for this binding. Do not resend. |
+
+A successful native commit and worker completion are separate durable facts.
+A crash between them must preserve `committed` rather than manufacture
+`finished`. An admitted attempt with no commit witness is not evidence that a
+worker can never start. A seal does not erase a committed effect, and no HTTP
+seal operation is exposed by this contract.
+
+The ledger retains at most 65,536 admissions per store and refuses new admission
+at capacity; it does not evict unresolved attempts or automatically forget old
+IDs. Retention changes require a separate governed policy. A consumed v2 ID is
+also refused if submitted through the legacy v1 write interface. Existing v1
+requests are not retroactively assigned durable evidence. Restarting the server
+or installing this capability cannot resolve an old UNKNOWN write by itself.
+
+The contract is advertised alongside v1 in `/version`. Consumer adoption and
+installed qualification remain separate from source availability. It provides
+completion evidence and a no-replay fence, not automatic idempotent retries.
+
 ### Resumable snapshot promotion and cancellation
 
 `POST /knot/stage` stores inert, content-addressed parts. Transport parts are
@@ -1325,6 +1373,25 @@ Every successful response also carries the `quipu-context/v1` contract:
 Consumer validation requires a finite declared floor in `[0.52, 1]` before
 accepting either CONTEXT or NO CONTEXT. A lower, missing or malformed floor
 is UNKNOWN in these consumers, even when the server reports no context.
+
+Hybrid results use the explicit `context.admission: "hybrid-ranked-terms/v1"`
+rule. An admitted row must have `ranking_reason: "hybrid"`, a finite fused
+`score` in `(0, 1]`, and `fusion_rank` from 1 through 20. It must also cover the
+query subject, every required identifier and the existing distinct-term
+threshold (half the query terms, rounded up, capped at three). An
+uncorroborated top result still refuses the entire context. A fused score is
+never compared with the cosine floor; raw `similarity` remains nullable and
+diagnostic. `query_terms` and `fusion_rank_limit` accompany this rule so native
+MCP projection and outcome accounting validate the same evidence. Unknown
+admission rules remain UNKNOWN. Pure semantic admission keeps its cosine floor.
+
+`ranking: "content"` is supported with hybrid fusion: content demotion applies
+to the semantic leg before fusion, and the keyword leg retains its BM25 scale.
+In automatic mode, content requests use hybrid only when hybrid is enabled,
+the keyword index is complete and a vector input/provider is available.
+Explicit modes retain their backend gates; configuring hybrid as the default
+also accepts content requests. This does not activate hybrid or backfill an
+existing store automatically.
 
 `results`, `count`, ranking scores, ordering, scope and temporal provenance remain
 unchanged diagnostic search output. They are **not** evidence that an answer
