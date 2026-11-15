@@ -64,6 +64,8 @@ pub const ARMS: &[&str] = &[
     "triple-3way",
     "context-merge",
     "shape-aware",
+    #[cfg(feature = "merge-benchmark")]
+    "unified-core",
 ];
 
 /// Run one arm by name.
@@ -78,6 +80,8 @@ pub fn run(arm: &str, base: &Graph, ours: &Graph, theirs: &Graph) -> Outcome {
         "triple-3way" => triple_3way(base, ours, theirs),
         "context-merge" => context_merge(base, ours, theirs),
         "shape-aware" => shape_aware(base, ours, theirs),
+        #[cfg(feature = "merge-benchmark")]
+        "unified-core" => unified_core(base, ours, theirs),
         other => panic!("unknown arm: {other}"),
     }
 }
@@ -233,6 +237,29 @@ fn shape_aware(base: &Graph, ours: &Graph, theirs: &Graph) -> Outcome {
             }
         }
         resolved.insert(slot, merged);
+    }
+    Outcome::clean(assemble(&b, &resolved, &conflicts), conflicts)
+}
+
+/// Measured planner arm; the independent reference arm above remains separate.
+#[cfg(feature = "merge-benchmark")]
+fn unified_core(base: &Graph, ours: &Graph, theirs: &Graph) -> Outcome {
+    let (b, o, t) = (by_slot(base), by_slot(ours), by_slot(theirs));
+    let empty = BTreeSet::new();
+    let mut resolved = BTreeMap::new();
+    let mut conflicts = BTreeSet::new();
+    for slot in all_slots(&b, &o, &t) {
+        let projection = quipu::merge_benchmark::project_slot(
+            b.get(&slot).unwrap_or(&empty),
+            o.get(&slot).unwrap_or(&empty),
+            t.get(&slot).unwrap_or(&empty),
+            shapes::max_count(&slot.1),
+        )
+        .expect("unified planner refused benchmark input; no metrics may be published");
+        if projection.held {
+            conflicts.insert(slot.clone());
+        }
+        resolved.insert(slot, projection.current);
     }
     Outcome::clean(assemble(&b, &resolved, &conflicts), conflicts)
 }

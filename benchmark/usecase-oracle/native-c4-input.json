@@ -1,0 +1,32 @@
+{
+  "schema": "quipu-native-input/v1",
+  "case": "C4-gate-as-of",
+  "path": "fork-promote",
+  "max_count": 1,
+  "base": {
+    "at": "2026-01-01T00:00:00Z",
+    "rows": [{"value": "a", "from": "2026-01-01T00:00:00Z", "to": null, "op": "assert"}]
+  },
+  "fork_at": "2026-01-01T01:00:00Z",
+  "ours": [{
+    "at": "2026-01-02T00:00:00Z",
+    "rows": [
+      {"value": "a", "from": "2026-01-02T00:00:00Z", "to": null, "op": "retract"},
+      {"value": "b", "from": "2026-01-02T00:00:00Z", "to": null, "op": "assert"}
+    ]
+  }],
+  "theirs": [{
+    "at": "2026-01-03T00:00:00Z",
+    "rows": [
+      {"value": "a", "from": "2026-01-03T00:00:00Z", "to": null, "op": "retract"},
+      {"value": "c", "from": "2026-01-03T00:00:00Z", "to": null, "op": "assert"}
+    ]
+  }],
+  "decision_at": "2026-01-10T00:00:00Z",
+  "resolution": ["c"],
+  "probes": [
+    {"tx": "receive", "valid_at": "2026-01-10T00:00:00Z"},
+    {"tx": "decide", "valid_at": "2026-01-10T00:00:00Z"},
+    {"tx": "decide", "valid_at": "2026-01-01T00:00:00Z"}
+  ]
+}
