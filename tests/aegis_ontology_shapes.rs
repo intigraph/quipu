@@ -475,8 +475,7 @@ fn membership_admits_only_the_typed_process_rulebook_document() {
         );
         let report = quipu::validate_shapes(SHAPES, &data).unwrap();
         assert_eq!(
-            report.conforms,
-            accepted,
+            report.conforms, accepted,
             "{target} / {kind}: {:#?}",
             report.results
         );
