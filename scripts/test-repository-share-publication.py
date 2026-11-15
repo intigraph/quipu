@@ -248,5 +248,12 @@ class Publication(unittest.TestCase):
         self.assertEqual(pauses, [30])
 
 
+def load_tests(loader, tests, pattern):
+    # Keep provider controls in the existing CI entrypoint.
+    controls = load("provider_controls", ROOT / "test-repository-share-embedding.py")
+    tests.addTests(loader.loadTestsFromModule(controls))
+    return tests
+
+
 if __name__ == "__main__":
     unittest.main()

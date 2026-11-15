@@ -266,3 +266,68 @@ fn load_refuses_a_bundle_that_is_not_a_single_graph() {
         "{out:?}"
     );
 }
+
+#[test]
+fn required_profile_load_names_setup_and_leaves_no_staging_before_setup() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let producer_db = root.join("producer.db");
+    seed_producer(&producer_db);
+    let profile = "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:profile> a sh:NodeShape .\n";
+    let profile_ref = "seeds-v0.22.1@released-ref";
+    let digest = format!(
+        "sha256:{}",
+        hex::encode(ring::digest::digest(&ring::digest::SHA256, profile.as_bytes()).as_ref())
+    );
+    let profile_path = root.join("reviewed.ttl");
+    std::fs::write(&profile_path, profile).unwrap();
+    let producer = quipu::Store::open(producer_db.to_str().unwrap()).unwrap();
+    let bundle = root.join("bundle");
+    quipu::share::share(
+        &producer,
+        bundle.to_str().unwrap(),
+        &quipu::share::ShareOptions {
+            scope: quipu::share::ShareScope::Graph(GRAPH.into()),
+            no_shapes: true,
+            required_profile: Some(quipu::share::RequiredProfile {
+                reference: profile_ref.into(),
+                digest,
+            }),
+            destination: quipu::share_scrub::ShareDestination::Internal,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let db = root.join("recipient.db");
+    let args = [
+        "load",
+        bundle.to_str().unwrap(),
+        "--db",
+        db.to_str().unwrap(),
+    ];
+    let absent = quipu(root, &args);
+    assert!(!absent.status.success());
+    let error = String::from_utf8_lossy(&absent.stderr);
+    assert!(
+        error.contains("quipu shapes load") && error.contains(profile_ref),
+        "{error}"
+    );
+    let recipient = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    assert!(recipient.committed_graph_id(GRAPH).unwrap().is_none());
+    assert!(recipient.list_shapes().unwrap().is_empty());
+    drop(recipient);
+    ok(&quipu(
+        root,
+        &[
+            "shapes",
+            "load",
+            profile_ref,
+            profile_path.to_str().unwrap(),
+            "--db",
+            db.to_str().unwrap(),
+        ],
+    ));
+    ok(&quipu(root, &args));
+    let recipient = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    assert!(recipient.committed_graph_id(GRAPH).unwrap().is_some());
+}

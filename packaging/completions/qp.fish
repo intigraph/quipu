@@ -41,7 +41,7 @@ complete -c qp -n "__fish_qp_needs_command" -f -a "unravel" -d 'Show facts as th
 complete -c qp -n "__fish_qp_needs_command" -f -a "impact" -d 'Walk what depends on an entity, optionally after a speculative removal'
 complete -c qp -n "__fish_qp_needs_command" -f -a "explain" -d 'Trace a derived fact back to its premises'
 complete -c qp -n "__fish_qp_needs_command" -f -a "project" -d 'Project the graph and run a graph algorithm such as PageRank'
-complete -c qp -n "__fish_qp_needs_command" -f -a "report" -d 'Report hubs, surprising links and open questions in the graph'
+complete -c qp -n "__fish_qp_needs_command" -f -a "report" -d 'Report graph hubs and questions, or public operational SLO history'
 complete -c qp -n "__fish_qp_needs_command" -f -a "reason" -d 'Run Datalog rules to a fixpoint and persist the derivations'
 complete -c qp -n "__fish_qp_needs_command" -f -a "demotions" -d 'Read preserved unsupported demotions without materializing a closure'
 complete -c qp -n "__fish_qp_needs_command" -f -a "episode" -d 'Ingest a structured episode of nodes and edges from JSON'
@@ -199,6 +199,10 @@ complete -c qp -n "__fish_qp_using_subcommand report" -l predicate -d 'Predicate
 complete -c qp -n "__fish_qp_using_subcommand report" -l hubs -d 'Number of hubs in the report' -r
 complete -c qp -n "__fish_qp_using_subcommand report" -l surprises -d 'Number of surprising relationships in the report' -r
 complete -c qp -n "__fish_qp_using_subcommand report" -l questions -d 'Number of suggested questions in the report' -r
+complete -c qp -n "__fish_qp_using_subcommand report" -l prometheus -d 'Prometheus base URL for a public SLO report (no credentials in URL)' -r
+complete -c qp -n "__fish_qp_using_subcommand report" -l days -d 'Public SLO report window in complete UTC days (1-90; default 30)' -r
+complete -c qp -n "__fish_qp_using_subcommand report" -l end -d 'Public SLO report end at a past RFC3339 UTC midnight' -r
+complete -c qp -n "__fish_qp_using_subcommand report" -l public -d 'Read public operational SLO history without opening the graph'
 complete -c qp -n "__fish_qp_using_subcommand report" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand reason" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand reason" -l rules -d 'Rule set to load or evaluate' -r

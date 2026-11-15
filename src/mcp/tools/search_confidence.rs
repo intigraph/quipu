@@ -8,6 +8,8 @@ use crate::{Error, Result};
 
 const DEFAULT_FLOOR: f64 = 0.52;
 const MIN_COVERAGE: f64 = 0.5;
+const HYBRID_RULE: &str = "hybrid-ranked-terms/v1";
+const HYBRID_RANK_LIMIT: u64 = 20;
 /// Long natural-language questions need corroboration, not half the sentence.
 /// Without this cap a nine-term question rejected a 0.745-similarity row that
 /// held the subject and three other terms (aegis-k4uz). Queries of up to six
@@ -56,9 +58,10 @@ impl Policy {
         } else {
             Vec::new()
         };
+        let hybrid = response["ranking"] == "hybrid";
         let evaluations: Vec<_> = rows
             .iter()
-            .map(|row| self.evaluate(row, &terms, &identifiers))
+            .map(|row| self.evaluate(row, &terms, &identifiers, hybrid))
             .collect();
         // A lower-ranked coincidence cannot overrule an uncorroborated top hit.
         let reason = if query.len() > 4096 {
@@ -101,10 +104,21 @@ impl Policy {
             "candidate_count":rows.len(),
             "admitted_count":accepted.len(),
         });
+        if hybrid {
+            response["context"]["admission"] = json!(HYBRID_RULE);
+            response["context"]["fusion_rank_limit"] = json!(HYBRID_RANK_LIMIT);
+            response["context"]["query_terms"] = json!(terms);
+        }
         Ok(())
     }
 
-    fn evaluate(&self, row: &Value, terms: &[String], identifiers: &[String]) -> Evaluation {
+    fn evaluate(
+        &self,
+        row: &Value,
+        terms: &[String],
+        identifiers: &[String],
+        hybrid: bool,
+    ) -> Evaluation {
         let similarity = row["similarity"]
             .as_f64()
             .filter(|s| s.is_finite() && (-1.0..=1.0).contains(s));
@@ -121,8 +135,9 @@ impl Policy {
             covered as f64 / terms.len() as f64
         };
         let reason = match similarity {
-            None => "similarity_unavailable",
-            Some(s) if s < self.floor => "below_similarity_floor",
+            _ if hybrid && !valid_fused_score(row) => "invalid_fused_rank_or_score",
+            None if !hybrid => "similarity_unavailable",
+            Some(s) if !hybrid && s < self.floor => "below_similarity_floor",
             _ if !terms.first().is_some_and(|term| words.contains(term)) => "subject_not_covered",
             _ if !identifiers.iter().all(|id| exact_identifier(&text, id)) => {
                 "identifier_not_covered"
@@ -132,6 +147,53 @@ impl Policy {
         };
         Evaluation { reason, coverage }
     }
+}
+
+fn valid_fused_score(row: &Value) -> bool {
+    row["ranking_reason"] == "hybrid"
+        && row["fusion_rank"]
+            .as_u64()
+            .is_some_and(|rank| (1..=HYBRID_RANK_LIMIT).contains(&rank))
+        && row["score"]
+            .as_f64()
+            .is_some_and(|score| score.is_finite() && score > 0.0 && score <= 1.0)
+}
+
+/// Shared admission validation for projection and logical outcome accounting.
+pub(crate) fn valid_admitted_row(context: &Value, row: &Value) -> bool {
+    if context.get("admission").is_some() {
+        if context["admission"] != HYBRID_RULE || context["fusion_rank_limit"] != HYBRID_RANK_LIMIT
+        {
+            return false;
+        }
+        let strings = |value: &Value| -> Option<Vec<String>> {
+            value
+                .as_array()?
+                .iter()
+                .map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        };
+        let (Some(terms), Some(ids)) = (
+            strings(&context["query_terms"]),
+            strings(&context["required_identifiers"]),
+        ) else {
+            return false;
+        };
+        return !terms.is_empty()
+            && Policy {
+                floor: DEFAULT_FLOOR,
+            }
+            .evaluate(row, &terms, &ids, true)
+            .reason
+                == "sufficient_context";
+    }
+    context["similarity_floor"].as_f64().is_some_and(|floor| {
+        floor.is_finite()
+            && (DEFAULT_FLOOR..=1.0).contains(&floor)
+            && row["similarity"]
+                .as_f64()
+                .is_some_and(|s| s.is_finite() && (floor..=1.0).contains(&s))
+    })
 }
 
 struct Evaluation {

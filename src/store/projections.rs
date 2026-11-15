@@ -438,6 +438,9 @@ impl Store {
 #[path = "projections_aggregate.rs"]
 mod aggregate;
 pub use aggregate::{GroupBy, ProjectionAggregate};
+#[path = "projections_certificate.rs"]
+mod certificate;
+pub use certificate::ProjectionCertificate;
 #[path = "projections_rows.rs"]
 mod rows;
 #[cfg(test)]
@@ -451,6 +454,10 @@ mod tests;
 #[cfg(test)]
 #[path = "projections_rows_tests.rs"]
 mod rows_tests;
+
+#[cfg(test)]
+#[path = "projections_certificate_tests.rs"]
+mod certificate_tests;
 
 #[cfg(test)]
 #[path = "projections_windows_tests.rs"]
