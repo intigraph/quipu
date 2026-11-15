@@ -16,6 +16,12 @@ commands = (
     "python3 shapes/verify_shape_invariants.py",
 )
 cases = [("current combined job", ci, True)]
+# The prefix proof must remain an additional correctness dependency; dropping it
+# cannot preserve a green publication contract.
+needs = "needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance, deploy-skip-proof]"
+assert needs in ci
+cases.append(("missing deployment skip proof dependency", ci.replace(
+    needs, needs.replace(", deploy-skip-proof", ""), 1), False))
 for command in commands:
     line = f"        run: {command}\n"
     assert line in ci

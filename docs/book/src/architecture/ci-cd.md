@@ -12,22 +12,56 @@ automated versioning and changelog generation.
 
 ## CI Pipeline
 
-Every push to `main` and every pull request triggers the CI workflow
-(`.github/workflows/ci.yml`). Jobs run in parallel:
+Every push to `main`, pull request and combined merge-queue tree runs the seven
+required checks with unchanged names: **Format**, **Clippy (default)**,
+**Clippy (shacl)**, **Test (default)**, **Test (shacl)**, **Build** and
+**Release correctness**. The independent `review/approved` requirement is unchanged.
+Release correctness still requires generated-doc drift, SHACL write-path checks,
+pre-commit controls and the fast conformance expectation controls.
 
-| Job | What it does |
-|-----|-------------|
-| **fmt** | `cargo fmt --check` |
-| **clippy** | Linting with multiple feature combinations (default, SHACL) |
-| **test** | Test suite across feature matrix |
-| **build** | Full compilation check |
-| **check** | Pre-commit hooks on all files |
-| **source-size** | Source-size policy ratchet |
-| **shapes** | Static ontology-shape invariants |
-| **release-correctness** | Aggregate release gate over tests, clippy, builds, pre-commit, source size, and shapes |
-| **lint-markdown** | markdownlint-cli2 on documentation |
+Pendant review, shared signing, installer controls, Markdown lint, changelog
+checks and source/shape invariants remain PR checks. In particular,
+**Generated docs drift** always checks committed completions and man pages.
+PR runs cancel superseded heads; main and merge-queue verdicts finish.
 
-All jobs use cargo caching for fast iteration.
+| Expensive surface | PR coverage | Nightly coverage |
+|-------------------|-------------|------------------|
+| Extended features, full build, three-OS ONNX, string-filter and mixed-load ratchets | Nightly | Every run |
+| Seeded merge load and full W3C conformance re-derivation | Nightly | Every run |
+| Python wheels, sdist and installed-artifact tests | Python/binding paths and their workflow controls | Full platform matrix |
+| Wasm harness and browser bundle | Wasm sources, shared actions, lockfiles and their controls | Every run |
+| Book build | Documentation sources and browser assets | Main source changes also rebuild Pages |
+
+The CI schedule at 05:17 UTC is the single heavy-suite orchestrator. Python,
+merge-load and conformance share their existing definitions through reusable
+workflows, so nightly coverage cannot diverge into another copy. A manual CI
+run exercises the same gate without publishing. `just ci test` checks this topology
+and the release guards offline, including failure and missing-evidence cases.
+
+### Experimental nightly channel
+
+Only a scheduled run on `main` can publish a nightly GitHub prerelease. All
+nightly suites must succeed: failed, cancelled, missing or skipped suites refuse
+**Nightly correctness**. Publication consumes the Linux x86_64 full-feature
+CLI/server package already built in that run, verifies its checksum and embedded
+source SHA, and requires the gate to name that same SHA. It never rebuilds after
+the gate. Tags are immutable `nightly-<run-id>-<full-commit-sha>` prereleases, excluded from
+`latest`; an existing different package is refused rather than overwritten.
+
+To opt in, select the exact experimental nightly in the repository's Releases,
+download `quipu-nightly-linux-x86_64.tar.gz` and its `.sha256`, verify with
+`sha256sum -c`, then extract into a separate directory. Keep the previous
+installation and a store backup before trying it. Consult `FEATURES.txt` for
+ONNX runtime/model requirements. Experimental compatibility and schema changes
+can break running systems; rollback may require the pre-upgrade store backup.
+This channel does not publish crates, PyPI packages or Homebrew formulae.
+
+A red scheduled gate or publication updates the single **Nightly correctness
+failure** issue with the source SHA, failed-stage results and run URL. It does
+not silently ship a partial nightly. Stable promotion is a separate release
+review after a seven-day soak; this workflow never promotes a nightly or changes
+the stable release workflow. A deferred optional failure is therefore discovered
+on nightly rather than during an unrelated PR; fixes retain their PR-local tests.
 
 ## Release Automation
 

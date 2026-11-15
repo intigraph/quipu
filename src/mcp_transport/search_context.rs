@@ -11,7 +11,7 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
     if context["contract"].as_str() != Some("quipu-context/v1") || response.get("error").is_some() {
         return Err("UNKNOWN: search context contract unavailable");
     }
-    let floor = context["similarity_floor"]
+    let _floor = context["similarity_floor"]
         .as_f64()
         .filter(|f| f.is_finite() && (0.52..=1.0).contains(f))
         .ok_or("UNKNOWN: invalid context floor")?;
@@ -31,11 +31,10 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
                 .as_array()
                 .filter(|rows| !rows.is_empty())
                 .ok_or("UNKNOWN: missing admitted context")?;
-            if !rows.iter().all(|row| {
-                row["similarity"]
-                    .as_f64()
-                    .is_some_and(|s| s.is_finite() && (floor..=1.0).contains(&s))
-            }) {
+            if !rows
+                .iter()
+                .all(|row| crate::mcp::tools::search_confidence::valid_admitted_row(context, row))
+            {
                 return Err("UNKNOWN: invalid admitted similarity");
             }
             rows.clone()
@@ -75,15 +74,16 @@ fn render_lexical(response: &Value) -> Result<String, &'static str> {
                 return Err("UNKNOWN: invalid lexical evidence");
             }
         } else {
-            let floor = response["semantic_context"]["similarity_floor"]
+            let _floor = response["semantic_context"]["similarity_floor"]
                 .as_f64()
                 .filter(|f| f.is_finite() && (0.52..=1.0).contains(f))
                 .ok_or("UNKNOWN: mixed result lacks semantic admission")?;
             if response["semantic_context"]["contract"] != "quipu-context/v1"
                 || response["semantic_context"]["outcome"] != "CONTEXT"
-                || !row["similarity"]
-                    .as_f64()
-                    .is_some_and(|s| s.is_finite() && (floor..=1.0).contains(&s))
+                || !crate::mcp::tools::search_confidence::valid_admitted_row(
+                    &response["semantic_context"],
+                    row,
+                )
             {
                 return Err("UNKNOWN: mixed result violates semantic admission");
             }
@@ -151,6 +151,23 @@ mod tests {
         let missing = json!({"insufficient_context":true,
             "context":{"contract":"quipu-context/v1","outcome":"NO CONTEXT","similarity_floor":0.52}});
         assert!(render(&missing.to_string()).is_err());
+    }
+
+    #[test]
+    fn fused_context_requires_explicit_ranked_term_evidence() {
+        let row = json!({"entity":"urn:holon","text":"holon definition","similarity":null,
+            "ranking_reason":"hybrid","fusion_rank":1,"score":0.016});
+        let mut body = json!({"ranking":"hybrid","insufficient_context":false,"context_results":[row],
+            "context":{"contract":"quipu-context/v1","outcome":"CONTEXT","similarity_floor":0.52,
+                "admission":"hybrid-ranked-terms/v1","fusion_rank_limit":20,
+                "query_terms":["holon","definition"],"required_identifiers":[]}});
+        assert!(render(&body.to_string()).is_ok());
+        body["context_results"][0]["text"] = json!("unrelated");
+        body["context_results"][0]["entity"] = json!("urn:unrelated");
+        assert!(render(&body.to_string()).is_err());
+        body["context_results"][0] = row;
+        body["context"].as_object_mut().unwrap().remove("admission");
+        assert!(render(&body.to_string()).is_err());
     }
 
     #[test]
