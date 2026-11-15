@@ -136,6 +136,18 @@ pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::Qui
     }
 }
 
+/// Apply the governance enforcement policy at the same startup boundary as
+/// the other write policies. Action-boundary policies gate every write; see
+/// docs/design/policy-edit-hooks.md.
+pub(crate) fn apply_governance(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
+    store.governance_config_mut().clone_from(&config.governance);
+    if config.governance.enforce_on_write {
+        eprintln!(
+            "Governance write-enforcement enabled (action-boundary policies gate every write)"
+        );
+    }
+}
+
 pub(crate) fn apply_search(store: &mut quipu::Store, config: &quipu::SearchConfig) {
     store.search_config_mut().clone_from(config);
     let fresh = store.created_fact_schema();
