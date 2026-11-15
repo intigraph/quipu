@@ -11,6 +11,11 @@ are generated from the versioned release records.
 
 ### Added
 
+- Add immutable graph-owner catalog plans with bounded fan-out, placement and write-target admission; no route is activated.
+
+- Size SQLite connections from one aggregate budget and support bounded RDF result serialization without returning a partial body.
+- *(server)* Record bounded authentication phase timings for signed health and identity requests, including unfinished phases on cancellation.
+
 - *(namespaces)* Add owner-local conditional inverse core (#1213)([5983f4e](https://github.com/scbrown/quipu/commit/5983f4eb29773761bc0cdbd852d82e1870a040ac))
 - *(observability)* Observe auth phases for signed health and identity requests (#1215)([83fe6d1](https://github.com/scbrown/quipu/commit/83fe6d1b0a511e4a28d6e99677a64cb5566eaee4))
 - *(projections)* Certify an aggregate's model compatibility in one snapshot (#1187)([df443f6](https://github.com/scbrown/quipu/commit/df443f6481416517ac09bb03be487b890e0578a9))
