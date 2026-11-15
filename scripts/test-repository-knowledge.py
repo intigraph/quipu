@@ -339,6 +339,152 @@ class Knowledge(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "absent or ambiguous"):
                     self.render(lambda s: None if s == subject else "indexed-label")
 
+    def test_release_bytes_follow_source_without_renewing_summary(self):
+        import hashlib
+        before_registry = (self.root / "docs/knowledge/repository-knowledge.json").read_bytes()
+        for record in self.registry["records"]:
+            if record.get("source_hash_mode") != "release-bytes":
+                continue
+            path = self.root / record["source"]
+            path.write_bytes(path.read_bytes() + b"\nsource change\n")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            text = self.render()
+            self.assertIn('sourceHash> "' + digest + '"', text)
+            self.assertIn(self.registry["reviewed_at"], text)
+        self.assertEqual(before_registry,
+                         (self.root / "docs/knowledge/repository-knowledge.json").read_bytes())
+        modes = [r for r in self.registry["records"] if "source_hash_mode" in r]
+        self.assertEqual({r["source"] for r in modes},
+                         {"src/lib.rs", "docs/book/src/reference/rest-api.md"})
+        self.assertEqual(len(modes), 2)
+        self.assertEqual(len(self.registry["records"]) - len(modes), 14)
+
+    def test_other_fourteen_records_keep_changed_source_refusal(self):
+        for record in self.registry["records"]:
+            if "source_hash_mode" in record:
+                continue
+            with self.subTest(source=record["source"]):
+                path = self.root / record["source"]
+                original = path.read_bytes()
+                try:
+                    path.write_bytes(original + b"\nchanged\n")
+                    with self.assertRaisesRegex(ValueError, "witness changed"):
+                        self.render()
+                finally:
+                    path.write_bytes(original)
+
+    def test_unknown_mixed_and_unapproved_modes_refuse(self):
+        import copy
+        import hashlib
+        original = copy.deepcopy(self.registry)
+        selected = next(i for i, r in enumerate(original["records"])
+                        if r["source"] == "src/lib.rs")
+        for mode in (None, "", "release_bytes", "other"):
+            with self.subTest(mode=mode):
+                self.registry = copy.deepcopy(original)
+                self.registry["records"][selected]["source_hash_mode"] = mode
+                self.save()
+                with self.assertRaisesRegex(ValueError, "unknown or mixed"):
+                    self.render()
+        for witness in (None, "", "0" * 64,
+                        hashlib.sha256((self.root / "src/lib.rs").read_bytes()).hexdigest()):
+            self.registry = copy.deepcopy(original)
+            self.registry["records"][selected]["source_sha256"] = witness
+            self.save()
+            with self.assertRaisesRegex(ValueError, "unknown or mixed"):
+                self.render()
+        for i, record in enumerate(original["records"]):
+            if "source_hash_mode" in record:
+                continue
+            with self.subTest(unapproved=record["source"]):
+                self.registry = copy.deepcopy(original)
+                candidate = self.registry["records"][i]
+                del candidate["source_sha256"]
+                candidate["source_hash_mode"] = "release-bytes"
+                self.save()
+                with self.assertRaisesRegex(ValueError, "not approved"):
+                    self.render()
+
+    def test_strict_records_require_their_witness(self):
+        import copy
+        original = copy.deepcopy(self.registry)
+        for index, record in enumerate(original["records"]):
+            if "source_hash_mode" in record:
+                continue
+            self.registry = copy.deepcopy(original)
+            del self.registry["records"][index]["source_sha256"]
+            self.save()
+            with self.subTest(source=record["source"]):
+                with self.assertRaisesRegex(ValueError, "witness changed"):
+                    self.render()
+
+    def test_release_bytes_still_refuse_missing_escaped_or_wrong_pointer(self):
+        import copy
+        original = copy.deepcopy(self.registry)
+        for index, record in enumerate(original["records"]):
+            if "source_hash_mode" not in record:
+                continue
+            path = self.root / record["source"]
+            content = path.read_bytes()
+            path.unlink()
+            with self.assertRaises(FileNotFoundError):
+                self.render()
+            with tempfile.TemporaryDirectory() as folder:
+                outside = Path(folder) / "outside"
+                outside.write_bytes(content)
+                path.symlink_to(outside)
+                with self.assertRaisesRegex(ValueError, "witness changed"):
+                    self.render()
+                path.unlink()
+            path.write_bytes(content)
+            for source in ("../outside", str(path.resolve())):
+                self.registry = copy.deepcopy(original)
+                self.registry["records"][index]["source"] = source
+                self.save()
+                with self.assertRaisesRegex(ValueError, "witness changed"):
+                    self.render()
+            self.registry = copy.deepcopy(original)
+            self.registry["records"][index]["subject"] += "#different"
+            self.save()
+            with self.assertRaisesRegex(ValueError, "not approved"):
+                self.render()
+            self.registry = copy.deepcopy(original)
+            self.save()
+
+    def test_historical_hash_only_conflicts_merge_but_summary_conflicts_remain(self):
+        import copy
+        cases = json.loads((ROOT / "scripts/fixtures/repository-knowledge-merges.json").read_text())
+        self.assertEqual([c["merge"][:8] for c in cases],
+                         ["1870c8b5", "6e55fd91", "e2d7b6e9"])
+        current = {r["source"]: r for r in self.registry["records"]}
+
+        def merge(records):
+            with tempfile.TemporaryDirectory() as folder:
+                paths = []
+                # Fixtures record base, then the two exact historical parents.
+                for i in (1, 0, 2):
+                    path = Path(folder) / str(i)
+                    path.write_text(json.dumps(records[i], indent=2) + "\n")
+                    paths.append(str(path))
+                return subprocess.run(["git", "merge-file", "-p", *paths],
+                                      capture_output=True, text=True)
+
+        for case in cases:
+            with self.subTest(merge=case["merge"]):
+                baseline = merge(case["records"])
+                self.assertEqual(baseline.returncode, 1, baseline.stderr)
+                self.assertEqual(baseline.stdout.count("<<<<<<<"), 1)
+                converted = copy.deepcopy(case["records"])
+                for record in converted:
+                    record.pop("source_sha256")
+                    record["source_hash_mode"] = current[record["source"]]["source_hash_mode"]
+                candidate = merge(converted)
+                self.assertEqual(candidate.returncode, 0, candidate.stderr)
+                self.assertEqual(json.loads(candidate.stdout), converted[0])
+                converted[1]["summary"] = "Left independently reviewed summary"
+                converted[2]["summary"] = "Right independently reviewed summary"
+                self.assertEqual(merge(converted).returncode, 1)
+
     def test_changed_source_refuses(self):
         path = self.root / self.registry["records"][0]["source"]
         path.write_text(path.read_text() + "\nchanged\n")
