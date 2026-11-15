@@ -173,6 +173,15 @@ pub(super) fn defs() -> Vec<Value> {
                     },
                     "graph": {
                         "type": "string"
+                    },
+                    "predicate": {
+                        "type": "string"
+                    },
+                    "subject": {
+                        "type": "string"
+                    },
+                    "member": {
+                        "type": "string"
                     }
                 },
                 "required": [],

@@ -239,7 +239,7 @@ fn entity_matches_query(
             Value::Float(f) => f.to_string(),
             Value::Bool(b) => b.to_string(),
             Value::Ref(id) => store.resolve(*id).unwrap_or_default().to_lowercase(),
-            Value::Bytes(_) => continue,
+            Value::Bytes(_) | Value::Triple(_) => continue,
         };
         if val_str.contains(query_lower) {
             return Ok(true);

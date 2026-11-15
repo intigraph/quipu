@@ -139,10 +139,12 @@ pub mod provider;
 pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
+pub mod rdf_triple;
 pub mod term_vocabulary;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
 /// Oversized-transaction parts shared by the change stream and the as-of share.
 pub mod feed_parts;
+pub mod fluent;
 pub mod follow;
 #[cfg(feature = "remote")]
 pub mod follow_http;
@@ -151,6 +153,8 @@ pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
 pub mod grant_scope;
+/// Immutable admission plans for the per-graph writer pilot; not an activation API.
+pub mod graph_catalog;
 /// Inactive SQLite-only HA read profile; no serving adapter is installed.
 #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
 pub mod ha_read;
@@ -220,6 +224,8 @@ pub mod share_diff;
 pub mod promotion_control;
 pub mod shape_mapping;
 pub mod share_alignments;
+/// Opaque fluent proof transport, separate from native admission authority.
+pub mod share_fluent;
 pub mod share_import;
 pub(crate) mod share_import_resolve;
 #[cfg(not(target_arch = "wasm32"))]
@@ -318,10 +324,10 @@ pub use mcp::resolution::tool_resolve_entity;
 pub use mcp::rule_answers::tool_rule_query;
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
-    PreparedEpisode, resolve_validation_shapes, tool_cord, tool_datasets, tool_episode,
-    tool_episode_commit, tool_episode_prepare, tool_graph_freeze, tool_graph_list, tool_graph_thaw,
-    tool_hybrid_search, tool_queries, tool_retract, tool_retract_episode, tool_search, tool_set,
-    tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
+    PreparedEpisode, SERVER_DERIVED_EMBEDDING, resolve_validation_shapes, tool_cord, tool_datasets,
+    tool_episode, tool_episode_commit, tool_episode_prepare, tool_graph_freeze, tool_graph_list,
+    tool_graph_thaw, tool_hybrid_search, tool_queries, tool_retract, tool_retract_episode,
+    tool_search, tool_set, tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use mcp::tools::{tool_attest_challenge, tool_attest_commit, tool_attest_receipt};
@@ -370,8 +376,8 @@ pub use sparql::{
 };
 pub use store::forks::{ForkDiff, ForkInfo, ForkPromotion};
 pub use store::{
-    Datum, GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus,
-    RowsAfter, Store,
+    Datum, GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionCertificate,
+    ProjectionRows, ProjectionStatus, RowsAfter, Store,
 };
 #[cfg(feature = "reactive-reasoner")]
 pub use store::{Delta, TransactObserver};

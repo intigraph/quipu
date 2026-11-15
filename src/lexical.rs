@@ -113,7 +113,7 @@ pub(crate) fn register(conn: &Connection) -> rusqlite::Result<()> {
             Value::Int(n) => n.to_string(),
             Value::Float(n) => n.to_string(),
             Value::Bool(b) => b.to_string(),
-            Value::Ref(_) | Value::Bytes(_) => String::new(),
+            Value::Ref(_) | Value::Bytes(_) | Value::Triple(_) => String::new(),
         })
     })?;
     conn.create_scalar_function("quipu_lexical_ref", 1, flags, |ctx| {
@@ -390,9 +390,7 @@ impl Store {
         match result {
             Err(_) if deadline.is_some_and(|d| d.passed()) => Err(Error::QueryTimeout {
                 elapsed_ms: started.elapsed_ms(),
-                limit_ms: deadline
-                    .map(|d| d.millis_from(&started))
-                    .unwrap_or_default(),
+                limit_ms: deadline.map_or_else(Default::default, |d| d.millis_from(&started)),
             }),
             other => other,
         }

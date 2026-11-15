@@ -8,6 +8,7 @@ use crate::cli::{chrono_now, flag_value};
 
 pub fn cmd_graph(args: &[String], db_path: &str) {
     match args.get(2).map(String::as_str) {
+        Some("writer-instance" | "writer-grant") => writer_policy(args, db_path),
         Some("import") => cmd_import(args, db_path),
         Some("create") => cmd_register(args, db_path, false),
         Some("label") => cmd_register(args, db_path, true),
@@ -245,4 +246,43 @@ fn cmd_list(args: &[String], db_path: &str) {
 
 fn open_store(db_path: &str) -> quipu::Store {
     crate::cli_open::open_store(db_path)
+}
+
+/// Local-owner-only policy enrollment. Grant files contain identifiers/pins,
+/// never bearer plaintext. This command is not exposed through MCP or HTTP.
+fn writer_policy(args: &[String], db_path: &str) {
+    let Some(value) = args.get(3).filter(|s| !s.starts_with("--")) else {
+        eprintln!("graph writer-instance <iri> | graph writer-grant <grant.json>");
+        std::process::exit(2);
+    };
+    let result = (|| -> quipu::Result<serde_json::Value> {
+        let store = open_store(db_path);
+        if args[2] == "writer-instance" {
+            return serde_json::to_value(store.writer_graph_instance(value)?)
+                .map_err(|e| quipu::Error::InvalidValue(e.to_string()));
+        }
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        std::fs::File::open(value)
+            .map_err(|_| quipu::Error::InvalidValue("cannot open writer grant file".into()))?
+            .take(65537)
+            .read_to_end(&mut bytes)
+            .map_err(|_| quipu::Error::InvalidValue("cannot read writer grant file".into()))?;
+        if bytes.len() > 65536 {
+            return Err(quipu::Error::InvalidValue(
+                "writer grant exceeds 64 KiB".into(),
+            ));
+        }
+        let grant: quipu::writer_scope::WriteGrant = serde_json::from_slice(&bytes)
+            .map_err(|_| quipu::Error::InvalidValue("invalid writer grant JSON".into()))?;
+        store.writer_grant_apply(&grant)?;
+        Ok(serde_json::json!({"id":grant.id,"revision":grant.revision,"revoked":grant.revoked}))
+    })();
+    match result {
+        Ok(value) => println!("{value}"),
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+    }
 }

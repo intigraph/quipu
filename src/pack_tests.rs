@@ -147,6 +147,8 @@ fn the_label_is_part_of_the_content() {
 fn a_pack_round_trips_and_verifies_and_leaves_no_wal_siblings() {
     let store = producer(0);
     let out = tmp("roundtrip");
+    // Exercise sidecar cleanup before a native writer-lease producer is enabled.
+    std::fs::write(format!("{out}.building.writer-lease"), b"fixture").unwrap();
     let manifest = pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
 
     assert_eq!(manifest.source_graph, "urn:g:pack");
@@ -161,6 +163,7 @@ fn a_pack_round_trips_and_verifies_and_leaves_no_wal_siblings() {
         ".building",
         ".building-wal",
         ".building-shm",
+        ".building.writer-lease",
     ] {
         assert!(
             !std::path::Path::new(&format!("{out}{suffix}")).exists(),
@@ -520,12 +523,22 @@ fn a_pack_built_as_bytes_attaches_to_a_native_store() {
 fn naming_a_shape_that_does_not_exist_is_refused() {
     let store = producer(0);
     let out = tmp("badshape");
+    let lease = format!("{out}.building.writer-lease");
+    std::fs::write(&lease, b"fixture").unwrap();
     let opts = PackOptions {
         shapes: vec!["nope".into()],
         ..Default::default()
     };
     let err = pack(&store, "urn:g:pack", &out, &opts, TS).expect_err("no such shape");
     assert!(err.to_string().contains("no such shape"), "{err}");
+    assert!(
+        !std::path::Path::new(&lease).exists(),
+        "refusal leaked the build lease"
+    );
+    assert!(
+        !std::path::Path::new(&*out).exists(),
+        "refusal shipped a partial pack"
+    );
 }
 
 #[test]
@@ -690,6 +703,7 @@ fn a_space_pack_owns_the_space_and_still_verifies() {
         ".building",
         ".building-wal",
         ".building-shm",
+        ".building.writer-lease",
     ] {
         assert!(
             !std::path::Path::new(&format!("{out}{suffix}")).exists(),
@@ -1367,6 +1381,10 @@ fn every_canonical_content_caller_scrubs_or_is_classified() {
         // Receiver-side inspection of immutable pack bytes before admission;
         // receive_pack enforces the independently configured receiver policy.
         "unpack_verified",
+        // Evidence-only receiver: recomputes the existing pendant hash without
+        // rewriting signed bytes, then receive_pack and carriers::enforce_destination
+        // enforce receiver policy, including decoded pending proofs. Emits no pack.
+        "materialize_pending_carriers",
         // The definition matches its own name. Named here rather than filtered
         // silently, so the list stays a record of every decision rather than of
         // the interesting ones.

@@ -72,10 +72,9 @@ pub(crate) async fn update_post(
     if let Err(e) = quipu::sparql_structure::check(&update) {
         return Ok((StatusCode::BAD_REQUEST, e.to_string()).into_response());
     }
-    let parameters: Vec<_> = uri
-        .query()
-        .map(|query| url::form_urlencoded::parse(query.as_bytes()).collect())
-        .unwrap_or_default();
+    let parameters: Vec<_> = uri.query().map_or_else(Default::default, |query| {
+        url::form_urlencoded::parse(query.as_bytes()).collect()
+    });
     if parameters
         .iter()
         .any(|(name, _)| name == "default-graph-uri" || name == "named-graph-uri")

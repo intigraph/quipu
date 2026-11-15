@@ -81,6 +81,7 @@ pub fn unpack_verified(
             "pack: HASH MISMATCH: manifest {stored}, recomputed {recomputed}"
         )));
     }
+    crate::pack::require_ordinary_load(pack_path)?;
     let provenance: serde_json::Value = serde_json::from_str(&manifest.producer)
         .map_err(|e| Error::InvalidValue(format!("pack: invalid producer manifest: {e}")))?;
     let repository = provenance.get("repository").and_then(|v| v.as_str());

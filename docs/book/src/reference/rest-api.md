@@ -1326,6 +1326,25 @@ Consumer validation requires a finite declared floor in `[0.52, 1]` before
 accepting either CONTEXT or NO CONTEXT. A lower, missing or malformed floor
 is UNKNOWN in these consumers, even when the server reports no context.
 
+Hybrid results use the explicit `context.admission: "hybrid-ranked-terms/v1"`
+rule. An admitted row must have `ranking_reason: "hybrid"`, a finite fused
+`score` in `(0, 1]`, and `fusion_rank` from 1 through 20. It must also cover the
+query subject, every required identifier and the existing distinct-term
+threshold (half the query terms, rounded up, capped at three). An
+uncorroborated top result still refuses the entire context. A fused score is
+never compared with the cosine floor; raw `similarity` remains nullable and
+diagnostic. `query_terms` and `fusion_rank_limit` accompany this rule so native
+MCP projection and outcome accounting validate the same evidence. Unknown
+admission rules remain UNKNOWN. Pure semantic admission keeps its cosine floor.
+
+`ranking: "content"` is supported with hybrid fusion: content demotion applies
+to the semantic leg before fusion, and the keyword leg retains its BM25 scale.
+In automatic mode, content requests use hybrid only when hybrid is enabled,
+the keyword index is complete and a vector input/provider is available.
+Explicit modes retain their backend gates; configuring hybrid as the default
+also accepts content requests. This does not activate hybrid or backfill an
+existing store automatically.
+
 `results`, `count`, ranking scores, ordering, scope and temporal provenance remain
 unchanged diagnostic search output. They are **not** evidence that an answer
 exists. Context consumers must render **NO CONTEXT** when
@@ -2262,6 +2281,26 @@ use `completion_outcome: "response"`. This records abandonment of the HTTP
 future, including cancellation during shutdown; it does not prove that a blocking
 worker stopped or that a write did not commit. Response-body streaming after the
 handler returns is outside this measurement.
+Signed `GET /health` and `POST /identity` requests also add fixed-size numeric
+phase observations to that same terminal event. Header presence selects this
+observation; it does not authenticate the request. `auth_phase_us` contains eight
+microsecond durations in this order: verification, pre-handler blocking dispatch,
+pre-handler writer-lock wait, pre-handler lock hold, handler, post-handler blocking
+dispatch, post-handler writer-lock wait, and post-handler lock hold. Verification
+includes body decoding, read admission and signature checks; these inner costs
+are not separated. Lock holds include existing nonce settlement. The observer
+changes no nonce, timeout, retry or authorization policy.
+
+`auth_phase_started` and `auth_phase_complete` are bit masks with bit zero naming
+the first array entry. An unstarted phase is `null`. An unfinished phase reports
+elapsed time at the snapshot with its completion bit unset; a completed zero is
+a measured sub-microsecond duration. Cancellation can leave a detached blocking
+worker running beyond that snapshot. These values are diagnostic timings, not
+proof of worker termination or a complete decomposition of request duration.
+The three fields add fewer than 256 JSON bytes per selected terminal event,
+with no extra events or metric labels. No signature, nonce, key, session, body
+or header value is added by the phase observer.
+
 Completed `/search`, `/hybrid-search`, and `/search-query` pipelines exceeding 500 ms also emit
 `search_phase_slow`. This anonymous record reports `pipeline_ms`, combined
 `admission_dispatch_ms`, and `phase_ms` for embedding, reader acquisition,
@@ -2661,8 +2700,32 @@ Event streams accept `types`, `group` and `graph` (one registered committed
 named graph, read from its own log as on `/events/graph`; a server that
 predates named-graph events refuses `graph` on an event stream with HTTP
 400); change streams accept `graph`, including a
-registered named graph. Unrelated filter kinds and invalid resume
-cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
+registered named graph, plus `predicate` and `subject`: each a
+comma-separated list of 1 to 64 IRIs. A change frame then carries only the
+records whose predicate (`attribute`) and subject (`entity`) are in the lists,
+renumbered from 0; a transaction with no such record sends no frame. Lists are
+OR within a parameter and AND across parameters and with `graph`. An IRI the
+store has never seen matches nothing. The same `predicate` and `subject`
+parameters narrow `GET /changes`.
+
+A change stream also accepts one `member` condition, `<predicate> <term>`:
+the predicate an IRI in angle brackets and the term one RDF term in N-Triples
+syntax, an IRI (`<urn:Class>`) or a quoted literal (`"alice"`, `"x"@en`,
+`"5"^^<datatype>`). A record is kept when its subject has that predicate and
+term in the record's own graph (so with `graph=X`, in X only) in the state
+just before the record's transaction OR just after it. The transaction that
+moves a subject out of the condition therefore still arrives, carrying the
+retract and its `old_value`; later ones on that subject do not. The term is
+matched exactly: `"alice"` matches neither `"alice"^^<other>` nor
+`"alice"@en`, with no case folding or numeric equivalence (`"alice"` and
+`"alice"^^xsd:string` are the same term). Blank nodes, quoted triples and
+Turtle shorthand (`5`, `true`, prefixed names) are refused. `member`
+combines with the other filters by AND, and also narrows `GET /changes`.
+A predicate or IRI term the store has never seen matches nothing. The server
+evaluates at most 64 distinct `member` conditions at once, each once per
+commit for all its subscribers; a stream with a 65th is refused with HTTP
+503 until one ends. Unrelated filter kinds, a malformed `member` and invalid
+resume cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
 
 Delivery does not acknowledge a consumer. Commit applied data and its cursor
 atomically, then reconnect from that cursor after a disconnect. A transaction
@@ -2724,7 +2787,9 @@ From the server:
   the SSE data as a string, not parsed, because the part digests of a chunked
   transaction (`quipu.changes.begin`/`.part`/`.commit`) hash those exact bytes.
 - A subscription takes the same scope as its SSE stream: change subscriptions
-  take `graph`; event subscriptions take `types` (a list), `group` and `graph`.
+  take `graph`, `predicate` and `subject` (lists of IRIs without commas) and
+  `member` (one `"<predicate> <term>"` string); event subscriptions take
+  `types` (a list), `group` and `graph`.
   An invalid scope, an unknown `feed`, a duplicate `sub`, a subscription over a
   limit and an unknown `op` are each answered with `quipu.error` for that
   message. The connection stays open.
@@ -2892,8 +2957,12 @@ Standards-flavoured read endpoints for semantic-web tooling.
 
 Returns fact-level change records after the optional `since` transaction.
 `capture` selects `new_values`, `old_and_new_values`, or `new_row`; `graph`
-optionally scopes the feed to one graph IRI. The response includes `next_tx`
+optionally scopes the feed to one graph IRI; `predicate`, `subject` and
+`member` narrow it as on `GET /changes/stream`. The response includes `next_tx`
 and a watermark so consumers can distinguish an idle feed from a stalled one.
+With `member`, one page walks at most 256 transactions: a page that reaches
+that bound returns what it kept (possibly no records) with `next_tx` at the
+last transaction walked, and the next page continues from there.
 
 ### `GET /entity/{iri}`
 

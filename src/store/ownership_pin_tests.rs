@@ -99,13 +99,9 @@ fn count(store: &Store, table: &str) -> i64 {
 
 /// An open disk-store handle pinned to `authority(0)` at `journal`.
 fn open_pinned(dir: &Path, journal: &Path) -> Store {
-    let store = Store::open(dir.join("pinned.db").to_str().unwrap()).unwrap();
-    store
-        .ownership_fence
-        .as_ref()
-        .expect("a disk store has a commit fence")
-        .pin_journal(journal.to_path_buf(), authority(0));
-    store
+    let path = dir.join("pinned.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    super::ownership_admission_fixture::open(&path, journal, &authority(0))
 }
 
 #[test]
@@ -194,10 +190,15 @@ fn every_non_admitting_journal_state_refuses_and_names_its_role() {
     for (label, state, expect) in cases {
         let dir = tempfile::tempdir().unwrap();
         let journal = dir.path().join("lineage.journal");
+        create(&journal, &active()).unwrap();
+        let mut store = open_pinned(dir.path(), &journal);
+        // Admission must succeed first. Corrupt or advance the journal only
+        // after this real admitted handle exists; startup would refuse it.
         if let Some(state) = &state {
             write_atomic(&journal, state).unwrap();
+        } else {
+            std::fs::remove_file(&journal).unwrap();
         }
-        let mut store = open_pinned(dir.path(), &journal);
         assert!(write(&mut store, 1).is_err(), "{label}: write admitted");
         assert_eq!(count(&store, "transactions"), 0, "{label}: no fact");
         // A refused COMMIT reads as a generic SQLite error; the handle keeps
@@ -209,8 +210,9 @@ fn every_non_admitting_journal_state_refuses_and_names_its_role() {
     // A corrupt journal is UNKNOWN too.
     let dir = tempfile::tempdir().unwrap();
     let journal = dir.path().join("lineage.journal");
-    std::fs::write(&journal, b"corrupt").unwrap();
+    create(&journal, &active()).unwrap();
     let mut store = open_pinned(dir.path(), &journal);
+    std::fs::write(&journal, b"corrupt").unwrap();
     assert!(write(&mut store, 1).is_err());
     let err = store.ensure_ownership_writable().unwrap_err().to_string();
     assert!(err.contains("UNKNOWN"), "{err}");

@@ -33,9 +33,7 @@ fn reference(store: &Store, deadline: Option<crate::time::Deadline>) -> Result<V
         if deadline.is_some_and(|d| d.passed()) {
             return Err(crate::Error::QueryTimeout {
                 elapsed_ms: started.elapsed_ms(),
-                limit_ms: deadline
-                    .map(|d| d.millis_from(&started))
-                    .unwrap_or_default(),
+                limit_ms: deadline.map_or_else(Default::default, |d| d.millis_from(&started)),
             });
         }
         let (Some(Value::Ref(entity)), Some(Value::Ref(entity_type))) =
@@ -54,9 +52,7 @@ fn reference(store: &Store, deadline: Option<crate::time::Deadline>) -> Result<V
         if deadline.is_some_and(|d| d.passed()) {
             return Err(crate::Error::QueryTimeout {
                 elapsed_ms: started.elapsed_ms(),
-                limit_ms: deadline
-                    .map(|d| d.millis_from(&started))
-                    .unwrap_or_default(),
+                limit_ms: deadline.map_or_else(Default::default, |d| d.millis_from(&started)),
             });
         }
         let entity_id = match row.get("s") {

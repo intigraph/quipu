@@ -42,7 +42,9 @@ pub fn term_to_value(store: &Store, term: &OxTerm) -> Result<Value> {
         }
         OxTerm::Literal(lit) => literal_to_value(lit),
         #[cfg(feature = "shacl")]
-        OxTerm::Triple(_) => Err(Error::InvalidValue("unsupported RDF term type".into())),
+        OxTerm::Triple(triple) => {
+            crate::rdf_triple::TripleValue::from_ox(triple).map(|t| Value::Triple(Box::new(t)))
+        }
     }
 }
 
@@ -91,6 +93,12 @@ pub fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
             b.to_string(),
             NamedNode::new_unchecked(namespace::XSD_BOOLEAN),
         ))),
+        #[cfg(feature = "shacl")]
+        Value::Triple(triple) => triple.to_ox().map(|t| OxTerm::Triple(Box::new(t))),
+        #[cfg(not(feature = "shacl"))]
+        Value::Triple(_) => Err(Error::InvalidValue(
+            "RDF 1.2 serialization requires shacl feature".into(),
+        )),
         Value::Bytes(_) => Err(Error::InvalidValue(
             "cannot convert raw bytes to RDF term".into(),
         )),

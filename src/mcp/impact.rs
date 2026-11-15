@@ -32,12 +32,11 @@ pub fn tool_impact(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let predicates: Vec<String> = input
         .get("predicates")
         .and_then(|v| v.as_array())
-        .map(|arr| {
+        .map_or_else(Default::default, |arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
 
     let opts = crate::impact::ImpactOptions { hops, predicates };
 

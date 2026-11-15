@@ -46,6 +46,15 @@ name: Changelog check
 # (v0.3.7). git-cliff with this repo's cliff.toml is correct; this job regenerates
 # the correct delta and fails a release PR whose CHANGELOG section is missing
 # commits — so a bad changelog cannot be merged unnoticed (v0.3.5's was).
+#
+# SCOPE: release-plz PRs only (aegis-06px). The check was introduced in becf5a0d for
+# "gating release-plz's PRs", with "touches CHANGELOG.md" standing in for "is a
+# release PR". Since 2ef6dfa5 (2026-09-08) check-release-window.py tells ORDINARY
+# PRs to add a linked CHANGELOG entry, so ordinary PRs touch CHANGELOG.md too and
+# this check then failed them on their own branch commits plus main's Unreleased gap.
+# Same pattern as release-pr-freshness.yml: no job-level `if:` (a skipped check is
+# not provable by the merge gate); the first step decides scope and every later step
+# runs only in scope. An ordinary or fork PR ends green having checked nothing.
 on:
   pull_request:
     paths:
@@ -64,13 +73,31 @@ jobs:
     name: Verify changelog completeness
     runs-on: ubuntu-latest
     steps:
+      - name: Scope
+        id: scope
+        env:
+          IN_SCOPE: >-
+            ${{ github.event.pull_request.head.repo.full_name == github.repository &&
+            startsWith(github.event.pull_request.head.ref, 'release-plz') }}
+        run: |
+          set -euo pipefail
+          case "$IN_SCOPE" in
+            true) echo "in_scope=true" >> "$GITHUB_OUTPUT" ;;
+            false) echo "in_scope=false" >> "$GITHUB_OUTPUT"
+                   echo "Not a same-repository release-plz PR; changelog completeness is not checked here." ;;
+            *) echo "::error::Unexpected scope value '$IN_SCOPE'."; exit 1 ;;
+          esac
+
       - uses: actions/checkout@v4
+        if: steps.scope.outputs.in_scope == 'true'
         with:
           fetch-depth: 0   # full history + tags: the verifier ranges over v<prev>..HEAD
 
       - uses: taiki-e/install-action@v2
+        if: steps.scope.outputs.in_scope == 'true'
         with:
           tool: git-cliff
 
       - name: Verify newest CHANGELOG section is complete
+        if: steps.scope.outputs.in_scope == 'true'
         run: ./scripts/verify-changelog.sh

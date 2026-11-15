@@ -105,6 +105,7 @@ pub(super) fn value_json(store: &Store, blob: Option<Vec<u8>>) -> Result<JsonVal
         Value::Typed { lexical, .. } | Value::Lang { lexical, .. } => json!(lexical),
         Value::Bool(b) => json!(b),
         Value::Float(f) => json!(f),
+        Value::Triple(t) => json!({"triple":t}),
         Value::Bytes(_) => json!("<bytes>"),
     })
 }

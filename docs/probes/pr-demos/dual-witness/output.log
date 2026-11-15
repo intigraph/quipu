@@ -1,0 +1,27 @@
+Script started on 2026-11-13 14:09:58-05:00 [COMMAND="bash witness-probe.sh" <not executed on terminal>]
+Baseline reader: the canonical-only signature cannot supply its recorded witness.
+running 1 test
+thread 'mcp::governance::verdict_trust_root_tests::dual_witness::canonical_and_legacy_use_the_original_recorded_transaction' (2319818) panicked at src/mcp/verdict_dual_witness_tests.rs:60:55:
+called `Result::unwrap()` on an `Err` value: InvalidValue("verdict 'http://ex/verdict/dual-witness' has no recorded aegis:signature with that value; there is no store-witnessed instant to verify it at")
+test mcp::governance::verdict_trust_root_tests::dual_witness::canonical_and_legacy_use_the_original_recorded_transaction ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4236 filtered out; finished in 0.10s
+Frozen candidate input manifest matches
+Candidate reader: both signatures bind to their original transaction; ambiguity and trust-root negatives refuse.
+running 14 tests
+test mcp::governance::verdict_trust_root_tests::a_root_signed_registration_is_trusted_and_says_why ... ok
+test mcp::governance::verdict_trust_root_tests::a_key_added_to_an_endorsed_registration_without_the_root_is_refused ... ok
+test mcp::governance::verdict_trust_root_tests::a_verdict_sealed_before_endorsement_stays_untrusted_after_migration ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::a_missing_transaction_record_is_not_witness_evidence ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::caller_supplied_instant_remains_an_untrusted_what_if ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::canonical_and_legacy_use_the_original_recorded_transaction ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::canonical_and_legacy_keep_revocation_bound_to_the_original_transaction ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::canonical_registration_terms_are_not_silently_promoted_to_authority ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::canonical_witness_does_not_endorse_or_expand_registration_authority ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::duplicate_graphs_and_distinct_historical_transactions_refuse ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::missing_mismatched_and_non_string_signatures_never_fall_back_to_supplied_time ... ok
+test mcp::governance::verdict_trust_root_tests::dual_witness::mixed_and_conflicting_assertions_refuse_even_when_one_signature_matches ... ok
+test mcp::governance::verdict_trust_root_tests::self_enrollment_never_yields_trust ... ok
+test mcp::governance::verdict_trust_root_tests::revocation_by_the_root_ends_trust_for_new_verdicts_only ... ok
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 4223 filtered out; finished in 1.17s
+
+Script done on 2026-11-13 14:14:39-05:00 [COMMAND_EXIT_CODE="0"]

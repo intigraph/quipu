@@ -173,7 +173,7 @@ fn text_from_facts(store: &Store, facts: &[crate::types::Fact]) -> Result<String
                 Value::Int(n) => literals.push(n.to_string()),
                 Value::Float(f) => literals.push(f.to_string()),
                 Value::Bool(b) => literals.push(b.to_string()),
-                Value::Ref(_) | Value::Bytes(_) => {}
+                Value::Ref(_) | Value::Bytes(_) | Value::Triple(_) => {}
             }
         }
     }

@@ -44,6 +44,7 @@
 
 # Reference
 
+- [Breaking changes and corrections](reference/breaking-changes.md)
 - [CLI Commands](reference/cli.md)
   - [Competency contracts](reference/competency.md)
   - [CLI Command Index](reference/cli-commands.md)
@@ -51,6 +52,7 @@
 - [DataBooks](reference/databooks.md)
 - [Render graph data into files](reference/render.md)
 - [REST API](reference/rest-api.md)
+- [Scoped machine writers](reference/scoped-writers.md)
   - [Scoped current reads](reference/scoped-reads.md)
   - [Versioned file memory](reference/memory-files.md)
   - [Expiring memory-only credentials](reference/memory-credentials.md)

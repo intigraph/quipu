@@ -442,7 +442,9 @@ impl MappingSet {
         out.push('\n');
 
         for m in &self.mappings {
-            let confidence = m.confidence.map(|c| format!("{c:.3}")).unwrap_or_default();
+            let confidence = m
+                .confidence
+                .map_or_else(Default::default, |c| format!("{c:.3}"));
             let modifier = if m.is_negated() { "Not" } else { "" };
             let cells = [
                 m.subject_id.as_str(),

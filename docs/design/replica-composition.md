@@ -30,7 +30,7 @@ their `ex:assignee` is my `my:owner`". After that:
    vocabulary, says how each part is known, and is told exactly what was
    not searched.
 
-Non-goals: pattern subscriptions (still deferred, `local-sync-mode.md` §4);
+Non-goals: pattern replicas (still deferred, `local-sync-mode.md` §4; stream filters are in `stream-filters.md`);
 transitive chains of mappings (§3.6); mapping-driven writes into a graph the
 writer has no write scope for; erasure of data already on an offline device.
 

@@ -21,13 +21,7 @@ impl Store {
         &self,
         allocation: crate::memory_budget::MemoryAllocation,
     ) -> Result<()> {
-        let cache = i64::try_from(allocation.cache_kib)
-            .map_err(|_| Error::InvalidValue("cache allocation overflow".into()))?;
-        let mmap = i64::try_from(allocation.mmap_bytes)
-            .map_err(|_| Error::InvalidValue("mmap allocation overflow".into()))?;
-        self.conn.pragma_update(None, "cache_size", -cache)?;
-        self.conn.pragma_update(None, "mmap_size", mmap)?;
-        Ok(())
+        allocation.apply_connection(&self.conn)
     }
 
     /// Open (or create) a Quipu store at the given path.
@@ -272,7 +266,7 @@ impl Store {
                 "store handoff: enrolled startup needs a native commit fence".into(),
             )
         })?;
-        admission.install(&fence)?;
+        fence.pin_admitted(admission)?;
         store.ensure_ownership_writable()?;
         Ok(store)
     }
@@ -363,7 +357,9 @@ impl Store {
         Self::migrate_frozen_packs(&conn)?;
         Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
+        Self::migrate_graph_creators_v1(&conn)?;
         Self::migrate_writer_scope(&conn)?;
+        Self::migrate_fluent_persistence(&conn)?;
         #[cfg(not(target_arch = "wasm32"))]
         Self::migrate_client_changesets(&conn)?;
 

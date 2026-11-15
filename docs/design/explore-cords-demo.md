@@ -48,3 +48,32 @@ existing topic/type groups; degree measures distinct links in the current view.
 
 The 375px screenshot illustrates the responsive overview; it is a still image.
 The source and embed theme remain the same page and receiving pipeline.
+
+## Relation accessibility
+
+Relation controls are exposed as named buttons within the graph's accessibility
+group. Decorative knots and cords remain hidden from assistive technology: their
+HTML targets and visible legend carry the same information. Pressing Enter on a
+relation opens its details and moves keyboard focus to the panel heading.
+
+The cord browser check inspects Chrome's accessibility tree before focusing a
+relation, then checks the Enter interaction and focus destination. Programmatic
+focus alone is insufficient: a browser can temporarily expose a focused control
+whose ancestor otherwise hides it from assistive technology. Docs CI runs this
+check against the matching built engine and validated repository pack before
+publishing the page.
+
+[Watch or download the 10-second accessibility recording](../../assets/explore-relation-accessibility.webm).
+It shows Enter opening the relation panel, its history, and the responsive cord
+overview in a source candidate based on
+`ce86ba4cc1b5bf0bcf98a67c2de8a6e1f075946b`. Before this change, the relation
+was hidden in the accessibility tree and Enter left focus outside the panel;
+the candidate exposes the control and focuses its heading. The browser test
+checks both outcomes; the recording illustrates the interaction rather than
+proving screen-reader behavior.
+
+The fixture uses the public repository pack and matching released engine and
+validated snapshot. Run the focused cord check with `DEMO_PAUSE_MS=2000` to retain
+readable pauses. The recording preserves actual timing and is compressed without
+a timing change. GitHub may require downloading it. This is candidate evidence;
+publication and a fresh live-page acceptance check remain separate.

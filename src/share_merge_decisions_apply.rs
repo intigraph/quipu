@@ -225,6 +225,11 @@ fn plan_pair_inner(
             &decisions_sha256,
         );
         let source = format!("{source};merge_id={id}");
+        // Dry runs never enter this branch; retain opaque parent evidence
+        // inside the same writer reservation, without admitting its origin.
+        for manifest in [&i.base.manifest, &i.incoming.manifest] {
+            crate::share_fluent::retain(store, manifest)?;
+        }
         commit(
             store, &i.ours, &merged, &plan, parents, &source, timestamp, actor,
         )?

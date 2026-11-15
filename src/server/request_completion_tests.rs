@@ -9,6 +9,7 @@ fn completion<'a>(
 ) -> Completion<'a> {
     Completion {
         search: None,
+        auth_phases: None,
         id: 7,
         client: "test-client".into(),
         task: "unattributed".into(),
@@ -88,10 +89,34 @@ fn completed_response_disarms_drop_and_retains_metadata() {
     assert_eq!(event["status"], 200);
     assert_eq!(event["completion_outcome"], "response");
     assert_eq!(event["auth_outcome"], "not_required");
+    assert!(event.get("auth_phase_us").is_none());
     assert!(counters.0.lock().unwrap().is_empty());
     let text = metrics.render(0, 0, 0, None);
     assert!(text.contains("quipu_http_request_duration_seconds_count{endpoint=\"/pending\"} 1"));
     assert!(!text.contains("status=\"499\""));
+}
+
+#[test]
+fn cancelled_auth_wait_keeps_partial_phase_on_the_same_single_terminal_event() {
+    use crate::auth_phase::{Observation, Phase};
+    let metrics = quipu::metrics::Metrics::default();
+    let counters = Cancellations::default();
+    let logs = Arc::new(Mutex::new(Vec::new()));
+    let mut guard = completion(&metrics, &counters, logs.clone());
+    let trace = Observation::default();
+    trace.start(Phase::PreWait);
+    guard.auth_phases = Some(trace);
+    drop(guard);
+    let logs = logs.lock().unwrap();
+    assert_eq!(logs.len(), 1);
+    let event: serde_json::Value = serde_json::from_str(&logs[0]).unwrap();
+    assert_eq!(event["request_id"], 7);
+    assert_eq!(event["status"], 499);
+    assert_eq!(event["completion_outcome"], "cancelled");
+    assert_eq!(event["auth_phase_started"], 4);
+    assert_eq!(event["auth_phase_complete"], 0);
+    assert!(event["auth_phase_us"][2].is_u64());
+    assert!(event["auth_phase_us"][3].is_null());
 }
 
 #[test]

@@ -343,8 +343,7 @@ impl FocusView for IdView<'_> {
         Ok(reaches(start, &class, |c| {
             self.supers
                 .get(c)
-                .map(|s| s.iter().copied().collect())
-                .unwrap_or_default()
+                .map_or_else(Default::default, |s| s.iter().copied().collect())
         }))
     }
 

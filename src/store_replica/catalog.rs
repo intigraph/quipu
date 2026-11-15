@@ -13,6 +13,8 @@ const DATA: &[&str] = &[
     "transaction_declarations",
     "facts",
     "graphs",
+    // Caller-declared creation history survives retention; never local authority.
+    "graph_creators",
     "shapes",
     "ontologies",
     "schema_terms",
@@ -35,6 +37,8 @@ const DATA: &[&str] = &[
     "import_reviews",
     "events",
     "pending_share_queries",
+    "share_fluent_carriers",
+    "fluent_pending_configs",
     "denial_quarantine",
     "quarantine_deltas",
     "vectors",
@@ -47,6 +51,13 @@ const LOCAL: &[&str] = &[
     // Authentication adjudication is local evidence, not transferable writer
     // authority. Actor/source text in historical transactions remains data.
     "transaction_auth",
+    // Receiving-store type codes are rebuilt from its own term dictionary;
+    // a replica must not install another store's immutability guard cache.
+    "fluent_type_codes",
+    // Native append permission exists only inside its local transaction.
+    "fluent_write_permits",
+    "fluent_origin_receipts",
+    "fluent_config_receipts",
     // Owner-enrolled grants and graph-instance pins are local authority,
     // never logical replica content or journal entries.
     "writer_grants",

@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
-use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -19,64 +18,18 @@ use crate::store::Store;
 mod manifest_rdf;
 pub(crate) use manifest_rdf::manifest_turtle;
 
-/// The graph slice written into a share.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub enum ShareScope {
-    /// ROOT/default graph.
-    #[default]
-    Root,
-    /// One named graph IRI.
-    Graph(String),
-    /// Facts attributed to one episode provenance group.
-    Group(String),
-    /// A SPARQL CONSTRUCT or DESCRIBE result.
-    Construct(String),
-}
+mod scope;
 
-impl Serialize for ShareScope {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let (kind, value) = match self {
-            Self::Root => ("root", None),
-            Self::Graph(value) => ("graph", Some(value.as_str())),
-            Self::Group(value) => ("group", Some(value.as_str())),
-            Self::Construct(value) => ("construct", Some(value.as_str())),
-        };
-        let mut state = serializer.serialize_struct("ShareScope", 2)?;
-        state.serialize_field("kind", kind)?;
-        state.serialize_field("value", &value)?;
-        state.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for ShareScope {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct Wire {
-            kind: String,
-            value: Option<String>,
-        }
-        let wire = Wire::deserialize(deserializer)?;
-        match (wire.kind.as_str(), wire.value) {
-            ("root", None) => Ok(Self::Root),
-            ("graph", Some(value)) => Ok(Self::Graph(value)),
-            ("group", Some(value)) => Ok(Self::Group(value)),
-            ("construct", Some(value)) => Ok(Self::Construct(value)),
-            (kind, value) => Err(serde::de::Error::custom(format!(
-                "invalid share scope kind={kind:?} value={value:?}"
-            ))),
-        }
-    }
-}
+#[path = "share/required_profile.rs"]
+mod required_profile;
+pub use required_profile::RequiredProfile;
+pub use scope::ShareScope;
 
 /// Options for [`share`].
 #[derive(Debug, Clone)]
 pub struct ShareOptions {
+    /// Exact reviewed recipient shape profile required before import.
+    pub required_profile: Option<RequiredProfile>,
     /// Scope to export.
     pub scope: ShareScope,
     /// Shape registry entries to concatenate into `shapes.ttl`.
@@ -89,6 +42,10 @@ pub struct ShareOptions {
     pub queries: Option<Vec<String>>,
     /// Optional ancillary alignment evidence; never automatically applied.
     pub alignments_turtle: Option<String>,
+    /// Opaque source proofs, sealed by share identity; never authority or graph facts.
+    pub fluent_proofs: Vec<String>,
+    /// Explicit pending observable requests; no approval or registration travels.
+    pub observable_configs: Vec<String>,
     /// Verbatim offline competency contract, compiled and sealed with the share.
     pub competency_toml: Option<String>,
     /// Prior share id in this lineage.
@@ -124,11 +81,14 @@ pub struct ShareOptions {
 impl Default for ShareOptions {
     fn default() -> Self {
         Self {
+            required_profile: None,
             scope: ShareScope::default(),
             shapes: Vec::new(),
             no_shapes: false,
             queries: None,
             alignments_turtle: None,
+            fluent_proofs: Vec::new(),
+            observable_configs: Vec::new(),
             competency_toml: None,
             parent_share: None,
             turtle_view: false,
@@ -147,6 +107,9 @@ pub const SHARE_PAYLOAD_MAX_BYTES: usize = 8 * 1024 * 1024;
 /// HTTP-friendly options for building a share payload in memory.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct SharePayloadRequest {
+    /// Optional recipient setup requirement; never installs incoming policy.
+    #[serde(default)]
+    pub required_profile: Option<RequiredProfile>,
     /// Scope to export.
     #[serde(default)]
     pub scope: ShareScope,
@@ -178,11 +141,15 @@ impl SharePayloadRequest {
     /// Convert the wire request to the canonical producer options.
     pub fn options(&self) -> ShareOptions {
         ShareOptions {
+            required_profile: self.required_profile.clone(),
             scope: self.scope.clone(),
             shapes: self.shapes.clone(),
             no_shapes: self.no_shapes,
             queries: self.queries.clone(),
             alignments_turtle: self.alignments_turtle.clone(),
+            // No new HTTP producer/admission surface in this source-only adapter.
+            fluent_proofs: Vec::new(),
+            observable_configs: Vec::new(),
             competency_toml: self.competency_toml.clone(),
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
@@ -278,12 +245,21 @@ pub use pointers::{PointerTarget, SharePointer};
 ///
 /// # Source compatibility after 0.15.0
 ///
-/// Rust struct literals must now supply `embedding` and `alignments_hash`
+/// Rust struct literals must now supply `required_profile`, `embedding` and `alignments_hash`
 /// (use `None` when absent). These optional JSON members remain defaulted when
 /// reading older manifests; that wire compatibility does not preserve Rust
 /// source compatibility for this exhaustive public struct.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
+    /// Exact recipient profile, sealed by `share_id`; omitted for legacy bundles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_profile: Option<RequiredProfile>,
+    /// Exact pending configuration strings; absent preserves legacy identities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observable_configs: Vec<String>,
+    /// Exact opaque source proofs inside share identity; absent preserves legacy bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fluent_proofs: Vec<String>,
     /// Optional exact model identity; covered by `share_id`. Legacy shares omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedding: Option<crate::embedding_runtime::EmbeddingRecipe>,
@@ -510,6 +486,11 @@ fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<
 }
 
 pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
+    if let Some(profile) = &opts.required_profile {
+        profile.validate()?;
+    }
+    crate::share_fluent::validate(&opts.fluent_proofs)?;
+    crate::fluent::pending_config::storage::validate_requests(&opts.observable_configs)?;
     let graph = canonicalize_ntriples(&export_scope(
         store,
         &opts.scope,
@@ -546,6 +527,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         recipe.validate()?;
     }
     let mut manifest = ShareManifest {
+        required_profile: opts.required_profile.clone(),
+        observable_configs: opts.observable_configs.clone(),
+        fluent_proofs: opts.fluent_proofs.clone(),
         embedding,
         schema: "https://github.com/scbrown/quipu/share-manifest/v1".into(),
         share_id: String::new(),
@@ -723,3 +707,7 @@ mod tests;
 #[cfg(test)]
 #[path = "share/pointer_tests.rs"]
 mod pointer_tests;
+
+#[cfg(test)]
+#[path = "share/required_profile_tests.rs"]
+mod required_profile_tests;

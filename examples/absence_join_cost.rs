@@ -41,8 +41,7 @@ fn rows(
                     .iter()
                     .map(|v| {
                         row.get(v)
-                            .map(|value| text(store, value))
-                            .unwrap_or_default()
+                            .map_or_else(Default::default, |value| text(store, value))
                     })
                     .collect()
             })

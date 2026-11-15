@@ -256,7 +256,7 @@ qp project
 
 ## `qp report`
 
-Report hubs, surprising links and open questions in the graph.
+Report graph hubs and questions, or public operational SLO history.
 
 ```text
 qp report
@@ -271,6 +271,14 @@ qp report
 - `--surprises <VALUE>`: Number of surprising relationships in the report.
 
 - `--questions <VALUE>`: Number of suggested questions in the report.
+
+- `--prometheus <VALUE>`: Prometheus base URL for a public SLO report (no credentials in URL).
+
+- `--days <VALUE>`: Public SLO report window in complete UTC days (1-90; default 30).
+
+- `--end <VALUE>`: Public SLO report end at a past RFC3339 UTC midnight.
+
+- `--public`: Read public operational SLO history without opening the graph.
 
 ## `qp reason`
 
@@ -1904,7 +1912,23 @@ qp trust-root status
 
 Create, label, list, import, freeze and thaw named graphs and overlays.
 
-Subcommands: `graph create`, `graph label`, `graph list`, `graph import`, `graph freeze`, `graph thaw`, `graph overlay-create`, `graph overlay-write`, `graph overlay-compose`.
+Subcommands: `graph writer-instance`, `graph writer-grant`, `graph create`, `graph label`, `graph list`, `graph import`, `graph freeze`, `graph thaw`, `graph overlay-create`, `graph overlay-write`, `graph overlay-compose`.
+
+### `qp graph writer-instance`
+
+Read a local committed graph instance pin for owner enrollment.
+
+```text
+qp graph writer-instance <iri>
+```
+
+### `qp graph writer-grant`
+
+Apply an owner-local scoped writer grant revision or revocation.
+
+```text
+qp graph writer-grant <grant.json>
+```
 
 ### `qp graph create`
 

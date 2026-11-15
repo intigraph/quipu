@@ -160,6 +160,7 @@ fn payload_bytes(value: Option<&Value>) -> usize {
     match value {
         Some(Value::Str(s)) => s.capacity(),
         Some(Value::Bytes(s)) => s.capacity(),
+        Some(Value::Triple(t)) => t.retained_bytes(),
         Some(Value::Lang { lexical, lang }) => lexical.capacity().saturating_add(lang.capacity()),
         Some(Value::Typed { lexical, datatype }) => {
             lexical.capacity().saturating_add(datatype.capacity())

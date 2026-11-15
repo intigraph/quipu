@@ -256,15 +256,12 @@ impl ShapeBounds {
                 .push((t.predicate.as_str().to_string(), t.object.clone()));
         }
         let get = |node: &str, pred: &str| -> Vec<&Term> {
-            props
-                .get(node)
-                .map(|ps| {
-                    ps.iter()
-                        .filter(|(p, _)| p == pred)
-                        .map(|(_, o)| o)
-                        .collect()
-                })
-                .unwrap_or_default()
+            props.get(node).map_or_else(Default::default, |ps| {
+                ps.iter()
+                    .filter(|(p, _)| p == pred)
+                    .map(|(_, o)| o)
+                    .collect()
+            })
         };
         let is_emit = |node: &str| {
             let values: Vec<&Term> = ON_VIOLATION.iter().flat_map(|p| get(node, p)).collect();
@@ -456,8 +453,7 @@ impl FocusView for TripleView {
         Ok(reaches(start, &class.to_string(), |c| {
             self.supers
                 .get(c)
-                .map(|s| s.iter().cloned().collect())
-                .unwrap_or_default()
+                .map_or_else(Default::default, |s| s.iter().cloned().collect())
         }))
     }
 

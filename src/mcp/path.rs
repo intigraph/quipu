@@ -22,12 +22,11 @@ fn string_list(input: &JsonValue, key: &str) -> Vec<String> {
     input
         .get(key)
         .and_then(|v| v.as_array())
-        .map(|arr| {
+        .map_or_else(Default::default, |arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// MCP tool: `quipu_path_cone` — which steps did the verified result depend on?

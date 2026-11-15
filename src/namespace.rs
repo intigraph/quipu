@@ -64,6 +64,9 @@ pub const QUECHUA: &str = "https://scbrown.github.io/quechua/ns#";
 
 pub const QUIPU: &str = "https://quipu.dev/ontology/";
 
+/// Stable public namespace for new fluent vocabulary; legacy terms stay in QUIPU.
+pub const QUIPU_FLUENT: &str = "https://w3id.org/intigraph/quipu/ns#";
+
 // ── Graph labels (quipu #65) ───────────────────────────────────
 //
 // The reserved meta-graph and the three label-axis predicates from
@@ -235,6 +238,24 @@ pub fn is_integer_datatype(dt: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fluent_opt_in_uses_stable_vocabulary_without_aliasing_legacy_annotations() {
+        let annotation = |prefix: &str| {
+            format!(
+                "<urn:shape> <http://www.w3.org/ns/shacl#path> <urn:count>; \
+                 <{prefix}currentValuePolicy> \"sum\" ."
+            )
+        };
+        let stable = crate::fluent::declarations(&annotation(QUIPU_FLUENT)).unwrap();
+        assert_eq!(stable.len(), 1);
+        assert_eq!(stable[0].policy, crate::fluent::Policy::Sum);
+        assert!(
+            crate::fluent::declarations(&annotation(QUIPU))
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn a_base_namespace_is_required_and_must_be_an_absolute_iri_prefix() {

@@ -222,8 +222,7 @@ pub(crate) fn pendant(request: Request, choices: &[Choice]) -> Result<Prepared> 
             let cells = old
                 .get(slot)
                 .and_then(Option::as_ref)
-                .map(|v| v.cells.clone())
-                .unwrap_or_default();
+                .map_or_else(Default::default, |v| v.cells.clone());
             prepared.prospective.retain(|t| {
                 !(t.subject.to_string() == slot.0 && t.predicate.as_str() == slot.1)
                     && !cells.contains(&t.subject.to_string())

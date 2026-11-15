@@ -107,6 +107,11 @@ unknown dependencies and cross-graph references atomically. `computedBy` and
 refuses missing inputs, and preserves original event provenance. This does not
 admit arbitrary code execution or turn sum-of-deltas into sum-of-snapshots.
 
+The source-stage [pending configuration path](fluent-pending-configuration.md)
+preserves exact request bytes across explicit transport. Configuration approval
+and its original acceptance receipt remain receiver-local; transporting a
+request does not register an observable or enroll a verifier.
+
 ## Activation and implementation gates
 
 SHACL covers structural fields and cardinalities only. It does not establish

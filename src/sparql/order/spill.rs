@@ -29,6 +29,7 @@ enum Atom {
     Float(u64),
     Bool(bool),
     Bytes(Vec<u8>),
+    Triple(Box<crate::rdf_triple::TripleValue>),
     Lang(String, String),
     Typed(String, String),
 }
@@ -41,6 +42,7 @@ impl Atom {
             Value::Float(x) => Self::Float(x.to_bits()),
             Value::Bool(x) => Self::Bool(x),
             Value::Bytes(x) => Self::Bytes(x),
+            Value::Triple(x) => Self::Triple(x),
             Value::Lang { lexical, lang } => Self::Lang(lexical, lang),
             Value::Typed { lexical, datatype } => Self::Typed(lexical, datatype),
         }
@@ -64,6 +66,7 @@ impl Record {
                 .saturating_add(match atom {
                     Some(Atom::Str(s)) => s.capacity(),
                     Some(Atom::Bytes(s)) => s.capacity(),
+                    Some(Atom::Triple(t)) => t.retained_bytes(),
                     Some(Atom::Lang(a, b) | Atom::Typed(a, b)) => {
                         a.capacity().saturating_add(b.capacity())
                     }
@@ -108,6 +111,7 @@ fn compare_atoms(a: Option<&Atom>, b: Option<&Atom>) -> Ordering {
             Atom::Float(x) => Value::Float(f64::from_bits(*x)),
             Atom::Bool(x) => Value::Bool(*x),
             Atom::Bytes(x) => Value::Bytes(x.clone()),
+            Atom::Triple(x) => Value::Triple(x.clone()),
             Atom::Lang(x, y) => Value::Lang {
                 lexical: x.clone(),
                 lang: y.clone(),

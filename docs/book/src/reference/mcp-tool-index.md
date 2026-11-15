@@ -94,7 +94,10 @@ Read whole transaction change pages. graph scopes an exact graph; use next_tx fo
 | `capture` | string: `new_values`, `old_and_new_values`, `new_row` | no |  |
 | `graph` | string | no |  |
 | `limit` | integer | no |  |
+| `member` | string | no |  |
+| `predicate` | string | no |  |
 | `since` | integer | no |  |
+| `subject` | string | no |  |
 
 ## `quipu_context`
 
@@ -939,6 +942,7 @@ Produce a bounded portable share payload, including canonical manifest and membe
 | `no_shapes` | boolean | no |  |
 | `parent_share` | string | no |  |
 | `queries` | array | no |  |
+| `required_profile` | object | no | Require the recipient to have this exact reviewed profile before import; does not install incoming shapes. |
 | `scope` | object | yes |  |
 | `shapes` | array | no |  |
 | `turtle_view` | boolean | no |  |

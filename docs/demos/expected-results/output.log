@@ -1,0 +1,8 @@
+Script started on 2026-11-13 01:08:51-05:00 [COMMAND="python3 docs/demos/expected-results/probe.py" <not executed on terminal>]
+BEFORE unexpected pass: old regression gate exit=0 (accepted)
+AFTER unexpected pass: strict expectation gate exit=1 (refused)
+suite.json: ('fixture', 'public', 'known-failure'): expected xfail, observed pass
+AFTER explicit expectation update: exit=0
+All pinned pass/xfail expectations match; no regression or unexpected pass.
+
+Script done on 2026-11-13 01:08:51-05:00 [COMMAND_EXIT_CODE="0"]

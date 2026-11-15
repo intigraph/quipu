@@ -23,7 +23,8 @@ Frames larger than 1 MiB terminate with an error event without acknowledging a
 cursor. This is an output budget, not a bound on the memory needed to read one
 large transaction. Consumers must refuse incomplete frames and retain the
 last applied cursor on errors, with bounded reconnect backoff. Event filters
-use `types` and `group`; transaction filters use `graph`. Combining unrelated
+use `types` and `group`; transaction filters use `graph`, `predicate`,
+`subject` and `member` (design: `docs/design/stream-filters.md`). Combining unrelated
 filter kinds is refused.
 
 Streaming is a source capability. Enabling a consumer, replaying production

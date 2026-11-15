@@ -39,7 +39,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('impact', 'impact', [CompletionResultType]::ParameterValue, 'Walk what depends on an entity, optionally after a speculative removal')
             [CompletionResult]::new('explain', 'explain', [CompletionResultType]::ParameterValue, 'Trace a derived fact back to its premises')
             [CompletionResult]::new('project', 'project', [CompletionResultType]::ParameterValue, 'Project the graph and run a graph algorithm such as PageRank')
-            [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Report hubs, surprising links and open questions in the graph')
+            [CompletionResult]::new('report', 'report', [CompletionResultType]::ParameterValue, 'Report graph hubs and questions, or public operational SLO history')
             [CompletionResult]::new('reason', 'reason', [CompletionResultType]::ParameterValue, 'Run Datalog rules to a fixpoint and persist the derivations')
             [CompletionResult]::new('demotions', 'demotions', [CompletionResultType]::ParameterValue, 'Read preserved unsupported demotions without materializing a closure')
             [CompletionResult]::new('episode', 'episode', [CompletionResultType]::ParameterValue, 'Ingest a structured episode of nodes and edges from JSON')
@@ -276,6 +276,10 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--hubs', '--hubs', [CompletionResultType]::ParameterName, 'Number of hubs in the report')
             [CompletionResult]::new('--surprises', '--surprises', [CompletionResultType]::ParameterName, 'Number of surprising relationships in the report')
             [CompletionResult]::new('--questions', '--questions', [CompletionResultType]::ParameterName, 'Number of suggested questions in the report')
+            [CompletionResult]::new('--prometheus', '--prometheus', [CompletionResultType]::ParameterName, 'Prometheus base URL for a public SLO report (no credentials in URL)')
+            [CompletionResult]::new('--days', '--days', [CompletionResultType]::ParameterName, 'Public SLO report window in complete UTC days (1-90; default 30)')
+            [CompletionResult]::new('--end', '--end', [CompletionResultType]::ParameterName, 'Public SLO report end at a past RFC3339 UTC midnight')
+            [CompletionResult]::new('--public', '--public', [CompletionResultType]::ParameterName, 'Read public operational SLO history without opening the graph')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1463,6 +1467,8 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('writer-instance', 'writer-instance', [CompletionResultType]::ParameterValue, 'Read a local committed graph instance pin for owner enrollment')
+            [CompletionResult]::new('writer-grant', 'writer-grant', [CompletionResultType]::ParameterValue, 'Apply an owner-local scoped writer grant revision or revocation')
             [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Register a committed named graph')
             [CompletionResult]::new('label', 'label', [CompletionResultType]::ParameterValue, 'Declare lattice labels on a registered graph')
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List registered named graphs')
@@ -1472,6 +1478,18 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('overlay-create', 'overlay-create', [CompletionResultType]::ParameterValue, 'Create an overlay graph bound to a committed parent')
             [CompletionResult]::new('overlay-write', 'overlay-write', [CompletionResultType]::ParameterValue, 'Assert, retract or tombstone a triple in an overlay')
             [CompletionResult]::new('overlay-compose', 'overlay-compose', [CompletionResultType]::ParameterValue, 'Resolve an overlay''s composed view over its parent')
+            break
+        }
+        'qp;graph;writer-instance' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;graph;writer-grant' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;create' {

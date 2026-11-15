@@ -38,13 +38,15 @@ fn refused(why: impl std::fmt::Display) -> Error {
 }
 
 /// A live witness read for the inventory's profile name. Implementations are
-/// deployment wiring; doubt of any kind is `Unknown`.
+/// deployment wiring; doubt of any kind is `Unknown`. `nonce` is the fresh
+/// startup nonce written into the receipt for this exact read.
 pub(crate) trait WitnessSource {
     fn head_evidence(
         &self,
         profile: &str,
         store_id: &str,
         anchor: u64,
+        nonce: &[u8; 32],
     ) -> Reply<(WitnessHead, Vec<(String, String)>)>;
 }
 
@@ -55,7 +57,7 @@ pub(crate) struct EnrolledStartup<'a> {
 }
 
 /// Proof that this process completed S1 for one database just now. Private
-/// fields, no Clone/Default/Deserialize; consumed by [`Admission::install`].
+/// fields, no Clone/Default/Deserialize; consumed by `CommitFence::pin_admitted`.
 pub(super) struct Admission {
     canonical: PathBuf,
     database: Database,
@@ -79,15 +81,10 @@ impl Admission {
         }
         Ok(())
     }
-    /// Install the generation pin and admitted binding on `fence`, then
-    /// release the startup latch. The latch outlives the installation.
-    pub(super) fn install(self, fence: &super::ownership_fence::CommitFence) -> Result<()> {
-        fence.pin_admitted(
-            self.journal.clone(),
-            self.authority.clone(),
-            self.binding.clone(),
-        )
-        // self (and its latch) drops here, after the pin exists.
+    /// Borrow the checked pin data without releasing the startup latch.
+    /// Only `admit` can construct the enclosing proof.
+    pub(super) fn pin_parts(&self) -> (&Path, &Authority, &Binding) {
+        (&self.journal, &self.authority, &self.binding)
     }
 }
 
@@ -296,6 +293,7 @@ pub(super) fn admit(path: &Path, config: &EnrolledStartup<'_>) -> Result<Admissi
         &entry.witness,
         &authority.store_id,
         authority.generation,
+        &nonce,
     ) {
         Reply::Ok(evidence) => evidence,
         Reply::Conflict => return Err(refused("witness lineage conflict")),

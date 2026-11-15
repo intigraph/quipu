@@ -190,11 +190,9 @@ pub fn resolve_episode_nodes(
         .map(|n| NodeQuery {
             name: &n.name,
             iri: crate::episode::address::resolved_node_iri(n, base_ns),
-            properties: n
-                .description
-                .as_ref()
-                .map(|d| vec![("description".to_string(), d.clone())])
-                .unwrap_or_default(),
+            properties: n.description.as_ref().map_or_else(Default::default, |d| {
+                vec![("description".to_string(), d.clone())]
+            }),
             declared_distinct: &n.distinct_from,
         })
         .collect();

@@ -63,3 +63,42 @@ pub(super) fn operand<'r>(
         _ => eval_expr(store, expr, row).map(Operand::Owned),
     }
 }
+
+/// Shared value semantics for interpreted and slot-indexed comparisons.
+pub(in crate::sparql) fn equal(a: &Value, b: &Value) -> Option<bool> {
+    if a == b {
+        return Some(true);
+    }
+    if let Some(order) = super::temporal_equality_order(a, b) {
+        return order.map(|o| o == std::cmp::Ordering::Equal);
+    }
+    Some(crate::numeric_value::equal(a, b))
+}
+
+pub(in crate::sparql) fn compare(
+    a: &Value,
+    b: &Value,
+    pred: impl Fn(std::cmp::Ordering) -> bool,
+) -> Option<bool> {
+    if a.datatype()
+        .is_some_and(crate::namespace::is_numeric_datatype)
+        && b.datatype()
+            .is_some_and(crate::namespace::is_numeric_datatype)
+    {
+        return Some(crate::numeric_value::compare(a, b).is_some_and(pred));
+    }
+    // Temporal literals compare by VALUE (aegis-jd2t): offsets normalised, an
+    // ill-typed lexeme, a mixed pair or an indeterminate (timezoned against
+    // untimezoned) comparison is the SPARQL type error (`None`), so it fails
+    // under `!` as well (aegis-u93). A lexical compare ordered 06:00-05:00
+    // before 10:00Z and let "not-a-time" pass.
+    if let Some(order) = super::temporal_order(a, b) {
+        return order.map(pred);
+    }
+    // String comparison uses the LEXICAL form, so "hello"@en compares as
+    // "hello" (it used to compare as "hello@en").
+    Some(match (a.as_lexical(), b.as_lexical()) {
+        (Some(a), Some(b)) => pred(a.cmp(b)),
+        _ => false,
+    })
+}

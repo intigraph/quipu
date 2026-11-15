@@ -1,0 +1,7 @@
+Script started on 2026-11-09 20:27:24-05:00 [COMMAND="just deploy-skip demo" <not executed on terminal>]
+BASE ce86ba4cc1b5bf0bcf98a67c2de8a6e1f075946b standing prefix job present: False
+CANDIDATE safe fixture: {'prefixes': ['benchmark/census/agent/'], 'sources': 3, 'include_controls': 1}
+A introduces include: REFUSED: prefix root referenced in build inputs: src/lib.rs:1
+B changes data only: REFUSED: prefix root referenced in build inputs: src/lib.rs:1
+
+Script done on 2026-11-09 20:27:24-05:00 [COMMAND_EXIT_CODE="0"]

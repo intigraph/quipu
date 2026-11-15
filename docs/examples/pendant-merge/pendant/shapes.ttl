@@ -1,0 +1,8 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <https://example.org/roster#> .
+
+# A service has exactly one owner at a time. Two branches that each name a
+# different owner cannot both be right, so the merge must stop and ask.
+ex:ServiceShape a sh:NodeShape ;
+    sh:targetClass ex:Service ;
+    sh:property [ sh:path ex:owner ; sh:maxCount 1 ] .

@@ -249,6 +249,10 @@ macro_rules! embed_handler {
                 quipu::search_trace::run(endpoint, queued, || {
                     let original = i.clone();
                     let mut i = i;
+                    // Only this handler may mark an embedding as server-derived.
+                    if let Some(obj) = i.as_object_mut() {
+                        obj.remove(quipu::SERVER_DERIVED_EMBEDDING);
+                    }
                     let no_embed = if stringify!($name) == "search" {
                         let config = &s.search_config;
                         let configured_mode = if config.mode == "hybrid" && !config.hybrid {
@@ -289,6 +293,12 @@ macro_rules! embed_handler {
                                 drop(embedding_trace);
                                 if let Some(obj) = i.as_object_mut() {
                                     obj.insert("embedding".to_string(), serde_json::json!(vec));
+                                    if stringify!($name) == "search" {
+                                        obj.insert(
+                                            quipu::SERVER_DERIVED_EMBEDDING.to_string(),
+                                            serde_json::json!(true),
+                                        );
+                                    }
                                 }
                             }
                         }

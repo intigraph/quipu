@@ -41,7 +41,7 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "unravel" -d 'Show facts
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "impact" -d 'Walk what depends on an entity, optionally after a speculative removal'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "explain" -d 'Trace a derived fact back to its premises'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "project" -d 'Project the graph and run a graph algorithm such as PageRank'
-complete -c quipu -n "__fish_quipu_needs_command" -f -a "report" -d 'Report hubs, surprising links and open questions in the graph'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "report" -d 'Report graph hubs and questions, or public operational SLO history'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "reason" -d 'Run Datalog rules to a fixpoint and persist the derivations'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "demotions" -d 'Read preserved unsupported demotions without materializing a closure'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "episode" -d 'Ingest a structured episode of nodes and edges from JSON'
@@ -199,6 +199,10 @@ complete -c quipu -n "__fish_quipu_using_subcommand report" -l predicate -d 'Pre
 complete -c quipu -n "__fish_quipu_using_subcommand report" -l hubs -d 'Number of hubs in the report' -r
 complete -c quipu -n "__fish_quipu_using_subcommand report" -l surprises -d 'Number of surprising relationships in the report' -r
 complete -c quipu -n "__fish_quipu_using_subcommand report" -l questions -d 'Number of suggested questions in the report' -r
+complete -c quipu -n "__fish_quipu_using_subcommand report" -l prometheus -d 'Prometheus base URL for a public SLO report (no credentials in URL)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand report" -l days -d 'Public SLO report window in complete UTC days (1-90; default 30)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand report" -l end -d 'Public SLO report end at a past RFC3339 UTC midnight' -r
+complete -c quipu -n "__fish_quipu_using_subcommand report" -l public -d 'Read public operational SLO history without opening the graph'
 complete -c quipu -n "__fish_quipu_using_subcommand report" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand reason" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand reason" -l rules -d 'Rule set to load or evaluate' -r
@@ -825,17 +829,23 @@ complete -c quipu -n "__fish_quipu_using_subcommand trust-root; and __fish_seen_
 complete -c quipu -n "__fish_quipu_using_subcommand trust-root; and __fish_seen_subcommand_from bootstrap" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand trust-root; and __fish_seen_subcommand_from status" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand trust-root; and __fish_seen_subcommand_from status" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "create" -d 'Register a committed named graph'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "label" -d 'Declare lattice labels on a registered graph'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "list" -d 'List registered named graphs'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "import" -d 'Import another store file as a named graph'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "freeze" -d 'Freeze a graph\'s full history into a read-only archive pack'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "thaw" -d 'Restore a frozen graph from its archive pack'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "overlay-create" -d 'Create an overlay graph bound to a committed parent'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "overlay-write" -d 'Assert, retract or tombstone a triple in an overlay'
-complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "overlay-compose" -d 'Resolve an overlay\'s composed view over its parent'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "writer-instance" -d 'Read a local committed graph instance pin for owner enrollment'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "writer-grant" -d 'Apply an owner-local scoped writer grant revision or revocation'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "create" -d 'Register a committed named graph'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "label" -d 'Declare lattice labels on a registered graph'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "list" -d 'List registered named graphs'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "import" -d 'Import another store file as a named graph'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "freeze" -d 'Freeze a graph\'s full history into a read-only archive pack'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "thaw" -d 'Restore a frozen graph from its archive pack'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "overlay-create" -d 'Create an overlay graph bound to a committed parent'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "overlay-write" -d 'Assert, retract or tombstone a triple in an overlay'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and not __fish_seen_subcommand_from writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose" -f -a "overlay-compose" -d 'Resolve an overlay\'s composed view over its parent'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and __fish_seen_subcommand_from writer-instance" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and __fish_seen_subcommand_from writer-instance" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and __fish_seen_subcommand_from writer-grant" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand graph; and __fish_seen_subcommand_from writer-grant" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand graph; and __fish_seen_subcommand_from create" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand graph; and __fish_seen_subcommand_from create" -l actor -d 'Actor recorded in operation provenance' -r
 complete -c quipu -n "__fish_quipu_using_subcommand graph; and __fish_seen_subcommand_from create" -l timestamp -d 'Valid-time timestamp for the operation' -r

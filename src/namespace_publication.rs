@@ -6,7 +6,7 @@ use crate::{Error, Result, Store, entity_namespaces, share_scrub::ShareDestinati
 
 /// Decode common RDF, JSON and percent-encoded spellings before examining every
 /// emitted artifact, including nested manifest keys/values. Never rewrite output.
-fn decoded(text: &str) -> Result<String> {
+pub(crate) fn decoded(text: &str) -> Result<String> {
     let unicode =
         regex::Regex::new(r"\\(?:u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8}))").expect("constant regex");
     let pairs =

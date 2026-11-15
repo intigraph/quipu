@@ -132,6 +132,34 @@ pub fn serialize(
     result: &QueryResult,
     fmt: ResultFormat,
 ) -> Result<Option<(&'static str, Vec<u8>)>> {
+    serialize_bounded(store, result, fmt, usize::MAX)
+}
+
+/// Serialize through a writer that refuses before its buffer exceeds the cap.
+/// No partial body is returned on overflow; this does not meter evaluator heaps.
+pub(crate) fn serialize_bounded(
+    store: &Store,
+    result: &QueryResult,
+    fmt: ResultFormat,
+    max_bytes: usize,
+) -> Result<Option<(&'static str, Vec<u8>)>> {
+    if max_bytes == 0 {
+        return Err(Error::Serialization(
+            "zero response byte reservation".into(),
+        ));
+    }
+    serialize_with_limit(store, result, fmt, max_bytes)
+}
+
+#[path = "w3c_bounded_output.rs"]
+mod bounded_output;
+
+fn serialize_with_limit(
+    store: &Store,
+    result: &QueryResult,
+    fmt: ResultFormat,
+    max_bytes: usize,
+) -> Result<Option<(&'static str, Vec<u8>)>> {
     match (result, fmt) {
         (
             QueryResult::Select { variables, rows },
@@ -145,7 +173,7 @@ pub fn serialize(
                 .map(|v| Variable::new_unchecked(v.clone()))
                 .collect();
             let mut ser = QueryResultsSerializer::from_format(sparql_format(fmt))
-                .serialize_solutions_to_writer(Vec::new(), vars.clone())
+                .serialize_solutions_to_writer(bounded_output::Output::new(max_bytes), vars.clone())
                 .map_err(|e| Error::Serialization(format!("W3C results init: {e}")))?;
             for row in rows {
                 // Only bound variables appear in a row's map; unbound head vars
@@ -154,16 +182,16 @@ pub fn serialize(
                     .iter()
                     .filter_map(|var| {
                         row.get(var.as_str())
-                            .map(|val| (var, value_to_term(store, val)))
+                            .map(|val| value_to_term(store, val).map(|term| (var, term)))
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>>>()?;
                 ser.serialize(binding.iter().map(|(v, t)| (*v, t)))
                     .map_err(|e| Error::Serialization(format!("W3C results row: {e}")))?;
             }
             let body = ser
                 .finish()
                 .map_err(|e| Error::Serialization(format!("W3C results finish: {e}")))?;
-            Ok(Some((content_type(fmt), body)))
+            Ok(Some((content_type(fmt), body.into_bytes())))
         }
         (
             QueryResult::Ask(value),
@@ -173,9 +201,9 @@ pub fn serialize(
             | ResultFormat::Tsv,
         ) => {
             let body = QueryResultsSerializer::from_format(sparql_format(fmt))
-                .serialize_boolean_to_writer(Vec::new(), *value)
+                .serialize_boolean_to_writer(bounded_output::Output::new(max_bytes), *value)
                 .map_err(|e| Error::Serialization(format!("W3C ASK: {e}")))?;
-            Ok(Some((content_type(fmt), body)))
+            Ok(Some((content_type(fmt), body.into_bytes())))
         }
         (QueryResult::Graph(triples), ResultFormat::Turtle | ResultFormat::NTriples) => {
             let rdf_format = if fmt == ResultFormat::Turtle {
@@ -183,15 +211,16 @@ pub fn serialize(
             } else {
                 RdfFormat::NTriples
             };
-            let mut ser = RdfSerializer::from_format(rdf_format).for_writer(Vec::new());
+            let mut ser = RdfSerializer::from_format(rdf_format)
+                .for_writer(bounded_output::Output::new(max_bytes));
             for t in triples {
-                ser.serialize_triple(&triple_to_ox(store, t))
+                ser.serialize_triple(&triple_to_ox(store, t)?)
                     .map_err(|e| Error::Serialization(format!("W3C triple: {e}")))?;
             }
             let body = ser
                 .finish()
                 .map_err(|e| Error::Serialization(format!("W3C graph finish: {e}")))?;
-            Ok(Some((content_type(fmt), body)))
+            Ok(Some((content_type(fmt), body.into_bytes())))
         }
         // Format does not fit the result variant — caller falls back to bespoke.
         _ => Ok(None),
@@ -222,8 +251,8 @@ fn content_type(fmt: ResultFormat) -> &'static str {
 ///
 /// `Ref` becomes an IRI (`"type": "uri"`); everything else is a literal
 /// (`"type": "literal"`). This is the one distinction the bespoke shape loses.
-fn value_to_term(store: &Store, val: &Value) -> OxTerm {
-    match val {
+fn value_to_term(store: &Store, val: &Value) -> Result<OxTerm> {
+    Ok(match val {
         Value::Ref(id) => {
             let iri = store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}"));
             if let Some(identifier) = iri.strip_prefix("_:") {
@@ -232,6 +261,7 @@ fn value_to_term(store: &Store, val: &Value) -> OxTerm {
                 OxTerm::from(NamedNode::new_unchecked(iri))
             }
         }
+        Value::Triple(_) => return crate::rdf::value_to_term(store, val),
         Value::Str(s) => OxTerm::from(Literal::new_simple_literal(s.clone())),
         Value::Lang { lexical, lang } => Literal::new_language_tagged_literal(lexical, lang)
             .map_or_else(
@@ -251,7 +281,7 @@ fn value_to_term(store: &Store, val: &Value) -> OxTerm {
         Value::Bytes(b) => {
             OxTerm::from(Literal::new_simple_literal(format!("<{} bytes>", b.len())))
         }
-    }
+    })
 }
 
 /// Preserve the same historical Float lexical meaning as RDF export.
@@ -259,12 +289,12 @@ fn fmt_double(f: f64) -> String {
     f.to_string()
 }
 
-fn triple_to_ox(store: &Store, t: &Triple) -> OxTriple {
-    OxTriple::new(
+fn triple_to_ox(store: &Store, t: &Triple) -> Result<OxTriple> {
+    Ok(OxTriple::new(
         NamedNode::new_unchecked(t.subject.clone()),
         NamedNode::new_unchecked(t.predicate.clone()),
-        value_to_term(store, &t.object),
-    )
+        value_to_term(store, &t.object)?,
+    ))
 }
 
 #[cfg(test)]

@@ -40,9 +40,7 @@ impl Store {
             if deadline.is_some_and(|dl| dl.passed()) {
                 return Err(crate::error::Error::QueryTimeout {
                     elapsed_ms: started.elapsed_ms(),
-                    limit_ms: deadline
-                        .map(|dl| dl.millis_from(&started))
-                        .unwrap_or_default(),
+                    limit_ms: deadline.map_or_else(Default::default, |dl| dl.millis_from(&started)),
                 });
             }
             Ok(())

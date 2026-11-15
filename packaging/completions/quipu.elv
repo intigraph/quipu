@@ -36,7 +36,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand impact 'Walk what depends on an entity, optionally after a speculative removal'
             cand explain 'Trace a derived fact back to its premises'
             cand project 'Project the graph and run a graph algorithm such as PageRank'
-            cand report 'Report hubs, surprising links and open questions in the graph'
+            cand report 'Report graph hubs and questions, or public operational SLO history'
             cand reason 'Run Datalog rules to a fixpoint and persist the derivations'
             cand demotions 'Read preserved unsupported demotions without materializing a closure'
             cand episode 'Ingest a structured episode of nodes and edges from JSON'
@@ -253,6 +253,10 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --hubs 'Number of hubs in the report'
             cand --surprises 'Number of surprising relationships in the report'
             cand --questions 'Number of suggested questions in the report'
+            cand --prometheus 'Prometheus base URL for a public SLO report (no credentials in URL)'
+            cand --days 'Public SLO report window in complete UTC days (1-90; default 30)'
+            cand --end 'Public SLO report end at a past RFC3339 UTC midnight'
+            cand --public 'Read public operational SLO history without opening the graph'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1306,6 +1310,8 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand writer-instance 'Read a local committed graph instance pin for owner enrollment'
+            cand writer-grant 'Apply an owner-local scoped writer grant revision or revocation'
             cand create 'Register a committed named graph'
             cand label 'Declare lattice labels on a registered graph'
             cand list 'List registered named graphs'
@@ -1315,6 +1321,16 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand overlay-create 'Create an overlay graph bound to a committed parent'
             cand overlay-write 'Assert, retract or tombstone a triple in an overlay'
             cand overlay-compose 'Resolve an overlay''s composed view over its parent'
+        }
+        &'quipu;graph;writer-instance'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;graph;writer-grant'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'quipu;graph;create'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
