@@ -102,8 +102,7 @@ fn run(request: &Request) -> Res<serde_json::Value> {
     let mut store = Store::open(db.to_str().ok_or("scratch path encoding")?)?;
     let bound = request
         .max_count
-        .map(|n| format!("; sh:maxCount {n}"))
-        .unwrap_or_default();
+        .map_or_else(String::new, |n| format!("; sh:maxCount {n}"));
     let shapes = format!(
         "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:oracle:S> a sh:NodeShape ; sh:targetSubjectsOf <{PREDICATE}> ; sh:property [ sh:path <{PREDICATE}> {bound} ] ."
     );
