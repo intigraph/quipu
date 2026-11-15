@@ -613,3 +613,123 @@ async fn a_verified_signed_write_counts_complete_and_headers_alone_do_not() {
         .unwrap();
     assert_eq!(body(response).await, "partial|agent,session");
 }
+
+#[tokio::test]
+async fn observed_identity_preserves_identity_and_replay_refusal() {
+    use crate::auth_phase::Observation;
+    use tower::ServiceExt;
+    let (app, key, binding) = identity_router(false);
+    let nonce = "00000000000000000000000000000071";
+    let observation = Observation::default();
+    let mut request = identity_request(&key, &binding, nonce, Some("synthetic-other"));
+    request.extensions_mut().insert(observation.clone());
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let value: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["principal"], "synthetic-owner");
+    let mut phases = serde_json::json!({});
+    observation.annotate(&mut phases);
+    assert_eq!(phases["auth_phase_started"], 255);
+    assert_eq!(phases["auth_phase_complete"], 255);
+    assert!(
+        phases["auth_phase_us"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(serde_json::Value::is_u64)
+    );
+
+    let replay_observation = Observation::default();
+    let mut replay = identity_request(&key, &binding, nonce, None);
+    replay.extensions_mut().insert(replay_observation.clone());
+    assert_eq!(
+        app.oneshot(replay).await.unwrap().status(),
+        axum::http::StatusCode::UNAUTHORIZED
+    );
+    let mut phases = serde_json::json!({});
+    replay_observation.annotate(&mut phases);
+    assert_eq!(phases["auth_phase_started"], 1);
+    assert_eq!(phases["auth_phase_complete"], 1);
+    assert!(phases["auth_phase_us"][4].is_null());
+}
+
+#[tokio::test]
+async fn observed_post_handler_lock_wait_survives_http_cancellation() {
+    use crate::auth_phase::Observation;
+    use tower::ServiceExt;
+    let (store, key, binding) = identity_fixture();
+    let (held_tx, held_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+    let store_for_handler = store.clone();
+    let channels = Arc::new(std::sync::Mutex::new(Some((
+        held_tx, held_rx, release_rx, done_tx,
+    ))));
+    let app = axum::Router::new()
+        .route(
+            "/identity",
+            axum::routing::post(move || {
+                let store = store_for_handler.clone();
+                let (held, held_rx, release, done) = channels.lock().unwrap().take().unwrap();
+                async move {
+                    std::thread::spawn(move || {
+                        let guard = store.writer.lock();
+                        let _ = held.send(());
+                        // A failed assertion cannot leave this thread holding the lock forever.
+                        let _ = release.recv_timeout(std::time::Duration::from_secs(5));
+                        drop(guard);
+                        let _ = done.send(());
+                    });
+                    // The handler returns only once the independent lock holder is in place.
+                    held_rx.await.unwrap();
+                    axum::http::StatusCode::OK
+                }
+            }),
+        )
+        .layer(axum::middleware::from_fn(move |req, next| {
+            super::handle(store.clone(), false, req, next)
+        }));
+    let observation = Observation::default();
+    let mut request = identity_request(&key, &binding, "00000000000000000000000000000072", None);
+    request.extensions_mut().insert(observation.clone());
+    let task = tokio::spawn(app.oneshot(request));
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let mut phases = serde_json::json!({});
+            observation.annotate(&mut phases);
+            if phases["auth_phase_started"].as_u64().unwrap() & 64 != 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    let mut phases = serde_json::json!({});
+    observation.annotate(&mut phases);
+    assert_eq!(phases["auth_phase_started"], 127);
+    assert_eq!(phases["auth_phase_complete"], 63);
+    assert!(phases["auth_phase_us"][6].is_u64());
+    assert!(phases["auth_phase_us"][7].is_null());
+    release_tx.send(()).unwrap();
+    done_rx.await.unwrap();
+    // Detached settlement must finish after cancellation; zero is not imputed.
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            observation.annotate(&mut phases);
+            if phases["auth_phase_complete"] == 255 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}

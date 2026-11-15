@@ -32,6 +32,7 @@ use quipu::transaction_auth::{AttestState, AttestationSlot, Identity, PendingAtt
 use quipu::verified_write::{ATTESTED_PATHS, MAX_SIGNED_BODY as MAX_BODY, SignedRequest};
 
 use crate::SharedStore;
+use crate::auth_phase::{Observation, Phase};
 
 /// The header carrying `base64url(JSON AttestationEnvelope)`, unpadded.
 pub(crate) const HEADER: &str = "x-quipu-attestation";
@@ -42,9 +43,18 @@ pub(crate) async fn handle(
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
+    let observation = req.extensions().get::<Observation>().cloned();
+    if let Some(trace) = &observation {
+        trace.start(Phase::Verify);
+    }
     let (pending, identity, req) = match verify(&store, keys_required, req).await {
         Ok(verified) => verified,
-        Err(refusal) => return refuse(&refusal),
+        Err(refusal) => {
+            if let Some(trace) = &observation {
+                trace.finish(Phase::Verify);
+            }
+            return refuse(&refusal);
+        }
     };
     let mut req = req;
     req.extensions_mut()
@@ -54,10 +64,16 @@ pub(crate) async fn handle(
     // The verified binding names the writer, so the write is counted with that
     // agent and session even though a signed client omits those headers
     // (aegis-7zp4rc.2).
+    if let Some(trace) = &observation {
+        trace.start(Phase::Handler);
+    }
     let mut response = crate::request_middleware::with_verified_write_identity(
         super::run_identified(Some(identity), next.run(req)),
     )
     .await;
+    if let Some(trace) = &observation {
+        trace.finish(Phase::Handler);
+    }
     if let AttestState::Refused { verdict, message } = pending.state() {
         return refuse(&Refusal { verdict, message });
     }
@@ -67,7 +83,7 @@ pub(crate) async fn handle(
     // replayable against a later state, so answer INDETERMINATE (503) rather
     // than 2xx. That loses nothing and a client re-signs (malcolm, bys8d1).
     let was_unspent = pending.state() == AttestState::Unspent;
-    if let Err(e) = spend_durably(&store, &pending).await {
+    if let Err(e) = spend_durably(&store, &pending, observation).await {
         eprintln!(
             "{} signed write: durable nonce spend failed for session {}: {e}",
             quipu::time::now_iso(),
@@ -99,6 +115,7 @@ async fn verify(
     keys_required: bool,
     req: axum::extract::Request,
 ) -> Result<Verified, Refusal> {
+    let observation = req.extensions().get::<Observation>().cloned();
     let invalid = |message: &str| Refusal {
         verdict: "invalid",
         message: message.to_owned(),
@@ -200,13 +217,31 @@ async fn verify(
         checked.key_id.clone(),
         checked.introducer.clone(),
     );
+    if let Some(trace) = &observation {
+        trace.finish(Phase::Verify);
+    }
     if read_route {
         // Reads never enter the writer barrier in their handler. Settle before
         // dispatch, using the existing atomic binding re-check and nonce spend.
         // A post-handler INSERT OR IGNORE cannot exclude concurrent readers.
         let (store, pending) = (store.clone(), pending.clone());
+        if let Some(trace) = &observation {
+            trace.start(Phase::PreDispatch);
+        }
         tokio::task::spawn_blocking(move || {
-            let result = store.lock().settle_attestation(&pending);
+            if let Some(trace) = &observation {
+                trace.transition(Phase::PreDispatch, Phase::PreWait);
+            }
+            let guard = store.lock_observed(|| {
+                if let Some(trace) = &observation {
+                    trace.transition(Phase::PreWait, Phase::PreHeld);
+                }
+            });
+            let result = guard.settle_attestation(&pending);
+            drop(guard);
+            if let Some(trace) = &observation {
+                trace.finish(Phase::PreHeld);
+            }
             match pending.state() {
                 AttestState::Refused { verdict, message } => Err(Refusal { verdict, message }),
                 _ => result.map_err(|e| Refusal {
@@ -244,12 +279,34 @@ fn decode(header: &str) -> Result<AttestationEnvelope, Refusal> {
         .map_err(|e| invalid(format!("{HEADER} is not an attestation envelope: {e}")))
 }
 
-async fn spend_durably(store: &SharedStore, pending: &PendingAttestation) -> quipu::Result<bool> {
+async fn spend_durably(
+    store: &SharedStore,
+    pending: &PendingAttestation,
+    observation: Option<Observation>,
+) -> quipu::Result<bool> {
     let store = store.clone();
     let (session, nonce) = (pending.session.clone(), pending.nonce.clone());
-    crate::base::spawn_tracked(move || store.lock().attestation_ensure_spent(&session, &nonce))
-        .await
-        .map_err(|e| quipu::Error::InvalidValue(format!("durable nonce spend failed: {e}")))?
+    if let Some(trace) = &observation {
+        trace.start(Phase::PostDispatch);
+    }
+    crate::base::spawn_tracked(move || {
+        if let Some(trace) = &observation {
+            trace.transition(Phase::PostDispatch, Phase::PostWait);
+        }
+        let guard = store.lock_observed(|| {
+            if let Some(trace) = &observation {
+                trace.transition(Phase::PostWait, Phase::PostHeld);
+            }
+        });
+        let result = guard.attestation_ensure_spent(&session, &nonce);
+        drop(guard);
+        if let Some(trace) = &observation {
+            trace.finish(Phase::PostHeld);
+        }
+        result
+    })
+    .await
+    .map_err(|e| quipu::Error::InvalidValue(format!("durable nonce spend failed: {e}")))?
 }
 
 fn refuse(refusal: &Refusal) -> Response {

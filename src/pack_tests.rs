@@ -57,6 +57,19 @@ fn tmp(name: &str) -> Tmp {
     Tmp { _dir: dir, path }
 }
 
+/// Sidecar cleanup fixtures must satisfy the writer authority-file contract.
+fn lease_fixture(path: impl AsRef<std::path::Path>) {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path).unwrap();
+    std::io::Write::write_all(&mut file, b"fixture").unwrap();
+}
+
 /// A store with one labelled graph holding two triples, one of them an
 /// object-position REFERENCE (the `Ref` BLOB that cannot be remapped in SQL).
 fn producer(extra_terms: usize) -> Store {
@@ -147,6 +160,8 @@ fn the_label_is_part_of_the_content() {
 fn a_pack_round_trips_and_verifies_and_leaves_no_wal_siblings() {
     let store = producer(0);
     let out = tmp("roundtrip");
+    // Exercise sidecar cleanup before a native writer-lease producer is enabled.
+    lease_fixture(format!("{out}.building.writer-lease"));
     let manifest = pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
 
     assert_eq!(manifest.source_graph, "urn:g:pack");
@@ -521,12 +536,22 @@ fn a_pack_built_as_bytes_attaches_to_a_native_store() {
 fn naming_a_shape_that_does_not_exist_is_refused() {
     let store = producer(0);
     let out = tmp("badshape");
+    let lease = format!("{out}.building.writer-lease");
+    lease_fixture(&lease);
     let opts = PackOptions {
         shapes: vec!["nope".into()],
         ..Default::default()
     };
     let err = pack(&store, "urn:g:pack", &out, &opts, TS).expect_err("no such shape");
     assert!(err.to_string().contains("no such shape"), "{err}");
+    assert!(
+        !std::path::Path::new(&lease).exists(),
+        "refusal leaked the build lease"
+    );
+    assert!(
+        !std::path::Path::new(&*out).exists(),
+        "refusal shipped a partial pack"
+    );
 }
 
 #[test]

@@ -110,6 +110,8 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("graphs", "class", TermIdKind::None),
     ("graphs", "parent_branch", TermIdKind::Id),
     ("graphs", "created_at", TermIdKind::None),
+    ("graph_creators", "g", TermIdKind::Id),
+    ("graph_creators", "actor", TermIdKind::None),
     ("shapes", "name", TermIdKind::None),
     ("shapes", "turtle", TermIdKind::None),
     ("shapes", "loaded_at", TermIdKind::None),

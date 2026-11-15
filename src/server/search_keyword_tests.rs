@@ -316,3 +316,107 @@ fn existing_store_needs_explicit_keyword_activation() {
     super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
     assert!(store.search_config().keyword);
 }
+
+struct FixedEmbed;
+
+impl EmbeddingProvider for FixedEmbed {
+    fn embed_text(&self, _: &str) -> quipu::Result<Vec<f32>> {
+        Ok(vec![1.0, 0.0])
+    }
+    fn dimension(&self) -> usize {
+        2
+    }
+}
+
+/// Serve `store` with a fixed provider and one labelled entity, then POST /search.
+async fn http_search_with_provider(
+    mut store: Store,
+    path: &str,
+    body: serde_json::Value,
+) -> serde_json::Value {
+    store.set_embedding_provider(Arc::new(FixedEmbed));
+    quipu::ingest_rdf(
+        &mut store,
+        br#"<urn:library> <http://www.w3.org/2000/01/rdf-schema#label> "Clockwork" ."#.as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let readers = super::super::ReadPool::open(path, &store, 1);
+    let shared = Arc::new(super::super::StoreHandle::serving(
+        store,
+        readers,
+        path,
+        Default::default(),
+    ));
+    super::super::tools::search(State(shared), axum::Json(body))
+        .await
+        .unwrap()
+        .0
+}
+
+/// aegis-t8gy: an existing store whose default keyword setting was suppressed
+/// at startup must SAY so on the HTTP route, instead of a silent semantic answer.
+#[tokio::test]
+async fn http_search_reports_suppressed_keyword_default_on_existing_store() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("existing.db");
+    let path = db.to_str().unwrap();
+    drop(Store::open(path).unwrap());
+    let mut store = Store::open(path).unwrap();
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    assert!(
+        !store.search_config().keyword,
+        "precondition: default suppressed"
+    );
+    let out = http_search_with_provider(store, path, json!({"query":"Clockwork"})).await;
+    let retrieval = &out["retrieval"];
+    assert_eq!(retrieval["embedding_source"], "server", "{out}");
+    assert_eq!(retrieval["mode"], "semantic", "{out}");
+    assert_eq!(retrieval["status"], "degraded", "{out}");
+    let keyword = &retrieval["backends"]["keyword"];
+    assert_eq!(keyword["default_suppressed"], true, "{out}");
+    assert_eq!(keyword["initialized"], false, "{out}");
+    let notice = retrieval["backends"]["notice"].as_str().unwrap();
+    assert!(notice.contains("keyword = true explicitly"), "{notice}");
+    assert!(notice.contains("quipu search-index backfill"), "{notice}");
+}
+
+/// Only the HTTP handler may mark an embedding as server-derived: a caller's
+/// copy of the marker is stripped and its vector keeps the caller contract.
+#[tokio::test]
+async fn http_search_strips_caller_supplied_server_embedding_marker() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("caller.db");
+    let path = db.to_str().unwrap();
+    let mut store = Store::open(path).unwrap();
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    let body = json!({"query":"Clockwork","embedding":[1.0,0.0],
+                      quipu::SERVER_DERIVED_EMBEDDING: true});
+    let out = http_search_with_provider(store, path, body).await;
+    assert!(out.get("retrieval").is_none(), "{out}");
+}
+
+/// A fresh store with a provider and a complete keyword index answers with an
+/// ok backend state and no notice.
+#[tokio::test]
+async fn http_search_reports_live_backends_without_notice() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("fresh-provider.db");
+    let path = db.to_str().unwrap();
+    let mut store = Store::open(path).unwrap();
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    let out = http_search_with_provider(store, path, json!({"query":"Clockwork"})).await;
+    let retrieval = &out["retrieval"];
+    assert_eq!(retrieval["embedding_source"], "server", "{out}");
+    assert_eq!(retrieval["status"], "ok", "{out}");
+    assert_eq!(retrieval["backends"]["keyword"]["complete"], true, "{out}");
+    assert_eq!(
+        retrieval["backends"]["semantic"]["provider_configured"], true,
+        "{out}"
+    );
+    assert!(retrieval["backends"].get("notice").is_none(), "{out}");
+}

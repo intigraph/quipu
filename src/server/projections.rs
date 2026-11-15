@@ -15,6 +15,11 @@
 //!   two; a dimension is a column name, `"key"`, or
 //!   `{"column": "<time column>", "bucket": "day"}` (the UTC calendar day).
 //!   Two dimensions answer `values` per group instead of `value`.
+//!   With `"certificate": {"class": "<IRI>", "unique": ["<column>", ...]}` the
+//!   answer also carries `certificate`, counted in the same snapshot over the
+//!   whole `graph`: `rows`, current class `members`, `members_without_key`,
+//!   `rows_without_class`, `key_not_plain`, per-unique-column `missing`,
+//!   `not_plain` and `duplicated`, and `tx`. It reports counts, not a verdict.
 //! - `{"action": "rows", ..., "after": {"entity": IRI, "graph": IRI}}` resumes
 //!   strictly after a truncated page's `next_after`. A page whose `tx`
 //!   differs from the first page's is another snapshot: restart, never splice.
@@ -85,7 +90,19 @@ pub(crate) async fn projections(
                     until: p.until,
                     max_groups: count(&i, "max_groups")?,
                 };
-                Ok(axum::Json(store.aggregate_projection(&def, &q)?))
+                match certificate(&i)? {
+                    None => Ok(axum::Json(store.aggregate_projection(&def, &q)?)),
+                    Some((class, unique)) => {
+                        let unique: Vec<&str> = unique.iter().map(String::as_str).collect();
+                        let cert = quipu::ProjectionCertificate {
+                            class: &class,
+                            unique: &unique,
+                        };
+                        Ok(axum::Json(
+                            store.aggregate_projection_certified(&def, &q, &cert)?,
+                        ))
+                    }
+                }
             }
             "rows" => {
                 let def = declared_def(&store, &i)?;
@@ -129,6 +146,37 @@ pub(crate) async fn projections(
         }
     })
     .await
+}
+
+/// The optional `certificate` request: a class IRI and unique column names.
+fn certificate(i: &JsonValue) -> Result<Option<(String, Vec<String>)>, quipu::Error> {
+    let bad = |m: &str| quipu::Error::InvalidValue(format!("certificate {m}"));
+    let c = match i.get("certificate") {
+        None | Some(JsonValue::Null) => return Ok(None),
+        Some(JsonValue::Object(c)) => c,
+        Some(_) => return Err(bad("must be an object")),
+    };
+    if let Some(k) = c.keys().find(|k| !matches!(k.as_str(), "class" | "unique")) {
+        return Err(bad(&format!("has unknown field {k:?}")));
+    }
+    let class = c
+        .get("class")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| bad("class must be an IRI string"))?
+        .to_string();
+    let unique = match c.get("unique") {
+        None | Some(JsonValue::Null) => Vec::new(),
+        Some(JsonValue::Array(a)) => a
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_string)
+                    .ok_or_else(|| bad("unique must list column names"))
+            })
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err(bad("unique must be an array of column names")),
+    };
+    Ok(Some((class, unique)))
 }
 
 fn declared_def(

@@ -14,12 +14,93 @@ pub(crate) fn read_lexical(store: &Store, read: impl FnOnce() -> Result<Value>) 
     Ok(response)
 }
 
+/// Request key the HTTP handler sets when it embedded the request's own
+/// `query` text outside the store lock. Such a vector is server-derived, not a
+/// caller vector contract. The handler strips any caller-supplied copy first.
+pub const SERVER_DERIVED_EMBEDDING: &str = "_quipu_server_derived_embedding";
+
+/// Cheap, per-request state of each configured search backend, with a
+/// plain-text notice when a configured backend is not live. Reads only the
+/// one-row lexical progress table; it never counts vectors or scans facts.
+pub(crate) fn backend_state(store: &Store) -> Result<Value> {
+    let config = store.search_config();
+    let progress = store.lexical_progress()?;
+    let initialized = progress.is_some();
+    let complete = progress.as_ref().is_some_and(|p| p.complete);
+    let provider = store.embedding_provider().is_some();
+    // Startup turns the default keyword setting off on a store that predates
+    // the index (only an explicit setting activates it there). That silent
+    // downgrade is the case callers most need told about.
+    let default_suppressed = !config.keyword && !config.keyword_explicit;
+    let notice = if default_suppressed {
+        Some(
+            "keyword search is off: this store predates the keyword index, so the default \
+             setting did not activate it and results are semantic-only; set \
+             [quipu.search] keyword = true explicitly and restart, then run \
+             `quipu search-index backfill --batch-size 500`",
+        )
+    } else if config.keyword && !initialized {
+        Some(
+            "keyword search is configured but its index is not initialized on this store, \
+             so results are semantic-only; set [quipu.search] keyword = true explicitly \
+             and restart, then run `quipu search-index backfill --batch-size 500`",
+        )
+    } else if config.keyword && !complete {
+        Some(
+            "keyword index is incomplete, so automatic search answers semantic-only; \
+             run `quipu search-index backfill --batch-size 500` until it completes, \
+             or request mode \"keyword\" explicitly",
+        )
+    } else if !provider {
+        Some("no embedding provider is configured, so semantic search is unavailable")
+    } else {
+        None
+    };
+    let mut state = json!({
+        "keyword": {
+            "configured": config.keyword,
+            "default_suppressed": default_suppressed,
+            "initialized": initialized,
+            "complete": complete,
+            "indexed_documents": progress.as_ref().map(|p| p.documents),
+        },
+        "semantic": {"provider_configured": provider},
+    });
+    if let Some(notice) = notice {
+        state["notice"] = json!(notice);
+    }
+    Ok(state)
+}
+
 pub(crate) fn run(
     store: &Store,
     input: &Value,
     semantic: impl FnOnce() -> Result<Value>,
 ) -> Result<Value> {
     super::search_confidence::Policy::parse(input)?;
+    // The HTTP route pre-embeds plain query text outside the store lock. That
+    // must not read as a caller vector contract with no backend state at all:
+    // answer the same semantic search, and say which backends are live. No
+    // lexical scan is added here; that would put a whole-store pass on every
+    // HTTP search.
+    if input.get(SERVER_DERIVED_EMBEDDING).and_then(Value::as_bool) == Some(true)
+        && input.get("embedding").is_some()
+        && input.get("query").and_then(Value::as_str).is_some()
+        && !["anchor", "structured_query", "filters", "mode"]
+            .iter()
+            .any(|key| input.get(*key).is_some())
+    {
+        let mut response = semantic()?;
+        let backends = backend_state(store)?;
+        let degraded = backends.get("notice").is_some();
+        response["retrieval"] = json!({
+            "mode": "semantic",
+            "status": if degraded { "degraded" } else { "ok" },
+            "embedding_source": "server",
+            "backends": backends,
+        });
+        return Ok(response);
+    }
     // Preserve explicit vector, structured and anchored contracts and their gates.
     if input.get("query").and_then(Value::as_str).is_none()
         || ["embedding", "anchor", "structured_query", "filters", "mode"]
