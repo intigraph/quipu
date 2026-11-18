@@ -91,6 +91,7 @@ mod cli_search;
 mod cli_share_diff;
 mod cli_share_review;
 mod cli_signer;
+mod cli_slo_report;
 mod cli_store;
 mod cli_trust_root;
 mod cli_validate;
@@ -129,6 +130,9 @@ fn main() {
     match args[1].as_str() {
         "fluent" => return cli_fluent::run(&args),
         "competency" => return cli_competency::run(&args),
+        "report" if args.iter().any(|arg| arg == "--public") => {
+            return cli_slo_report::run(&args);
+        }
         "install-alias" => return cli_alias::run(&args),
         "git-mergetool" => return cli_git_mergetool::run(&args),
         "git-merge" | "merge-driver" | "pendant-resolve" | "pendant-check" => {

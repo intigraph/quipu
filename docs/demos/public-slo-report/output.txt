@@ -1,0 +1,33 @@
+Script started on 2026-11-09 23:56:43-05:00 [COMMAND="bash docs/demos/public-slo-report/demo.sh" <not executed on terminal>]
+$ installed baseline: quipu version
+quipu 0.17.0
+git_sha: cd86223bd2afdce9ce616cdaa90825b6d23ab3ab
+git_dirty: false
+$ installed baseline: quipu report --public
+unknown option for report: --public
+Use qp --help for usage.
+exit: 2
+$ candidate: quipu report --public (private authenticated synthetic Prometheus fixture)
+{
+  "completed_requests_by_client": {
+    "client-bdc9ae1ea29f24ac95439140e22a499d": 10.0
+  },
+  "date": "1970-01-02",
+  "latency_seconds": {
+    "endpoint-7a0f074a4e856a41be3cb9f9d6916fae": {
+      "p50": 0.05,
+      "p95": 0.095,
+      "p99": 0.099
+    }
+  },
+  "query_samples": 2880.0,
+  "query_up": 1.0,
+  "scrape_samples": 1440.0,
+  "scrape_up": 1.0,
+  "search_samples": 2880.0,
+  "search_up": 1.0,
+  "window_end": "1970-01-03T00:00:00Z"
+}
+PASS actual CLI: eight authenticated reads; no graph/config open; private label controls; random maps; partial/redirect/size refusals; missing-data null
+
+Script done on 2026-11-09 23:56:44-05:00 [COMMAND_EXIT_CODE="0"]

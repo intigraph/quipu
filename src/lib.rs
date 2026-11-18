@@ -54,6 +54,10 @@ pub mod memory_files;
 pub mod merge3;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_adapters;
+/// Opt-in diagnostic projection of the common planner, without writer authority.
+#[cfg(feature = "merge-benchmark")]
+#[doc(hidden)]
+pub mod merge_benchmark;
 /// One merge write core: the merge spec's time, sequencing and report rules (aegis-karb.2).
 mod merge_core;
 #[cfg(not(target_arch = "wasm32"))]
@@ -112,6 +116,8 @@ pub mod write_base;
 pub mod write_kind;
 pub mod write_observation;
 pub mod write_provenance;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod writer_lock;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
 #[cfg(feature = "owl")]
@@ -149,6 +155,8 @@ pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
 pub mod grant_scope;
+/// Immutable admission plans for the per-graph writer pilot; not an activation API.
+pub mod graph_catalog;
 /// Inactive SQLite-only HA read profile; no serving adapter is installed.
 #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
 pub mod ha_read;

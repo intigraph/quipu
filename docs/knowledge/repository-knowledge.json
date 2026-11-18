@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "048c67da2e056a329583388aac461e9716f29f75ca501559b8213d4a7abbe776",
+      "source_sha256": "2385cc2c2f39410bfc6c3c81a4ed33b8c65e7cdfcb27e46e3fc57cd28da6eb7d",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,11 +35,11 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "16822b9c2a16e0eb7f90a34f17f208d527f897ae3e2a18c76c3fc5f29da74d51",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
-      }
+      },
+      "source_hash_mode": "release-bytes"
     },
     {
       "kind": "interface",
@@ -117,11 +117,11 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "623734b55ff65199716d29dcefb9d3224ccea56a3bd45e5008a45249c0d01e66",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
-      }
+      },
+      "source_hash_mode": "release-bytes"
     },
     {
       "kind": "interface",
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "b861bcb284af3dfba2568820040d86a102a1b779609a00f6ab73803e1c54d02b",
+      "source_sha256": "9228d48f0473bf9ed3b5caad1a84fba7316d02254d97fbcb772ba68a11bf8994",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "d6fa0ff3ad0d3de8471b123d131b9a39bc51af4f3620d693c5349376d0fee1b5",
+      "source_sha256": "9b73126f8829b80873681708e7f25627b44a21c6bbd3e3d05da2e36ac06ae578",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"

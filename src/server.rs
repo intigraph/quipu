@@ -1,12 +1,10 @@
 //! Quipu REST API server — HTTP interface to the knowledge graph.
 //! Usage: `quipu-server [--db <path>] [--bind <addr>]`
-
-use std::sync::Arc;
-
 use axum::{
     Router,
     routing::{get, post},
 };
+use std::sync::Arc;
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -58,6 +56,8 @@ mod knot_completion;
 #[cfg(test)]
 #[path = "server/knot_completion_tests.rs"]
 mod knot_completion_tests;
+#[path = "server/knot_durable.rs"]
+mod knot_durable;
 #[path = "server/mapping.rs"]
 mod mapping;
 #[path = "server/memory_files.rs"]
@@ -154,13 +154,12 @@ async fn main() {
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
 
-    // warn LOUDLY about documented, settable knobs this server does not
-    // act on (vector.backend = lancedb, federation.remotes), rather than accepting
-    // them and silently doing nothing.
+    // Warn about configured knobs this build does not act on.
     for warning in config.unwired_warnings() {
         eprintln!("warning: {warning}");
     }
 
+    let _writer_lock = replica::claim_writer_lock(&db_path, &config);
     let mut store = replica::open_store(&db_path, &config).unwrap_or_else(|e| {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);
@@ -296,15 +295,7 @@ async fn main() {
         Some(reasoner)
     };
 
-    // Apply the governance enforcement policy: when enabled, `boundary:"action"`
-    // policies gate every write (the loom's write-time gate, see
-    // docs/design/policy-edit-hooks.md).
-    store.governance_config_mut().clone_from(&config.governance);
-    if config.governance.enforce_on_write {
-        eprintln!(
-            "Governance write-enforcement enabled (action-boundary policies gate every write)"
-        );
-    }
+    base::apply_governance(&mut store, &config);
 
     match quipu::embedding_runtime::configure_provider(&mut store, &config.embedding) {
         Ok(status) => eprintln!("{status}"),
@@ -365,6 +356,7 @@ async fn main() {
 
     let relay = relay::open_configured(&store, &config);
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    handle.process_writer_lock = _writer_lock;
     handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
     handle.log_query_phases = config.server.log_query_phases;
@@ -488,6 +480,7 @@ async fn main() {
             push_store_outer,
             config.events.retention_days,
             &config.embedding,
+            read_only,
         );
     }
 

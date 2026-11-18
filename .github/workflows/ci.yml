@@ -43,6 +43,10 @@ jobs:
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     name: Select optional PR surfaces
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-pr-paths-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     outputs:
       wasm: ${{ steps.paths.outputs.wasm }}
     steps:
@@ -58,6 +62,10 @@ jobs:
   deploy-skip-proof:
     name: Deployment skip prefix proof
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-deploy-skip-proof-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -72,6 +80,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Typed SPARQL client builders
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-query-builders-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -99,6 +111,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Format
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-fmt-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -106,10 +122,35 @@ jobs:
           components: rustfmt
       - run: cargo fmt --check
 
+  writer-ownership:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    name: Writer ownership (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-writer-ownership-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: writer-ownership
+      - name: SQLite transactions, process contention, alias and lifetime controls
+        run: cargo test --locked --no-default-features --test writer_lock
+
   bundled-runtime:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     name: Bundled ONNX runtime (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-bundled-runtime-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -135,6 +176,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Clippy (${{ matrix.name }})
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-clippy-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     strategy:
       matrix:
         include:
@@ -180,6 +225,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Test (${{ matrix.name }})
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-test-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     env:
       # Serial feature builds must fit on the hosted runner together.
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -289,6 +338,10 @@ jobs:
     # Test jobs. Required through Release correctness.
     name: Generated docs drift
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-generated-docs-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
@@ -314,6 +367,10 @@ jobs:
     name: Extended feature surfaces
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-extended-features-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     env:
       # Serial feature builds need headroom for tests and cache compression.
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -368,6 +425,8 @@ jobs:
       # argument rests on them. Reuses the full-feature build just above.
       - name: quipu-server binary tests
         run: cargo test --features full --bin quipu-server
+      - name: Configured read-only retention preserves rows
+        run: cargo test --features full --test readonly_retention_server -- --test-threads=1
       - name: Reactive graph scope and withdrawal
         run: |
           cargo test --features full --test reactive_graph_scope
@@ -424,6 +483,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-build-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - name: Mirror acquisition controls
@@ -458,6 +521,10 @@ jobs:
     name: Build (full bundle)
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-build-full-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -511,6 +578,10 @@ jobs:
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-wasm-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -588,6 +659,10 @@ jobs:
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-wasm-explorer-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -609,6 +684,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Pre-commit checks
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-check-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -701,6 +780,10 @@ jobs:
   source-size:
     name: Source and shape invariants
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-source-size-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -746,6 +829,10 @@ jobs:
     name: Mixed load performance ratchet
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-load-test-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -808,6 +895,10 @@ jobs:
     name: String filter query performance gate
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-query-perf-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -886,6 +977,10 @@ jobs:
     name: Markdown lint
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-lint-markdown-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -909,6 +1004,10 @@ jobs:
   shacl-write-path:
     name: SHACL write-path conformance
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-shacl-write-path-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -962,9 +1061,13 @@ jobs:
 
   release-correctness:
     name: Release correctness
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
+    if: ${{ ((github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always())) && (github.event_name != 'pull_request' || !cancelled()) }}
     needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance, deploy-skip-proof]
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-release-correctness-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - name: Require every correctness job to pass
         env:
@@ -980,9 +1083,13 @@ jobs:
 
   extended-correctness:
     name: Extended correctness
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ (always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')) && (github.event_name != 'pull_request' || !cancelled()) }}
     needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-extended-correctness-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - name: Require every extended surface to pass
         env:
@@ -1000,6 +1107,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Repository pendant source controls
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-repository-pendant-source-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -1026,9 +1137,13 @@ jobs:
     name: Nightly correctness
     outputs:
       sha: ${{ steps.gate.outputs.sha }}
-    if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ (always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')) && (github.event_name != 'pull_request' || !cancelled()) }}
     needs: [fmt, query-builders, release-correctness, extended-correctness, bundled-runtime, wasm-explorer, nightly-wheels, nightly-merge-load, repository-pendant-source]
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-nightly-gate-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - name: Refuse failed, skipped or missing nightly suites
@@ -1042,6 +1157,10 @@ jobs:
     if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
     needs: nightly-gate
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-nightly-publish-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -1059,9 +1178,13 @@ jobs:
 
   nightly-failure:
     name: Track red nightly
-    if: ${{ always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (needs.nightly-gate.result != 'success' || needs.nightly-publish.result != 'success') }}
+    if: ${{ (always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (needs.nightly-gate.result != 'success' || needs.nightly-publish.result != 'success')) && (github.event_name != 'pull_request' || !cancelled()) }}
     needs: [nightly-gate, nightly-publish]
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-nightly-failure-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     permissions:
       contents: read
       issues: write

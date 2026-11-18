@@ -11,6 +11,26 @@ and one of the plan's own hypotheses does not survive it.
 
 ## Run
 
+The opt-in `unified-core` arm invokes the library's actual common slot planner:
+
+```bash
+cargo run --locked --example mergebench --features shacl,merge-benchmark -- --selftest
+cargo run --locked --example mergebench --features shacl,merge-benchmark -- --seed 42 --out <private-output-dir>
+```
+
+It is additional to `shape-aware`, which remains the historical reference
+implementation. Without `merge-benchmark` the planner arm is absent, never a
+successful empty row. Planner errors abort rather than publish partial metrics.
+These commands are a source contract, not a claim that this revision was run.
+
+The adapter projects real planned operations onto ground value sets at fixed
+synthetic times. A held conflict displays base, matching this benchmark's
+accounting convention; it does not mean a writer reverted ROOT. Cardinality
+comes from this synthetic arm's shapes, so the existing circularity limitation
+still applies. It measures neither profile admission nor transaction/history
+correctness. The use-case oracle, native share/fork/pendant adapters, explicit
+as-of reads and their path-specific reruns remain separate acceptance work.
+
 ```bash
 just bench merge                                   # seed 42, defaults
 just bench merge --seed 7 --entities 400 --edits 400 --overlap 0.8

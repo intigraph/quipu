@@ -1,0 +1,131 @@
+[
+  {
+    "merge": "1870c8b597447f2415ebe839023014988418eb5e",
+    "base": "a21ab30c7f1c8da20a9da656474ac21811edafc0",
+    "parents": [
+      "85bd2b5077647ad9d2c19f8925991f720f012f97",
+      "744ce7134786101b580ac447fa786cdf86ac7777"
+    ],
+    "records": [
+      {
+        "kind": "interface",
+        "source": "src/lib.rs",
+        "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+        "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
+        "source_sha256": "16822b9c2a16e0eb7f90a34f17f208d527f897ae3e2a18c76c3fc5f29da74d51",
+        "properties": {
+          "interfaceKind": "library",
+          "publicName": "quipu"
+        }
+      },
+      {
+        "kind": "interface",
+        "source": "src/lib.rs",
+        "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+        "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
+        "source_sha256": "7d5e6f25d351ee9e4f89dc298c3b33cbf18df7c231c8778c5908e15cfc726ec5",
+        "properties": {
+          "interfaceKind": "library",
+          "publicName": "quipu"
+        }
+      },
+      {
+        "kind": "interface",
+        "source": "src/lib.rs",
+        "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+        "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
+        "source_sha256": "536e4df8b365f9f37db15c2d283ff5a5b25d893a61b483a99c600d719c2d722d",
+        "properties": {
+          "interfaceKind": "library",
+          "publicName": "quipu"
+        }
+      }
+    ]
+  },
+  {
+    "merge": "6e55fd91380e8e92dc7c85248f5e5d29ca0704ce",
+    "base": "744ce7134786101b580ac447fa786cdf86ac7777",
+    "parents": [
+      "1870c8b597447f2415ebe839023014988418eb5e",
+      "1a343d4100d1ad5a79704cb0784a6fad90b8ca0d"
+    ],
+    "records": [
+      {
+        "kind": "interface",
+        "source": "docs/book/src/reference/rest-api.md",
+        "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
+        "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
+        "source_sha256": "9c0d380f6912d8d85ff7ea31093d39d7371d615df227c5dfe933a7d8feda734e",
+        "properties": {
+          "interfaceKind": "REST",
+          "publicName": "quipu-server HTTP"
+        }
+      },
+      {
+        "kind": "interface",
+        "source": "docs/book/src/reference/rest-api.md",
+        "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
+        "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
+        "source_sha256": "fa8a281aec8705ce8094994be14aabcc8476bef32cbddd41494bffc5dccf84a2",
+        "properties": {
+          "interfaceKind": "REST",
+          "publicName": "quipu-server HTTP"
+        }
+      },
+      {
+        "kind": "interface",
+        "source": "docs/book/src/reference/rest-api.md",
+        "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
+        "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
+        "source_sha256": "a710fbe9f7fc32efbfda40f28ee7c12c0701cc6c0a724e8d65fe9393e0841b1c",
+        "properties": {
+          "interfaceKind": "REST",
+          "publicName": "quipu-server HTTP"
+        }
+      }
+    ]
+  },
+  {
+    "merge": "e2d7b6e947f70dcf6d9e365c9deaaba8ea00474e",
+    "base": "a21ab30c7f1c8da20a9da656474ac21811edafc0",
+    "parents": [
+      "a3338f993e2dd95f36d1dcb1426bc514b8cc19cd",
+      "744ce7134786101b580ac447fa786cdf86ac7777"
+    ],
+    "records": [
+      {
+        "kind": "interface",
+        "source": "src/lib.rs",
+        "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+        "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
+        "source_sha256": "16822b9c2a16e0eb7f90a34f17f208d527f897ae3e2a18c76c3fc5f29da74d51",
+        "properties": {
+          "interfaceKind": "library",
+          "publicName": "quipu"
+        }
+      },
+      {
+        "kind": "interface",
+        "source": "src/lib.rs",
+        "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+        "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
+        "source_sha256": "f61afa050f2dbfd63c853dccd43aa74c52450ede0192c1bebb4c73544dba26e1",
+        "properties": {
+          "interfaceKind": "library",
+          "publicName": "quipu"
+        }
+      },
+      {
+        "kind": "interface",
+        "source": "src/lib.rs",
+        "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+        "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
+        "source_sha256": "536e4df8b365f9f37db15c2d283ff5a5b25d893a61b483a99c600d719c2d722d",
+        "properties": {
+          "interfaceKind": "library",
+          "publicName": "quipu"
+        }
+      }
+    ]
+  }
+]

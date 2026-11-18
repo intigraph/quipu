@@ -45,6 +45,10 @@ pub enum Disposition {
 pub const DECLARED: &[(&str, Disposition)] = &[
     // Local OWL resume/commit reconciliation belongs to this store generation;
     // importing it would authorize a foreign scratch cursor to skip assertions.
+    // Receiver attempts are local execution authority, bound to this store/epoch.
+    // A portable reconstruction must not import tickets or completion claims;
+    // missing local evidence stays UNKNOWN, never permission to replay.
+    ("knot_attempts", Disposition::Excluded),
     ("owl_batch_receipts", Disposition::Excluded),
     ("owl_page_job", Disposition::Excluded),
     ("owl_page_queue", Disposition::Excluded),

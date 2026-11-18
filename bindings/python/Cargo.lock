@@ -1789,7 +1789,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "base64 0.22.1",
  "bigdecimal",
@@ -1834,7 +1834,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-kg"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "pyo3",
  "quipu-ai",
@@ -2738,7 +2738,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

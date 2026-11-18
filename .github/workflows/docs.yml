@@ -66,6 +66,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build docs
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-build-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     outputs:
       release_report_ready: ${{ steps.conformance.outputs.ready }}
     steps:
@@ -225,6 +229,10 @@ jobs:
     if: github.ref == 'refs/heads/main' && needs.build.outputs.release_report_ready == 'true'
     needs: [build]
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-deploy-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

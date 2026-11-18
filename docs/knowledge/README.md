@@ -22,9 +22,31 @@ Generate and commit the references with `just docs generate` before cutting the
 release; `just docs generated-check` verifies the committed copies.
 It also generates man pages and completions using the catalogue's per-flag help;
 the CLI help and generated command index use those same descriptions.
-When a reference or primer changes, review its registry summary and update that
-record's `source_sha256` in `repository-knowledge.json`. A stale source witness
-refuses the build rather than silently binding a summary to different bytes.
+Most records use a strict `source_sha256` in `repository-knowledge.json`.
+When those sources change, review the summary and update its witness; a stale
+or missing witness refuses the build.
+
+Exactly two interface records use explicit `source_hash_mode: "release-bytes"`:
+`src/lib.rs` and `docs/book/src/reference/rest-api.md`. Their emitted `sourceHash`
+is derived from the exact materialized release source bytes. It proves published
+byte identity, **not that the summary was re-reviewed on every source edit**.
+The existing `reviewed_at` and freshness interval still bound the summary's age;
+neither `reviewed_at` nor `source_revision` is automatically renewed. This avoids
+committing moving whole-file digests that conflict when independent PRs change
+these high-churn sources. It does not merge competing summaries automatically.
+
+The other 14 records remain strict. Unknown modes, a mode combined with
+`source_sha256` (even a matching digest), and release-byte mode on any other
+record are refused. Source confinement, actual indexed pointers, revision-bound
+source links, summary metadata and freshness checks apply in both modes. New
+exceptions require separate evidence and review; this is not a general
+regenerate-all-witnesses mode.
+
+Branches that still edit a removed strict digest can need one ordinary migration
+resolution when adopting this mode. Keep the reviewed mode, remove its old digest,
+and preserve any actual summary edits. Once adopted, source-only changes stop
+editing those registry scalars. Competing summary changes still require normal
+resolution; no local merge driver or queue-side source rewrite is installed.
 
 `alignments.ttl` is currently a valid empty SSSOM/RDF carrier. Its accompanying
 status file explicitly records zero approved mappings and seals those bytes.

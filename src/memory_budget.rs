@@ -21,6 +21,16 @@ pub struct MemoryAllocation {
 }
 
 impl MemoryAllocation {
+    pub(crate) fn apply_connection(&self, conn: &rusqlite::Connection) -> Result<()> {
+        let cache = i64::try_from(self.cache_kib)
+            .map_err(|_| Error::InvalidValue("cache allocation overflow".into()))?;
+        let mmap = i64::try_from(self.mmap_bytes)
+            .map_err(|_| Error::InvalidValue("mmap allocation overflow".into()))?;
+        conn.pragma_update(None, "cache_size", -cache)?;
+        conn.pragma_update(None, "mmap_size", mmap)?;
+        Ok(())
+    }
+
     /// Validate before opening a database or spawning any process.
     pub fn for_server(config: &ServerConfig) -> Result<Option<Self>> {
         let Some(mib) = config.memory_budget_mib else {
@@ -53,28 +63,53 @@ impl MemoryAllocation {
             .ok()
             .and_then(|n| n.checked_add(1))
             .ok_or_else(|| Error::InvalidValue("connection count overflow".into()))?;
+        Self::for_connections(mib, connections).map(Some)
+    }
+
+    /// Partition one service budget across an explicitly counted connection set.
+    /// Include legacy, native owner, fence, worker and request scratch connections.
+    /// This sizes SQLite ceilings; admission and the aggregate cgroup remain
+    /// the caller's responsibility. Zero connections never denotes unlimited.
+    pub fn for_connections(mib: u64, connections: u64) -> Result<Self> {
+        let minimum = connections
+            .checked_mul(64)
+            .filter(|_| connections != 0)
+            .ok_or_else(|| Error::InvalidValue("invalid connection count".into()))?;
         let total_bytes = mib
             .checked_mul(1_048_576)
             .filter(|n| i64::try_from(*n).is_ok())
             .ok_or_else(|| Error::InvalidValue("memory budget overflow".into()))?;
-        if mib < connections * 64 {
+        if mib < minimum {
             return Err(Error::InvalidValue(
                 "memory budget requires at least 64 MiB per connection".into(),
             ));
         }
         let quarter = total_bytes / 4 / connections;
-        Ok(Some(Self {
+        Ok(Self {
             total_bytes,
             connections,
             cache_kib: quarter / 1024,
             mmap_bytes: quarter,
-        }))
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_connection_count_refuses_zero_tiny_and_overflow() {
+        for (mib, count) in [(64, 0), (63, 1), (4096, u64::MAX), (u64::MAX, 1)] {
+            assert!(MemoryAllocation::for_connections(mib, count).is_err());
+        }
+        for count in [1, 5, 14, 257] {
+            let plan = MemoryAllocation::for_connections(64 * count, count).unwrap();
+            assert_eq!(plan.connections, count);
+            assert_eq!(plan.cache_kib, 16 * 1024);
+            assert_eq!(plan.mmap_bytes, 16 * 1_048_576);
+        }
+    }
 
     #[test]
     fn memory_budget_partitions_aggregate_not_each_process() {
