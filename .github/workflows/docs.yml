@@ -104,8 +104,6 @@ jobs:
       #
       # A release may publish before its trusted pack arrives. Select the newest
       # complete public release instead; never deploy a packless explorer.
-      # While scripts/select-explorer-release.py sets PINNED_TAG, exactly that
-      # release is staged (see its comment for why and the unpin condition).
       - name: Stage explorer assets from the newest release with a complete pack
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
