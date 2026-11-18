@@ -700,8 +700,11 @@ def build(revision, source, tooling, binary, bobbin, output):
     query = (source / "queries/repository-share-quipu.rq").read_text()
     stage = private / "share"
     native = native_alignments(binary, private)
+    # No --turtle: export.ttl repeated export.nt as Turtle, 37 MB of the
+    # 110 MB v0.18.2 release pendant. N-Triples is normative and the importer
+    # skips the view; people can still ask the CLI for it.
     run(
-        [binary, "share", "--construct", query, "--turtle", "--output", stage]
+        [binary, "share", "--construct", query, "--output", stage]
         + (["--alignments", alignments] if native else [])
         + ["--db", database]
     )

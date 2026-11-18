@@ -248,6 +248,22 @@ class Publication(unittest.TestCase):
         self.assertEqual(pauses, [30])
 
 
+class ReleasePendantMembers(unittest.TestCase):
+    def test_release_build_does_not_emit_the_derived_turtle_view(self):
+        import ast
+
+        tree = ast.parse((ROOT / "build-repository-share.py").read_text())
+        calls = [
+            [e.value for e in node.elts if isinstance(e, ast.Constant)]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.List)
+            and any(isinstance(e, ast.Constant) and e.value == "--construct" for e in node.elts)
+        ]
+        self.assertEqual(len(calls), 1, "exactly one share --construct invocation")
+        self.assertIn("share", calls[0])
+        self.assertNotIn("--turtle", calls[0])
+
+
 def load_tests(loader, tests, pattern):
     # Keep provider controls in the existing CI entrypoint.
     controls = load("provider_controls", ROOT / "test-repository-share-embedding.py")
