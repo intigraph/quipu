@@ -2,6 +2,10 @@
 
 pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
     match (path, name) {
+        ("fluent append" | "fluent current", "server") => {
+            Some("HTTP(S) server origin without credentials, query or path")
+        }
+        ("fluent current", "fluent") => Some("Exact fluent IRI to read"),
         ("share", "competency") => {
             Some("Verbatim competency.toml to compile and seal with the share")
         }

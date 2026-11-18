@@ -144,6 +144,66 @@ async fn signed_cut_route_binds_completed_manifest_to_the_source_key() {
     ));
 }
 
+/// Production serves `/share/asof` from a pooled READ connection, and pooled
+/// readers never carry the writer's signing identity. Before aegis-xdvg.4 the
+/// route signed with the reader's identity, so every pooled cut had a null
+/// `manifest_signature` and a signed-bootstrap replica refused it. The writer-only
+/// test above could not see this: with no pool, `read()` IS the writer.
+#[tokio::test]
+async fn pooled_reader_cut_is_signed_by_the_writer_identity() {
+    let _serial = SERIAL.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let signer = Arc::new(
+        quipu::signing::SigningIdentity::load(&temp.path().join("synthetic-key"), "fixture")
+            .unwrap(),
+    );
+    let key = signer.public_key_hex();
+    let path = temp.path().join("source.db");
+    let path = path.to_str().unwrap();
+    let mut store = quipu::Store::open(path).unwrap();
+    store.set_signing_identity(signer);
+    let graph = store.graph_create(G).unwrap();
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut store,
+        b"<https://example.org/item/one> <https://example.org/title> \"one\" .\n".as_slice(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let identity = store.store_id().unwrap();
+    let readers = crate::ReadPool::open(path, &store, 2);
+    assert!(readers.len() > 0, "the regression needs a real reader pool");
+    assert!(
+        readers.conns[0].lock().signing_identity().is_none(),
+        "precondition: pooled readers do not adopt the signing identity"
+    );
+    let shared: SharedStore = Arc::new(StoreHandle::serving(
+        store,
+        readers,
+        path,
+        quipu::config::FederationConfig::default(),
+    ));
+    let app = Router::new()
+        .route("/share/asof", post(share_asof))
+        .with_state(shared);
+    let (status, _, body) = post_cut(app, json!({"graphs":[G],"expected_store_id":identity})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let frames = events(&body);
+    let data: Value = serde_json::from_str(&frames[0].2).unwrap();
+    let manifest: quipu::asof_share::Manifest =
+        serde_json::from_value(data["manifest"].clone()).unwrap();
+    let signature = data["manifest_signature"]
+        .as_str()
+        .expect("a pooled cut must carry the writer's manifest signature");
+    assert!(quipu::asof_share::verify_manifest(
+        &manifest, &key, signature
+    ));
+}
+
 /// Busy first, then a real cut, then a refusal.
 #[tokio::test]
 async fn a_small_cut_is_one_frame_and_refusals_come_first() {

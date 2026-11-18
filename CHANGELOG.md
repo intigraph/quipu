@@ -18,6 +18,22 @@ are generated from the versioned release records.
   Rollback is a normal source revert and CD of the previous build. Client
   adoption is tracked separately from this removal.
 
+## [0.18.2] - 2026-11-18
+
+### Added
+
+- *(fluent)* Add remote CLI observation adapter (#1237)([52e09e3](https://github.com/scbrown/quipu/commit/52e09e3642824e6a0ad40700b05151641e5b5c11))
+
+### Fixed
+
+- *(build)* Fall back to a checksum-addressed ONNX mirror when upstream is gone (#1246)([d06d717](https://github.com/scbrown/quipu/commit/d06d717200160dc94d1b768417fb9d42e997b5ec))
+- *(asof)* Sign the as-of manifest with the writer's identity (#1247)([2900014](https://github.com/scbrown/quipu/commit/2900014308b1a752bfa2484447bf510d010cc3f7))
+- *(sparql)* Linear CONSTRUCT dedupe and hashed MINUS (repository share >600s) (#1248)([88f498a](https://github.com/scbrown/quipu/commit/88f498a6a685163e309116d81510b03e57d6b8e7))
+
+### Miscellaneous
+
+- *(conformance)* Commit outcome-only ledgers (drop generated_at, duration_ms) (#1244)([91c5b7c](https://github.com/scbrown/quipu/commit/91c5b7ce183c57e2e38768fd8a2b39074e3103a0))
+
 ## [0.18.1] - 2026-11-15
 
 ### Added

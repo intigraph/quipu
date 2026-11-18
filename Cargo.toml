@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.18.1"
+version = "0.18.2"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -239,7 +239,7 @@ owl = []
 # Minimal libraries use --no-default-features: neither
 # crate compiles for wasm32 (mio has no wasm target) — see
 # docs/design/wasm-support.md §4.3.
-remote = ["dep:ureq"]
+remote = ["dep:ureq", "dep:url"]
 # Design W2: S3-compatible conditional-create witness backend (source only;
 # selecting a bucket and principal is a deployment decision).
 ownership-witness-s3 = ["dep:ureq"]
