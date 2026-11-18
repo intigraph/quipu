@@ -5,7 +5,7 @@ use crate::Value;
 use crate::sparql::pattern_util::merge_bindings;
 use crate::sparql::{Bindings, TemporalContext};
 
-/// The pre-aegis-49s evaluator, kept verbatim as the oracle.
+/// The evaluator before aegis-49s, kept verbatim as the oracle.
 fn nested_loop(left: &[Bindings], right: &[Bindings]) -> Vec<Bindings> {
     left.iter()
         .filter(|left_row| {
