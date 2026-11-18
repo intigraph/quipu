@@ -62,15 +62,21 @@ fn class_terms() -> Terms {
 fn scan_steps(store: &Store) -> (u64, Vec<String>) {
     let steps = Arc::new(AtomicU64::new(0));
     let counter = Arc::clone(&steps);
-    store.conn.progress_handler(
-        64,
-        Some(move || {
-            counter.fetch_add(1, Ordering::Relaxed);
-            false
-        }),
-    );
+    store
+        .conn
+        .progress_handler(
+            64,
+            Some(move || {
+                counter.fetch_add(1, Ordering::Relaxed);
+                false
+            }),
+        )
+        .unwrap();
     let result = graphs_using(store, &class_terms(), &BTreeSet::new());
-    store.conn.progress_handler(0, None::<fn() -> bool>);
+    store
+        .conn
+        .progress_handler(0, None::<fn() -> bool>)
+        .unwrap();
     let (graphs, snapshots) = result.unwrap();
     assert!(snapshots.is_empty(), "{snapshots:?}");
     (steps.load(Ordering::Relaxed), graphs)
