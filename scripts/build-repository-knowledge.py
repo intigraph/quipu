@@ -16,6 +16,34 @@ XSD = "http://www.w3.org/2001/XMLSchema#"
 KINDS = {"idea", "interface", "decision", "start-here"}
 PROPERTIES = {"interfaceKind", "publicName", "status", "supersessionStatus", "startHereOrder", "glossaryTerm"}
 
+# Explicitly reviewed exceptions: these two whole-file hashes caused otherwise
+# identical curated records to conflict. Do not widen this set automatically.
+RELEASE_BYTE_SOURCES = {
+    "src/lib.rs": A + "code/quipu/src%2Flib.rs",
+    "docs/book/src/reference/rest-api.md":
+        A + "doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
+}
+
+
+def source_hash(source, record):
+    path = record["source"]
+    witness = source / path
+    if (Path(path).is_absolute() or ".." in Path(path).parts
+            or not witness.resolve().is_relative_to(source.resolve())):
+        raise ValueError("source witness changed: " + path)
+    digest = hashlib.sha256(witness.read_bytes()).hexdigest()
+    if "source_hash_mode" in record:
+        if (record["source_hash_mode"] != "release-bytes"
+                or "source_sha256" in record):
+            raise ValueError("unknown or mixed source hash mode: " + path)
+        if (record["kind"] != "interface"
+                or RELEASE_BYTE_SOURCES.get(path) != record["subject"]):
+            raise ValueError("release-bytes not approved for this record: " + path)
+        # Byte provenance is derived; summary review time is never renewed.
+    elif digest != record.get("source_sha256"):
+        raise ValueError("source witness changed: " + path)
+    return digest
+
 
 def render(source, revision, lookup):
     source = Path(source)
@@ -45,14 +73,7 @@ def render(source, revision, lookup):
 
     for record in records:
         path = record["source"]
-        witness = source / path
-        if (
-            Path(path).is_absolute()
-            or ".." in Path(path).parts
-            or not witness.resolve().is_relative_to(source.resolve())
-            or hashlib.sha256(witness.read_bytes()).hexdigest() != record["source_sha256"]
-        ):
-            raise ValueError("source witness changed: " + path)
+        digest = source_hash(source, record)
         subject = record["subject"]
         bases = (A + "doc/quipu/" + quote(path, safe=""), A + "code/quipu/" + quote(path, safe=""))
         if not any(subject == base or subject.startswith(base + "#") for base in bases):
@@ -80,7 +101,7 @@ def render(source, revision, lookup):
             raise ValueError("unreviewed or private summary")
         fact(subject, RDFS + "comment", summary)
         fact(subject, A + "knowledgeKind", record["kind"])
-        fact(subject, A + "sourceHash", record["source_sha256"])
+        fact(subject, A + "sourceHash", digest)
         fact(subject, A + "reviewAfter", after, datatype=XSD + "dateTime")
         fact(subject, A + "maxAge", age, datatype=XSD + "integer")
         fact(subject, "http://purl.org/dc/terms/modified", registry["reviewed_at"], datatype=XSD + "dateTime")

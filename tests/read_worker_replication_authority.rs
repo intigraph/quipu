@@ -12,6 +12,9 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[path = "read_worker_replication_authority/fixture_ports.rs"]
+mod fixture_ports;
+
 static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 const WRITER: &str = "private-writer-fixture";
 const REPLICA: &str = "private-replication-fixture";
@@ -20,9 +23,9 @@ fn fixture(readers: usize) -> (tempfile::TempDir, SocketAddr, SocketAddr) {
     let root = tempfile::tempdir().unwrap();
     drop(quipu::Store::open(root.path().join("store.db").to_str().unwrap()).unwrap());
     let primary = TcpListener::bind("127.0.0.1:0").unwrap();
-    let worker = TcpListener::bind("127.0.0.1:0").unwrap();
+    let workers = fixture_ports::reserve(readers.max(1));
     let address = primary.local_addr().unwrap();
-    let worker_address = worker.local_addr().unwrap();
+    let worker_address = workers[0].local_addr().unwrap();
     let registry = root.path().join("replication.json");
     std::fs::write(
         &registry,

@@ -21,6 +21,8 @@ on:
       - "**/shapes.ttl"
       - "**/decisions.json"
       - "scripts/ci/pendant-review.py"
+      - "scripts/ci/pendant-graph.py"
+      - "scripts/ci/test-pendant-graph.py"
       - ".github/workflows/pendant-review.yml"
       - "src/share_pack_review*.rs"
       - "src/cli_share_diff.rs"
@@ -32,6 +34,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "tests/share_review*.rs"
+      - "tests/share_diff_neighborhood.rs"
+      - "docs/probes/pr-demos/pendant-graph/**"
 
 # READ-ONLY by default. Posting a PR comment needs a write token, which is a
 # security-posture decision, so it lives in the separate `comment` job below and
@@ -50,6 +54,10 @@ jobs:
   review:
     name: pendant review
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-review-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -58,6 +66,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Outside-contributor comment controls
+        run: python3 scripts/test-pendant-comment-guard.py
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
       # `shacl` is required: without it the report says NOT CHECKED and the
@@ -66,6 +76,10 @@ jobs:
         run: cargo test --locked --no-default-features --test share_review_no_shacl
       - name: Gate regression controls
         run: cargo test --locked --features shacl --test share_review
+      - name: Graph neighborhood and display controls
+        run: |
+          cargo test --locked --features shacl --test share_diff_neighborhood
+          python3 scripts/ci/test-pendant-graph.py
       - run: cargo build --locked --features shacl --bin quipu
       - name: Review changed packs
         env:
@@ -76,7 +90,25 @@ jobs:
             --base "$BASE_SHA" --head "$HEAD_SHA" \
             --binary target/debug/quipu \
             --summary "$GITHUB_STEP_SUMMARY" \
-            --comment-body pendant-review.md
+            --comment-body pendant-review.md \
+            --graph-dir pendant-graphs
+      - name: Upload graph diff views
+        id: graphs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pendant-graph-diffs
+          path: |
+            pendant-graphs/
+            docs/probes/pr-demos/pendant-graph/graph.html
+            docs/probes/pr-demos/pendant-graph/report.json
+          if-no-files-found: ignore
+      - name: Link graph diff views from the check
+        if: always() && steps.graphs.outputs.artifact-url != ''
+        env:
+          GRAPH_URL: ${{ steps.graphs.outputs.artifact-url }}
+        run: |
+          printf '\n[Download before/after graph diff views](%s) — open the HTML files locally; JSON reports accompany them. Includes the labeled reference example in docs/probes/pr-demos/pendant-graph; changed-pack reports are listed above.\n' "$GRAPH_URL" >> "$GITHUB_STEP_SUMMARY"
       - if: always() && vars.QPACK_REVIEW_COMMENT == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -86,14 +118,20 @@ jobs:
 
   # OFF unless the repository variable QPACK_REVIEW_COMMENT is "true". This is
   # the only job holding a write permission, it runs no repository code, and it
-  # never runs for a fork (whose token cannot write anyway).
+  # never runs for a fork or an outside author (Stiwi 2026-11-14).
   comment:
     name: pendant review comment
     needs: review
     if: >-
       always() && vars.QPACK_REVIEW_COMMENT == 'true'
       && github.event.pull_request.head.repo.full_name == github.repository
+      && (github.event_name != 'pull_request' || !cancelled())
+      && github.event.pull_request.user.login == 'scbrown'
     runs-on: ubuntu-latest
+    concurrency:
+      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-comment-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      queue: max
+      cancel-in-progress: false
     permissions:
       pull-requests: write
     steps:
@@ -107,6 +145,14 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          # Recheck forge metadata at the write boundary. Maintainer-edit and a
+          # crew-looking branch do not change an outside contributor's author.
+          eligible=$(gh api "repos/$REPO/pulls/$PR" --jq \
+            '.user.login == "scbrown" and .base.repo.full_name != null and .head.repo.full_name == .base.repo.full_name')
+          if [ "$eligible" != true ]; then
+            echo 'Outside or unknown contributor: no comment.'
+            exit 0
+          fi
           test -s pendant-review.md
           id=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
             --jq '.[] | select(.body | startswith("<!-- quipu-qpack-review -->")) | .id' | head -n1)

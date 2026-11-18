@@ -15,6 +15,12 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+/// Native owner qualification primitive; not a server route activation API.
+#[cfg(unix)]
+pub mod graph_owner;
+/// Pilot write router over the catalog, legacy writer and owners.
+#[cfg(unix)]
+pub mod graph_router;
 /// Durable, native receiver completion evidence; no replay API.
 pub mod knot_completion;
 mod ownership;
@@ -23,6 +29,14 @@ mod ownership_fence;
 mod ownership_latch;
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_scope;
+/// Legacy-file fence for graphs routed to their own owner (per-graph pilot).
+mod routed_fence;
+pub use routed_fence::{FenceClass, FencedColumn};
+/// Canonical producer slice copy between files (per-graph pilot parity).
+mod routed_slice;
+pub use routed_slice::{SliceFact, slice_multiset};
+#[cfg(unix)]
+mod writer_lease;
 // Dormant enrollment inventory: native identity fields, no startup wiring.
 mod ownership_admission;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -161,6 +175,9 @@ pub struct Store {
     /// SQLite's last-writer WAL/SHM cleanup.
     ownership_fence: Option<Arc<ownership_fence::CommitFence>>,
     pub(crate) conn: Connection,
+    // Release the writer connection before its native lifetime admission lease.
+    #[cfg(unix)]
+    writer_lease: Option<Arc<writer_lease::Lease>>,
     /// v1 verdict-signing identity (ed25519, host-file key). When set, the
     /// governance committed-tier evaluator signs verdicts (aegis-g1al / the
     /// loom, Phase 0). The server loads it at startup; None → verdicts are

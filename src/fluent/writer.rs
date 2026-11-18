@@ -1,4 +1,4 @@
-//! Source-stage native append builder. Transport adapters remain unadmitted.
+//! Native append builder shared by admitted adapters and the transaction pipeline.
 use super::{Binding, Log, Observation, Order, Policy, Scalar, bindings, invalid};
 use crate::store::Datum;
 use crate::types::{Op, Value};

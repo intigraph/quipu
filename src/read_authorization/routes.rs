@@ -73,6 +73,8 @@ const CENSUS: &[&str] = &[
     "/explain",
     "/export",
     "/feed/ws",
+    "/fluent/current",
+    "/fluent/observations",
     "/fragments",
     "/graph",
     "/graph-canvas.js",

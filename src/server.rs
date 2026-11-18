@@ -37,6 +37,8 @@ mod deck;
 mod entity;
 #[path = "server/feed.rs"]
 mod feed;
+#[path = "server/fluents.rs"]
+mod fluents;
 #[path = "server/graph_backfill.rs"]
 mod graph_backfill;
 #[path = "server/graph_metrics.rs"]
@@ -150,13 +152,12 @@ async fn main() {
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
 
-    // warn LOUDLY about documented, settable knobs this server does not
-    // act on (vector.backend = lancedb, federation.remotes), rather than accepting
-    // them and silently doing nothing.
+    // Warn about configured knobs this build does not act on.
     for warning in config.unwired_warnings() {
         eprintln!("warning: {warning}");
     }
 
+    let _writer_lock = replica::claim_writer_lock(&db_path, &config);
     let mut store = replica::open_store(&db_path, &config).unwrap_or_else(|e| {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);
@@ -292,15 +293,7 @@ async fn main() {
         Some(reasoner)
     };
 
-    // Apply the governance enforcement policy: when enabled, `boundary:"action"`
-    // policies gate every write (the loom's write-time gate, see
-    // docs/design/policy-edit-hooks.md).
-    store.governance_config_mut().clone_from(&config.governance);
-    if config.governance.enforce_on_write {
-        eprintln!(
-            "Governance write-enforcement enabled (action-boundary policies gate every write)"
-        );
-    }
+    base::apply_governance(&mut store, &config);
 
     match quipu::embedding_runtime::configure_provider(&mut store, &config.embedding) {
         Ok(status) => eprintln!("{status}"),
@@ -361,6 +354,7 @@ async fn main() {
 
     let relay = relay::open_configured(&store, &config);
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    handle.process_writer_lock = _writer_lock;
     handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
     handle.log_query_phases = config.server.log_query_phases;
@@ -484,6 +478,7 @@ async fn main() {
             push_store_outer,
             config.events.retention_days,
             &config.embedding,
+            read_only,
         );
     }
 
@@ -515,11 +510,9 @@ fn api_routes() -> Router<SharedStore> {
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())
-        .route(
-            "/.well-known/void",
-            get(service_description::service_description),
-        )
+        .merge(service_description::routes())
         .route("/metrics", get(metrics_handler))
+        .merge(fluents::routes())
         .merge(query_endpoint::routes())
         .route("/update", post(update::update_post))
         .route("/patch", post(patch::patch_post))

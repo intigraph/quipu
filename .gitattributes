@@ -31,6 +31,8 @@
 # Preserve the literal PTY recording without relaxing other whitespace checks.
 docs/probes/pr-demos/inferred-registry-filter/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 docs/demos/store-ownership/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/probes/pr-demos/writer-lock/base.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/probes/pr-demos/writer-lock/head.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 
 # quipu-docgen output (aegis-t7h): regenerate, do not edit.
 packaging/man/** linguist-generated=true
@@ -46,3 +48,6 @@ docs/demos/asof-rdf/output.log -text whitespace=cr-at-eol
 docs/demos/client-resolver-observation/output.log -text whitespace=cr-at-eol
 docs/demos/deploy-skip-prefixes/output.log -text whitespace=cr-at-eol
 docs/demos/expected-results/output.log -text whitespace=cr-at-eol
+
+# Preserve the release-byte witness demonstration recording.
+docs/demos/release-source-witness/output.log whitespace=cr-at-eol
