@@ -37,6 +37,9 @@ use crate::types::Value;
 
 #[path = "proposal_plan_scan.rs"]
 mod scan;
+#[cfg(test)]
+#[path = "proposal_plan_scan_tests.rs"]
+mod scan_tests;
 #[path = "proposal_plan_terms.rs"]
 mod terms;
 #[cfg(test)]
