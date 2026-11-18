@@ -93,12 +93,18 @@ pub(crate) async fn share_asof(
     let result = crate::admission::read_blocking(move || {
         let _phase = phase;
         sweep_expired(&dir);
-        let store = store.read();
-        let cut = quipu::asof_share::cut(&store, &request, &dir, &Limits::default());
+        // The signing identity lives on the WRITER only: pooled readers never
+        // adopt it (adopt_read_config_from copies read policy, not write-path
+        // signing). Take it from the writer, as replicate_stream does, or every
+        // cut served by a pooled reader goes out with a null manifest_signature
+        // and a signed-bootstrap replica correctly refuses it (aegis-xdvg.4).
+        let identity = store.lock().signing_identity();
+        let reader = store.read();
+        let cut = quipu::asof_share::cut(&reader, &request, &dir, &Limits::default());
+        drop(reader);
         match cut {
             Ok(cut) => {
-                let signature = store
-                    .signing_identity()
+                let signature = identity
                     .map(|identity| quipu::asof_share::sign_manifest(&cut.manifest, &identity))
                     .transpose()?;
                 Ok(Ok((cut, signature)))
