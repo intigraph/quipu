@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "bb69ef508def82b126b82ca04e99a18cbcc0dbfc8cb7988865acf31993e23219",
+      "source_sha256": "8593d2efe0150d01f28c5be9707fa90d870695d71af74cf8ec2ec52d435255d3",
       "properties": {
         "startHereOrder": 5
       }
