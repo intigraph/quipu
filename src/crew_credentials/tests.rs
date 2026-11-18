@@ -169,3 +169,14 @@ fn shared_credential_cannot_be_relabelled_as_a_named_principal() {
         Some(AuthGeneration::Current)
     );
 }
+
+#[test]
+fn removed_memory_audience_and_scope_never_gain_ordinary_authority() {
+    let mut old = credential("old-memory", "urn:crew:alice", "retired-token");
+    old["audience"] = json!("quipu-memory");
+    assert!(parse(&[old.clone()]).is_err());
+    old["audience"] = json!("quipu");
+    old["memory_scope"] = json!({"graph":"urn:memory", "deployment":"urn:d", "project":"urn:p"});
+    old["expires_at_epoch_secs"] = json!(9999999999_u64);
+    assert!(parse(&[old]).is_err());
+}

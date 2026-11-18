@@ -5,8 +5,7 @@ fn the_label_set_is_closed_and_distinct() {
     // An exhaustive match: a new variant missing here is a compile error, and
     // missing from ALL is the length assertion below.
     let listed = |k: WriteKind| match k {
-        WriteKind::MemoryFiles
-        | WriteKind::Fluent
+        WriteKind::Fluent
         | WriteKind::Episode
         | WriteKind::Knot
         | WriteKind::Promote
@@ -50,11 +49,6 @@ fn every_write_endpoint_has_a_named_kind() {
     assert_eq!(
         WriteKind::for_route("/fluent/observations"),
         Some(WriteKind::Fluent)
-    );
-    assert_eq!(WriteKind::for_route("/memory/projection"), None);
-    assert_eq!(
-        WriteKind::for_route("/memory/commit"),
-        Some(WriteKind::MemoryFiles)
     );
     // malcolm: promote is its own kind, for both promotion paths.
     assert_eq!(

@@ -1,0 +1,2 @@
+{"version": 2, "width": 100, "height": 24, "timestamp": 1794641028, "title": "Retired memory command: before and after"}
+[0.0, "o", "Before: memory command accepted=True; exit=0\r\nAfter: memory command accepted=False; exit=2\r\nAfter: explicit unknown-command refusal; no store operation requested\r\nRetained-record query/export is covered separately by the persistence regression.\r\nSource CLI demonstration only; no production deployment or data migration.\r\n"]

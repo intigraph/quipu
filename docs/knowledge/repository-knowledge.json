@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "2385cc2c2f39410bfc6c3c81a4ed33b8c65e7cdfcb27e46e3fc57cd28da6eb7d",
+      "source_sha256": "79c1fd394c3967a41b8d634e2f0e4988fc327d2ac2191b5627dc6e677c98131c",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "72bc7fb1bc11a746398f556aae5fd5f301d37ae1113b91c82e4b404bcee8314a",
+      "source_sha256": "b7376341fa2e849c764a9163da32b078a5ed647d9bbeb123cb366d2b73c4f0f1",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "9228d48f0473bf9ed3b5caad1a84fba7316d02254d97fbcb772ba68a11bf8994",
+      "source_sha256": "2c03f84446e3c63f817fe896fa932e900e6deb6d959396c2607bcc0aefbcd130",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "bb69ef508def82b126b82ca04e99a18cbcc0dbfc8cb7988865acf31993e23219",
+      "source_sha256": "8593d2efe0150d01f28c5be9707fa90d870695d71af74cf8ec2ec52d435255d3",
       "properties": {
         "startHereOrder": 5
       }

@@ -82,7 +82,7 @@ impl Fixture {
                 .unwrap()
                 .with_named(registry);
         crate::protected_app(
-            crate::api_routes(Default::default()),
+            crate::api_routes(),
             &crate::process_pool::in_process(),
             scoped.then(|| (self.profile.clone(), self.registry.clone())),
             self.source.clone(),

@@ -50,7 +50,6 @@ pub mod lexical;
 mod literal_identity;
 pub mod mcp;
 pub mod memory_budget;
-pub mod memory_files;
 pub mod merge3;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_adapters;

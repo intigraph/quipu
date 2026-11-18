@@ -16,7 +16,6 @@ use std::sync::atomic::{AtomicU8, Ordering};
 /// label set; `ALL` must list it and the tests enforce that.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WriteKind {
-    MemoryFiles,
     Fluent,
     Episode,
     Knot,
@@ -40,8 +39,7 @@ pub enum WriteKind {
 
 impl WriteKind {
     /// Every variant, for rendering and for the totality tests.
-    pub const ALL: [WriteKind; 20] = [
-        Self::MemoryFiles,
+    pub const ALL: [WriteKind; 19] = [
         Self::Fluent,
         Self::Episode,
         Self::Knot,
@@ -66,7 +64,6 @@ impl WriteKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::MemoryFiles => "memory_files",
             Self::Fluent => "fluent",
             Self::Episode => "episode",
             Self::Knot => "knot",
@@ -95,7 +92,6 @@ impl WriteKind {
     #[must_use]
     pub fn for_route(template: &str) -> Option<Self> {
         Some(match template {
-            "/memory/commit" => Self::MemoryFiles,
             "/fluent/observations" => Self::Fluent,
             "/episode" | "/episodes/complete" | "/episode/retract" => Self::Episode,
             "/knot" | "/knot/stage" => Self::Knot,
