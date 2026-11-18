@@ -24,13 +24,13 @@ fn fetch_pinned(url: &str, sha256: &str) -> Vec<u8> {
     println!("cargo:rerun-if-env-changed=QUIPU_ORT_MIRROR");
     let name = url.rsplit('/').next().expect("runtime archive file name");
     let mut sources = vec![url.to_string()];
-    if let Ok(base) = env::var("QUIPU_ORT_MIRROR") {
-        if !base.is_empty() {
-            sources.push(format!(
-                "{}/sha256/{sha256}/{name}",
-                base.trim_end_matches('/')
-            ));
-        }
+    if let Ok(base) = env::var("QUIPU_ORT_MIRROR")
+        && !base.is_empty()
+    {
+        sources.push(format!(
+            "{}/sha256/{sha256}/{name}",
+            base.trim_end_matches('/')
+        ));
     }
     sources.push(format!("{DEFAULT_MIRROR}/sha256/{sha256}/{name}"));
     let mut failures = Vec::new();
