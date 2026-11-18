@@ -82,6 +82,9 @@ _qp() {
             qp,export)
                 cmd="qp__subcmd__export"
                 ;;
+            qp,fluent)
+                cmd="qp__subcmd__fluent"
+                ;;
             qp,follow)
                 cmd="qp__subcmd__follow"
                 ;;
@@ -352,6 +355,12 @@ _qp() {
             qp__subcmd__events,refusals)
                 cmd="qp__subcmd__events__subcmd__refusals"
                 ;;
+            qp__subcmd__fluent,append)
+                cmd="qp__subcmd__fluent__subcmd__append"
+                ;;
+            qp__subcmd__fluent,current)
+                cmd="qp__subcmd__fluent__subcmd__current"
+                ;;
             qp__subcmd__fork,diff)
                 cmd="qp__subcmd__fork__subcmd__diff"
                 ;;
@@ -578,7 +587,7 @@ _qp() {
 
     case "${cmd}" in
         qp)
-            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-mergetool git-merge merge-driver databook-merge-driver databook-check pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help fluent competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-mergetool git-merge merge-driver databook-merge-driver databook-check pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2013,6 +2022,64 @@ _qp() {
                     return 0
                     ;;
                 --format)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__fluent)
+            opts="-h --help append current"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__fluent__subcmd__append)
+            opts="-h --server --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --server)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__fluent__subcmd__current)
+            opts="-h --server --graph --fluent --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --server)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --graph)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --fluent)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

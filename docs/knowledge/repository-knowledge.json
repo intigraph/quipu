@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "8138c0ffb4ed98724343858dbf30aacdfd25d8cc2a3c6614c5a653bb40c52f65",
+      "source_sha256": "2385cc2c2f39410bfc6c3c81a4ed33b8c65e7cdfcb27e46e3fc57cd28da6eb7d",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "7c079c1aab1831b362aebd19eb6d7779b23b5eb8a4449f5da1deadd8dd4926bc",
+      "source_sha256": "9228d48f0473bf9ed3b5caad1a84fba7316d02254d97fbcb772ba68a11bf8994",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "ed4e462aee6f56c7cdf2e18395090a96f0493695d0fab18ba8fb52966bcab18d",
+      "source_sha256": "bb69ef508def82b126b82ca04e99a18cbcc0dbfc8cb7988865acf31993e23219",
       "properties": {
         "startHereOrder": 5
       }
