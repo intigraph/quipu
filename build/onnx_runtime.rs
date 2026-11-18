@@ -10,6 +10,57 @@ mod catalogue;
 
 const MAX_ARCHIVE: u64 = 100 * 1024 * 1024;
 
+/// Checksum-addressed mirror tried after the pinned upstream URL. The
+/// upstream release location (github.com/microsoft/onnxruntime) stopped
+/// resolving in November 2026. Layout: `<base>/sha256/<pin>/<file name>`, the
+/// same contract as CI's `CI_ARTIFACT_MIRROR_URL`. A mirror cannot change what
+/// is built: every download is still checked against the catalogue SHA256.
+const DEFAULT_MIRROR: &str = "https://github.com/intigraph/ci-mirror/releases/download";
+
+/// Download the pinned archive from upstream, then from the mirrors, and
+/// return the first body that fits the byte budget. The caller verifies the
+/// SHA256; a source that serves different bytes fails that check loudly.
+fn fetch_pinned(url: &str, sha256: &str) -> Vec<u8> {
+    println!("cargo:rerun-if-env-changed=QUIPU_ORT_MIRROR");
+    let name = url.rsplit('/').next().expect("runtime archive file name");
+    let mut sources = vec![url.to_string()];
+    if let Ok(base) = env::var("QUIPU_ORT_MIRROR") {
+        if !base.is_empty() {
+            sources.push(format!(
+                "{}/sha256/{sha256}/{name}",
+                base.trim_end_matches('/')
+            ));
+        }
+    }
+    sources.push(format!("{DEFAULT_MIRROR}/sha256/{sha256}/{name}"));
+    let mut failures = Vec::new();
+    for source in &sources {
+        let response = match ureq::get(source)
+            .timeout(std::time::Duration::from_secs(180))
+            .call()
+        {
+            Ok(response) => response,
+            Err(error) => {
+                failures.push(format!("{source}: {error}"));
+                continue;
+            }
+        };
+        let mut archive = Vec::new();
+        match response
+            .into_reader()
+            .take(MAX_ARCHIVE + 1)
+            .read_to_end(&mut archive)
+        {
+            Ok(_) => return archive,
+            Err(error) => failures.push(format!("{source}: {error}")),
+        }
+    }
+    panic!(
+        "fetch pinned ONNX Runtime over HTTPS failed from every source; set QUIPU_ORT_ARCHIVE to a verified local copy:\n{}",
+        failures.join("\n")
+    );
+}
+
 pub fn bundle() {
     println!("cargo:rerun-if-env-changed=QUIPU_ORT_ARCHIVE");
     println!("cargo:rerun-if-changed=build/onnx_catalogue.rs");
@@ -34,14 +85,7 @@ pub fn bundle() {
             .read_to_end(&mut archive)
             .expect("read archive cache");
     } else {
-        ureq::get(dist.url)
-            .timeout(std::time::Duration::from_secs(180))
-            .call()
-            .expect("fetch pinned ONNX Runtime over HTTPS")
-            .into_reader()
-            .take(MAX_ARCHIVE + 1)
-            .read_to_end(&mut archive)
-            .expect("download archive");
+        archive = fetch_pinned(dist.url, dist.archive_sha256);
     }
     assert!(
         archive.len() as u64 <= MAX_ARCHIVE,
