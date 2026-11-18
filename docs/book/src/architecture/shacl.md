@@ -184,6 +184,15 @@ let result2 = validator.validate(data2.as_bytes())?;
 validator.validate_or_reject(data.as_bytes())?;
 ```
 
+## Memory cost on large payloads
+
+Validation memory grows linearly with the payload. The engine memoizes every
+`(value node, shape)` pair it checks, for the whole run. On the v0.18.2
+repository share (359,444 triples) `quipu validate` peaked at 4.46 GiB, about
+12.5 KB per triple; three shapes with many value nodes accounted for most of it.
+Size memory limits for imports that validate against shapes accordingly. See
+`docs/probes/receiver-shacl-memory/` in the repository.
+
 ## Code Entity Shapes
 
 Quipu ships SHACL shapes for Bobbin's code entity model in
