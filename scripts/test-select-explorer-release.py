@@ -45,6 +45,21 @@ class Selection(unittest.TestCase):
         self.assertEqual(set(result), {'tag', 'published', 'pack', 'wasm'})
         self.assertNotIn('PRIVATE-CONTROL', str(result))
 
+    def test_pin_selects_the_older_release_even_when_newer_is_complete(self):
+        pages = [release('0.18.2', '2026-11-18'), release('0.18.0', '2026-11-13')]
+        self.assertEqual(selector.select_release(pages, pinned='quipu-ai-v0.18.0')['tag'], 'quipu-ai-v0.18.0')
+
+    def test_pin_never_falls_back(self):
+        for pages in ([release('0.18.2', '2026-11-18')],
+                      [release('0.18.2', '2026-11-18'), release('0.18.0', '2026-11-13', False)]):
+            with self.subTest(pages=len(pages)):
+                with self.assertRaises(ValueError):
+                    selector.select_release(pages, pinned='quipu-ai-v0.18.0')
+
+    def test_pages_build_uses_the_recorded_pin(self):
+        # The Pages build passes PINNED_TAG; unpinning is an explicit, reviewed edit.
+        self.assertEqual(selector.PINNED_TAG, 'quipu-ai-v0.18.0')
+
 
 if __name__ == '__main__':
     unittest.main()
