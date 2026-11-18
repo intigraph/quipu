@@ -248,20 +248,7 @@ fn eval_pattern_seeded_inner(
         GraphPattern::Minus { left, right } => {
             let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
             let (right_rows, _) = eval_pattern_seeded(store, right, ctx, seed)?;
-            let mut kept = Vec::with_capacity(left_rows.len());
-            let mut comparisons = 0usize;
-            for left_row in left_rows {
-                let excluded = right_rows.iter().any(|right_row| {
-                    let shared_domain = left_row.keys().any(|key| right_row.contains_key(key));
-                    let compatible = merge_bindings(&left_row, right_row).is_some();
-                    comparisons += 1;
-                    shared_domain && compatible
-                });
-                super::pattern_util::check_eval_budget(ctx, comparisons, kept.len())?;
-                if !excluded {
-                    kept.push(left_row);
-                }
-            }
+            let kept = super::minus::subtract(left_rows, &right_rows, ctx)?;
             Ok((kept, left_vars))
         }
 
