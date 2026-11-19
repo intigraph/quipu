@@ -311,13 +311,12 @@ fn malformed_unrelated_relation_retains_selective_lookup() {
         2,
         "unrelated bad blob must not break a selective query"
     );
-    // urn:test:local is not an attached graph, so the query itself answers as
-    // the unattached store does (aegis-xacr), which refuses the same blob.
-    let local = super::super::query(&store, query);
-    assert!(
-        matches!(&local, Err(crate::Error::InvalidValue(m)) if m.contains("unknown tag")),
-        "{local:?}"
-    );
+    // urn:test:local is not an attached graph. Since aegis-prna R3 the
+    // unattached store also drives this star from the selective owner IRI, so
+    // it never decodes the unrelated blob and answers as the composed path
+    // does. (It used to refuse here only because its plan scanned the graph.)
+    let local = super::super::query(&store, query).unwrap();
+    assert_eq!(local.rows(), composed_answer.rows());
 }
 
 #[test]
