@@ -75,7 +75,10 @@ stops being read.
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
 | `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap; initially accepts only `["owner-rows"]`. Does not classify undeclared queries or grant permissions. |
-| `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation; in-process readers required. |
+| `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation. With read processes, one service-wide owner-rows executor runs on worker 0. See [Read concurrency](../reference/read-concurrency.md). |
+| `server.memory_budget_mib` | unset | One aggregate memory budget (MiB) for the primary and every read worker; sizes SQLite caches. Required for `read_processes`. |
+| `server.read_processes` | `0` | Separate read-only worker processes. Off by default: with workers on, every read endpoint is forwarded to them, each worker takes one request at a time, and overflow is an immediate 503. See [Read concurrency](../reference/read-concurrency.md). |
+| `server.read_process_base_port` | `3031` | First loopback port for read workers |
 | `server.update_full_copy_max_facts` | `250000` | Facts an unsliceable `/update` (open subject AND open predicate) may copy before it is refused with advice; 0 = unbounded |
 | `events.retention_days` | `30` | Prune events older than N days, never past any registered consumer's committed offset; `0` keeps every event |
 | `labels.min_freshness` | unset | Graph-label floor: refuse results staler than this |
