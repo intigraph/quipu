@@ -68,13 +68,22 @@ fn query_temporal_inner(store: &Store, sparql: &str, ctx: &TemporalContext) -> R
     // request deadline stamped at ADMISSION, which already includes whatever
     // this request spent queueing (aegis-raq1ok); then the per-query default,
     // whose clock starts here and so cannot see queue time at all.
-    let deadline = ctx
+    let admission_deadline = ctx
         .deadline
-        .or_else(crate::time::request_deadline)
-        .or_else(|| {
-            let limit_ms = store.search_config().query_timeout_ms;
-            (limit_ms > 0).then(|| crate::time::Deadline::after_millis(limit_ms))
-        });
+        .is_none()
+        .then(crate::time::request_deadline)
+        .flatten();
+    // The admission budget can be spent before evaluation begins (queue time).
+    // Report that as the request timeout it is, with the request's own budget
+    // and total elapsed, not as a query that "exceeded 0ms (ran 0ms)" and should
+    // be narrowed: it never ran (aegis-3a99).
+    if let Some(dl) = admission_deadline.filter(crate::time::Deadline::passed) {
+        return Err(dl.request_timeout());
+    }
+    let deadline = ctx.deadline.or(admission_deadline).or_else(|| {
+        let limit_ms = store.search_config().query_timeout_ms;
+        (limit_ms > 0).then(|| crate::time::Deadline::after_millis(limit_ms))
+    });
     let row_cap = ctx.row_cap.or_else(|| {
         let cap = store.search_config().max_join_rows;
         (cap > 0).then_some(cap)
