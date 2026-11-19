@@ -120,7 +120,7 @@ fn slice_guard_refuses_above_the_bound_and_accepts_at_it() {
 }
 
 /// Acceptance measurement (aegis-550z): append + current on a graph holding
-/// QUIPU_550Z_FACTS (default 1,000,000) unrelated facts within 2x of a 1k-fact
+/// `QUIPU_550Z_FACTS` (default 1,000,000) unrelated facts within 2x of a 1k-fact
 /// graph. Run explicitly: `cargo test --features full slice_latency -- --ignored --nocapture`.
 #[cfg(feature = "shacl")]
 #[test]
