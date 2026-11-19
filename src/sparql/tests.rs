@@ -1611,12 +1611,67 @@ fn an_admission_stamped_deadline_is_spent_by_queue_time_alone() {
         &store,
         "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
     ) {
-        Err(crate::error::Error::QueryTimeout { .. }) => {}
+        Err(crate::error::Error::RequestTimeout { .. }) => {}
         Ok(_) => panic!(
             "a request whose admission deadline had already passed was given a \
              fresh 30s budget at evaluation — queue time is still invisible"
         ),
         Err(e) => panic!("unexpected error: {e}"),
+    }
+}
+
+#[test]
+fn a_budget_spent_queueing_reports_the_request_budget_not_zero() {
+    // aegis-3a99. Production 408s read "query timeout: exceeded 0ms (ran 0ms)":
+    // the admission deadline had passed before evaluation began, and the
+    // rewrite measured the limit from evaluation start (saturating to 0) and
+    // told the caller to narrow a query that never ran. The report must name
+    // the request budget and the time the request really spent, queue included.
+    let mut store = test_store_with_data();
+    store.search_config_mut().query_timeout_ms = 30_000;
+    let _ambient = crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(40)));
+    std::thread::sleep(std::time::Duration::from_millis(60)); // the queue
+
+    let err = query(
+        &store,
+        "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+    )
+    .expect_err("a request past its admission deadline must not run");
+    match err {
+        crate::error::Error::RequestTimeout {
+            elapsed_ms,
+            limit_ms,
+        } => {
+            assert_eq!(
+                limit_ms, 40,
+                "report the request budget, not deadline minus eval start"
+            );
+            assert!(
+                elapsed_ms >= 60,
+                "elapsed must include queue time, got {elapsed_ms}"
+            );
+        }
+        other => panic!("expected RequestTimeout, got: {other}"),
+    }
+    assert!(!err.to_string().contains("exceeded 0ms"));
+}
+
+#[test]
+fn a_per_query_budget_overrun_still_reports_query_timeout() {
+    // Positive control: a deadline that is NOT the admission one keeps the
+    // existing QueryTimeout report (and its narrow-the-query advice).
+    let store = test_store_with_data();
+    let ctx = TemporalContext {
+        deadline: Some(crate::time::Deadline::after_millis(0)),
+        ..Default::default()
+    };
+    match query_temporal(
+        &store,
+        "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+        &ctx,
+    ) {
+        Err(crate::error::Error::QueryTimeout { .. }) => {}
+        other => panic!("expected QueryTimeout for an explicit caller deadline, got {other:?}"),
     }
 }
 
