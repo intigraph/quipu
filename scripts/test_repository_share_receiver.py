@@ -48,16 +48,16 @@ class InternalNameTest(unittest.TestCase):
     def positive(self):
         return [
             f"<{self.W}doc/README.md> {self.TYPE} <{self.A}Document> .",
-            f"<{self.W}doc/README.md> {self.SAME} <{self.A}doc/quipu/README.md> .",
-            f"<{self.W}chunk/README.md#C1> {self.SAME} <{self.A}chunk/quipu/README.md#C1> .",
             f"<{self.W}chunk/README.md#C1> <{self.A}inDocument> <{self.W}doc/README.md> .",
             f'<{self.W}chunk/README.md#C1> <{self.A}mentions> "{self.A}doc/quipu/x" .',
         ]
 
-    def test_renamed_and_linked_share_passes(self):
+    def test_renamed_share_without_aliases_passes(self):
         self.check(*self.positive())
+        # aegis-1o7r: a public subject needs no former-name link any more.
+        self.check(*self.positive(), f"<{self.W}doc/unlinked.md> <{self.A}filePath> \"unlinked.md\" .")
 
-    def test_internal_names_and_missing_links_refuse(self):
+    def test_internal_names_and_aliases_refuse(self):
         for bad in (
             [f"<{self.A}doc/quipu/README.md> {self.TYPE} <{self.A}Document> ."],
             [f"<{self.A}repo_quipu> {self.TYPE} <{self.A}GitRepo> ."],
@@ -65,8 +65,9 @@ class InternalNameTest(unittest.TestCase):
             [f"<{self.W}doc/x> <{self.A}touchesRepo> <{self.A}repo_quipu> ."],
             [f"<{self.W}doc/y> {self.SAME} <{self.A}doc/quipu/z> ."],
             [f"<{self.W}doc/y> {self.SAME} <https://example.org/other> ."],
-            # A public subject that does not carry its own former-name link.
-            [f"<{self.W}doc/unlinked.md> <{self.A}filePath> \"unlinked.md\" ."],
+            # aegis-1o7r: even the exact former-name link is no longer published.
+            [f"<{self.W}doc/README.md> {self.SAME} <{self.A}doc/quipu/README.md> ."],
+            [f"<{self.W}chunk/README.md#C1> {self.SAME} <{self.A}chunk/quipu/README.md#C1> ."],
             # Unrenamed idea and directive names.
             ["<https://quipu.dev/knowledge/vision> <https://quipu.dev/knowledge/guides> "
              f"<{self.W}doc/README.md> ."],
@@ -88,9 +89,6 @@ class InternalNameTest(unittest.TestCase):
         ):
             with self.subTest(bad=bad), self.assertRaises(RuntimeError):
                 self.check(*self.positive(), *bad)
-        unlinked = [line for line in self.positive() if self.SAME not in line]
-        with self.assertRaises(RuntimeError):
-            self.check(*unlinked)
         with self.assertRaises(RuntimeError):
             self.check()
 

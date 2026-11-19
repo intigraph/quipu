@@ -55,8 +55,8 @@ refuses; an explicit empty carrier does not. Dependencies and glossary reference
 are not identity alignments. Code/commit deduplication and unrelated exactMatch
 records are not cross-repository mapping approval.
 
-Entities are published under `https://w3id.org/intigraph/quipu/id/` with an
-`owl:sameAs` link to their internal name; the curated records above keep the
+Entities are published under `https://w3id.org/intigraph/quipu/id/` with no
+alias to their internal name; the curated records above keep the
 internal names, which is what the native index resolves. See
 [Public entity names](../book/src/sharing/index.md#public-entity-names).
 

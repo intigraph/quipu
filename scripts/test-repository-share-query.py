@@ -35,14 +35,11 @@ def public(node):
 
 
 def published(triples):
-    """Rename subjects and non-class objects, and link each renamed subject back."""
+    """Rename subjects and non-class objects; former names are not published."""
     out = set()
     for s, p, o in triples:
-        new = public(s)
         obj = o if p == RDF.type or not isinstance(o, URIRef) else public(o)
-        out.add((new, p, obj))
-        if new != s:
-            out.add((new, OWL.sameAs, s))
+        out.add((public(s), p, obj))
     return out
 
 
@@ -78,7 +75,7 @@ class RepositoryQuery(unittest.TestCase):
         # No internal entity name is published as a subject or object.
         for s, p, o in result:
             self.assertFalse(str(s).startswith(str(A)), s)
-            if p != OWL.sameAs and isinstance(o, URIRef) and p != RDF.type:
+            if isinstance(o, URIRef) and p != RDF.type:
                 self.assertFalse(str(o).startswith(str(A)), o)
 
     def test_ideas_and_sssom_records_survive_without_identity_knots(self):
@@ -99,7 +96,7 @@ class RepositoryQuery(unittest.TestCase):
         }
         for triple in expected:
             source.add(triple)
-        # A source identity knot stays out; only the generated rename link ships.
+        # A source identity knot stays out, and no rename link ships either.
         source.add((pointer, OWL.sameAs, other))
         self.assertEqual(set(source.query(QUERY).graph), published(expected))
 
@@ -135,9 +132,9 @@ class RepositoryQuery(unittest.TestCase):
         repo = URIRef(W3ID + "quipu/id/repo")
         self.assertIn((URIRef(W3ID + "quipu/id/doc/README.md"), RDFS.seeAlso,
                        URIRef(W3ID + "bobbin/id/doc/README.md")), result)
-        self.assertIn((repo, OWL.sameAs, A.repo_quipu), result)
+        # aegis-1o7r: no former-name alias is published for any entity.
+        self.assertEqual({t for t in result if t[1] == OWL.sameAs}, set())
         self.assertIn((new_directive, A.applies_to, repo), result)
-        self.assertIn((new_directive, OWL.sameAs, directive), result)
         vision = URIRef(W3ID + "quipu/id/idea/vision")
         self.assertIn((vision, RDF.type, Q.Vision), result)
         self.assertIn((vision, Q.guides, URIRef(W3ID + "quipu/id/idea/single-writer")), result)
@@ -149,7 +146,7 @@ class RepositoryQuery(unittest.TestCase):
                        Literal(str(A) + "doc/quipu/x")), result)
 
 
-    def test_build_admits_only_exact_former_name_links(self):
+    def test_build_refuses_every_alias_even_the_exact_former_name(self):
         spec = importlib.util.spec_from_file_location(
             "share_builder", Path(__file__).resolve().parents[1] / "scripts/build-repository-share.py")
         builder = importlib.util.module_from_spec(spec)
@@ -163,8 +160,9 @@ class RepositoryQuery(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work:
             export = Path(work) / "export.nt"
             export.write_bytes(source.query(QUERY).graph.serialize(format="nt", encoding="utf-8"))
-            self.assertEqual(builder.verify_former_names(export), 1)
+            self.assertEqual(builder.verify_public_names(export), 1)
             refused = {
+                "exact former name": f"<{new}> {same} <{own}> .",
                 "arbitrary": f"<{new}> {same} <https://example.org/other> .",
                 "mismatched path": f"<{new}> {same} <{A}doc/quipu/OTHER.md> .",
                 "other repository": f"<{new}> {same} <{A}doc/bobbin/README.md> .",
@@ -176,7 +174,7 @@ class RepositoryQuery(unittest.TestCase):
                 with self.subTest(name=name):
                     export.write_text(line + "\n")
                     with self.assertRaises(ValueError):
-                        builder.verify_former_names(export)
+                        builder.verify_public_names(export)
 
     def test_unmapped_internal_names_refuse_in_any_position(self):
         # Gemini on #970: an internal name the query does not rename (a new
@@ -197,7 +195,7 @@ class RepositoryQuery(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work:
             export = Path(work) / "export.nt"
             export.write_text(base)
-            self.assertEqual(builder.verify_former_names(export), 1, "control: the clean export passes")
+            self.assertEqual(builder.verify_public_names(export), 1, "control: the clean export passes")
             for name, line in {
                 "object": f"<{new}> {see} <{other}> .",
                 "subject": f'<{other}> {label} "x" .',
@@ -205,7 +203,7 @@ class RepositoryQuery(unittest.TestCase):
                 with self.subTest(name=name):
                     export.write_text(base + line + "\n")
                     with self.assertRaisesRegex(ValueError, "unrenamed"):
-                        builder.verify_former_names(export)
+                        builder.verify_public_names(export)
 
     def test_names_the_query_cannot_rename_refuse_at_build(self):
         # The query and the verifier read the repository segment the same
@@ -228,7 +226,7 @@ class RepositoryQuery(unittest.TestCase):
                 export = Path(work) / "export.nt"
                 export.write_bytes(result.serialize(format="nt", encoding="utf-8"))
                 with self.assertRaisesRegex(ValueError, "unrenamed"):
-                    builder.verify_former_names(export)
+                    builder.verify_public_names(export)
         idea = Graph()
         idea.add((own, RDF.type, A.Document))
         idea.add((own, RDFS.seeAlso, URIRef("https://quipu.dev/knowledge/")))

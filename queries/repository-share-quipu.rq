@@ -12,13 +12,16 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 # edge also pulls private operational literals into a public release artifact.
 # Public entity identity (aegis-ro425e.18): the selection below reads the
 # producer store's internal names unchanged; the outer CONSTRUCT republishes
-# every entity under https://w3id.org/intigraph/<repo>/id/ and links each new
-# subject to its old name with owl:sameAs, so stores holding an older pendant
-# keep resolving. Every stack repository uses the same rewrite, so the same
-# thing gets the same public IRI in every pendant. Predicates and classes are
-# vocabulary and are left alone; so are the review-pinned publication-policy
-# rule IRIs that the receiver verifier checks by name.
-CONSTRUCT { ?publicSubject ?p ?publicObject . ?publicSubject owl:sameAs ?formerSubject }
+# every entity under https://w3id.org/intigraph/<repo>/id/. The former
+# internal names are not published, not even as owl:sameAs aliases: they were
+# a tenth of the pendant and the only internal names left in it, and no public
+# reader resolved them. A store holding an older pendant keeps its old names;
+# it does not gain links from this one. Every stack repository uses the same
+# rewrite, so the same thing gets the same public IRI in every pendant.
+# Predicates and classes are vocabulary and are left alone; so are the
+# review-pinned publication-policy rule IRIs that the receiver verifier checks
+# by name.
+CONSTRUCT { ?publicSubject ?p ?publicObject }
 WHERE {
 { SELECT ?s ?p ?o WHERE {
   {
@@ -108,5 +111,4 @@ WHERE {
     IF(STRSTARTS(?objectText, "https://quipu.dev/knowledge/") && STRLEN(?objectText) > 28 && !STRSTARTS(?objectText, "https://quipu.dev/knowledge/publication-policy/"),
        IRI(CONCAT("https://w3id.org/intigraph/quipu/id/idea/", STRAFTER(?objectText, "https://quipu.dev/knowledge/"))), ?unmapped),
     ?o) AS ?publicObject)
-  BIND(IF(?publicSubject != ?s, ?s, ?unmapped) AS ?formerSubject)
 }

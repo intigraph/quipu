@@ -17,7 +17,7 @@ const ask = (query) => {
   return rows;
 };
 // K is the contributor vocabulary (classes and predicates). The ideas themselves
-// are published under their w3id names, each linked to its former name.
+// are published under their w3id names only; former names are not published.
 const K = "https://quipu.dev/knowledge/";
 const ID = "https://w3id.org/intigraph/quipu/id/idea/";
 const types = ask(`SELECT ?type (COUNT(?s) AS ?n) WHERE { ?s a ?type . FILTER(STRSTARTS(STR(?s), "${ID}")) } GROUP BY ?type`);
@@ -32,6 +32,6 @@ if (episodes.length !== 4 || episodes.some((r) => !r.source.startsWith("https://
 }
 const stale = ask(`SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s ?p ?o . FILTER(STRSTARTS(STR(?s), "${K}") && !STRSTARTS(STR(?s), "${K}publication-policy/")) }`);
 if (Number(stale[0].n) !== 0) throw new Error("contributor ideas still published under their former names");
-const unlinked = ask(`SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s ?p ?o . FILTER(STRSTARTS(STR(?s), "${ID}")) FILTER NOT EXISTS { ?s <http://www.w3.org/2002/07/owl#sameAs> ?former . FILTER(STR(?former) = CONCAT("${K}", STRAFTER(STR(?s), "${ID}"))) } }`);
-if (Number(unlinked[0].n) !== 0) throw new Error("every published idea must link to its former name");
+const aliased = ask(`SELECT (COUNT(*) AS ?n) WHERE { ?s <http://www.w3.org/2002/07/owl#sameAs> ?former . FILTER(STRSTARTS(STR(?s), "${ID}") && STR(?former) = CONCAT("${K}", STRAFTER(STR(?s), "${ID}"))) }`);
+if (Number(aliased[0].n) !== 0) throw new Error("former-name aliases must not be published");
 console.log(`Contributor receiver proof: ${paths.length} vision→decision→typed code paths, ${episodes.length} source-backed episodes`);
