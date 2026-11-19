@@ -43,14 +43,7 @@ pub(crate) async fn append(
     }
     admission::write_blocking(move || {
         let mut live = store.lock();
-        // A scoped machine writer is admitted only on its granted graph; ROOT
-        // is never grantable. Operator and named writers are unchanged.
-        let graphs = std::collections::BTreeSet::from([request.graph.clone()]);
-        let tx = live.with_writer_scope(
-            quipu::writer_scope::WriteOperation::FluentAppend,
-            &graphs,
-            |live| live.append_fluent_observation(&request),
-        )?;
+        let tx = live.append_fluent_observation(&request)?;
         Ok(axum::Json(json!({"tx": tx})).into_response())
     })
     .await

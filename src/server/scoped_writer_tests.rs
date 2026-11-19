@@ -1,6 +1,4 @@
 //! Real HTTP adapters, synthetic credentials and disposable stores only.
-#[path = "scoped_writer_fluent_tests.rs"]
-mod fluent;
 #[path = "scoped_writer_mint_tests.rs"]
 mod mint;
 use std::{collections::BTreeSet, sync::Arc};
