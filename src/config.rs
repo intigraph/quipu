@@ -831,6 +831,18 @@ pub struct ServerConfig {
     /// This is neither authorization nor a classifier for undeclared queries.
     pub heavy_read_operations: Vec<String>,
 
+    /// Early read shedding (aegis-69x). 0 (default) keeps today's admission:
+    /// a read waits for a permit and only its request budget ends the wait
+    /// (408). When positive, a read not admitted within this many ms (or its
+    /// remaining budget, if shorter) is refused before it runs with
+    /// 429 + Retry-After, body code `read_not_started`, and
+    /// `X-Quipu-Priority: background` reads never queue.
+    pub read_admission_wait_ms: u64,
+
+    /// Permits a `background` read must leave free for normal reads. Only
+    /// used when `read_admission_wait_ms > 0`. Default 1.
+    pub read_background_reserve: usize,
+
     /// Maximum listed operations occupying ordinary readers simultaneously.
     /// When enabled, must be positive and less than actual ordinary readers.
     pub heavy_read_permits: usize,
@@ -888,6 +900,8 @@ impl Default for ServerConfig {
             reserve_point_reads: false,
             heavy_read_operations: Vec::new(),
             heavy_read_permits: 1,
+            read_admission_wait_ms: 0,
+            read_background_reserve: 1,
             log_query_admission: false,
             log_query_phases: false,
             deck_http: false,

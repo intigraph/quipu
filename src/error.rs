@@ -53,6 +53,17 @@ pub enum Error {
     )]
     WriteAdmissionTimeout { waited_ms: u128 },
 
+    /// A read refused BEFORE it ran because the server is busy (aegis-69x).
+    #[error(
+        "read not started: {reason} after {waited_ms}ms ({class} priority); retry after {retry_after_s}s; the read did not run"
+    )]
+    ReadAdmissionShed {
+        waited_ms: u128,
+        class: &'static str,
+        reason: &'static str,
+        retry_after_s: u64,
+    },
+
     #[error(
         "query complexity limit: an intermediate join result exceeded {limit} rows — \
          this query's joins explode (unbound patterns multiplying against each other). \

@@ -21,8 +21,22 @@ where
         _ => quipu::metrics::inflight::Lane::Read,
     };
     let work = registry.start(lane, quipu::metrics::inflight::Phase::Waiting);
+    // aegis-69x: when read shedding is armed, a sheddable read either gets a
+    // permit within its wait or is refused with 429 before it runs. OFF (the
+    // default) returns None and the original acquisition below is unchanged.
+    let shed_policy = if super::shed::sheddable(kind) {
+        super::shed::policy()
+    } else {
+        None
+    };
+    let shed_permit = super::shed::acquire(shed_policy, admission, deadline, started)
+        .await
+        .map_err(AppError::from)?;
     let acquire = admission.acquire();
-    let acquired = if matches!(kind, "point-read" | "episode-read" | "heavy-read") {
+    let acquired = if let Some(permit) = shed_permit {
+        drop(acquire);
+        Ok(permit)
+    } else if matches!(kind, "point-read" | "episode-read" | "heavy-read") {
         if let Some(deadline) = deadline {
             let remaining = deadline.remaining_millis();
             let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
@@ -64,7 +78,12 @@ where
         if kind == "write" {
             reject_expired_write()?;
         }
-        f()
+        let ran = std::time::Instant::now();
+        let result = f();
+        if shed_policy.is_some() {
+            super::shed::record_service(ran.elapsed());
+        }
+        result
     })
     .await
 }

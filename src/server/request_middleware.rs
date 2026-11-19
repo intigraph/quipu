@@ -300,6 +300,7 @@ async fn log_request_tracked_stores(
         }),
         finished: false,
     };
+    let read_priority = super::admission::shed::ReadPriority::from_headers(req.headers());
     let resp = STORE_WORK
         .scope(
             StoreWorkContext {
@@ -312,7 +313,10 @@ async fn log_request_tracked_stores(
                     id,
                     super::search_observation::REQUEST.scope(
                         search,
-                        REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                        REQUEST_WRITE_PROVENANCE.scope(
+                            provenance.clone(),
+                            super::admission::shed::scope(read_priority, next.run(req)),
+                        ),
                     ),
                 ),
             ),

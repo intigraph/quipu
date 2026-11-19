@@ -68,6 +68,10 @@ pub(crate) fn open_pool(
     }
 
     super::admission::init_read_admission_for_pool(read_pool.ordinary_len());
+    super::admission::shed::init(
+        config.read_admission_wait_ms,
+        config.read_background_reserve,
+    );
     if config.reserve_point_reads {
         eprintln!(
             "point read reserve: {} ({} ordinary readers)",
