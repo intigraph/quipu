@@ -483,28 +483,20 @@ def is_legacy_entity(name):
         re.match(rf"{re.escape(FORMER_NAME_LEGACY)}((code|doc|chunk)/|repo_)", name))
 
 
-def verify_former_names(export):
-    """Admit owl:sameAs only from a public name to its exact former name.
+def verify_public_names(export):
+    """Entities publish under their public names only, with no aliases.
 
-    Every public entity subject carries exactly one such link; no internal
-    (legacy namespace) name appears anywhere except as that link's object or an
-    rdf:type object (classes, never entities); and a name under the public
-    entity prefix that the release query cannot produce refuses. Returns the
-    number of links.
+    No owl:sameAs is published at all: former internal names stay internal
+    (aegis-1o7r). No internal (legacy namespace) name appears anywhere except
+    as an rdf:type object (classes, never entities), and a name under the
+    public entity prefix that the release query cannot produce refuses.
+    Returns the number of distinct public entity subjects.
     """
-    linked, subjects = set(), set()
+    subjects = set()
     for subject, predicate, value in ntriples(Path(export).read_text()):
-        same = predicate == ("iri", SAME_AS)
-        if same:
-            if subject[0] != "iri" or value[0] != "iri":
-                raise ValueError("owl:sameAs between non-IRIs")
-            expected = former_name(subject[1])
-            if expected is None or value[1] != expected:
-                raise ValueError(f"owl:sameAs is not a former-name link: <{subject[1]}> <{value[1]}>")
-            if subject[1] in linked:
-                raise ValueError(f"more than one former name: <{subject[1]}>")
-            linked.add(subject[1])
-        positions = [subject] + ([] if same or predicate == ("iri", RDF_TYPE) else [value])
+        if predicate == ("iri", SAME_AS):
+            raise ValueError(f"owl:sameAs alias published: <{subject[1]}>")
+        positions = [subject] + ([] if predicate == ("iri", RDF_TYPE) else [value])
         for kind, name in positions:
             if kind != "iri":
                 continue
@@ -519,9 +511,7 @@ def verify_former_names(export):
                 raise ValueError(f"not a public entity name: <{name}>")
         if subject[0] == "iri" and former_name(subject[1]) is not None:
             subjects.add(subject[1])
-    if subjects - linked:
-        raise ValueError(f"public entity without its former-name link: <{min(subjects - linked)}>")
-    return len(linked)
+    return len(subjects)
 
 
 def build(revision, source, tooling, binary, bobbin, output):
@@ -716,7 +706,8 @@ def build(revision, source, tooling, binary, bobbin, output):
         or (stage / "shapes.ttl").stat().st_size == 0
     ):
         raise ValueError("repository share omitted receiver shapes")
-    verify_former_names(stage / "export.nt")
+    if not verify_public_names(stage / "export.nt"):
+        raise ValueError("repository share has no public entity names")
     receiver = private / "receiver.db"
     run(
         [

@@ -309,9 +309,10 @@ project site:
 | Quipu contributor idea | `…/quipu/id/idea/<name>` |
 
 The producer's store keeps its internal names; the release query renames
-subjects and entity-valued objects as it exports, and every renamed subject
-carries one `owl:sameAs` link to its former name, so a store that already
-holds an older pendant still resolves the old IRIs. Every repository applies
+subjects and entity-valued objects as it exports. Former names are not
+published, not even as `owl:sameAs` aliases: a pendant carries public names
+only. A store that already holds an older pendant keeps the old names that
+pendant brought; a newer pendant does not link them. Every repository applies
 the same rule, so a reference from one pendant to another lands on the name
 the other pendant publishes. Classes, predicates, literals and the four
 review-pinned publication-policy rule IRIs are not renamed.
