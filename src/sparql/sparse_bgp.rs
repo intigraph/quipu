@@ -129,15 +129,14 @@ fn smallest_fixed_driver(
         let NamedNodePattern::NamedNode(predicate) = &pattern.predicate else {
             continue;
         };
-        let fixed = match &pattern.object {
-            TermPattern::Literal(_) => true,
-            TermPattern::NamedNode(_) => {
-                !ctx.entails_rdfs && predicate.as_str() != crate::namespace::RDF_TYPE
-            }
-            TermPattern::Variable(v) => {
-                matches!(seed.get(v.as_str()), Some(crate::types::Value::Str(_)))
-            }
-            _ => false,
+        // An if-chain, not a match: TermPattern's variant set depends on
+        // features, so a wildcard arm trips clippy on one build or the other.
+        let fixed = if let TermPattern::Variable(v) = &pattern.object {
+            matches!(seed.get(v.as_str()), Some(crate::types::Value::Str(_)))
+        } else if matches!(pattern.object, TermPattern::NamedNode(_)) {
+            !ctx.entails_rdfs && predicate.as_str() != crate::namespace::RDF_TYPE
+        } else {
+            matches!(pattern.object, TermPattern::Literal(_))
         };
         if !fixed {
             continue;
