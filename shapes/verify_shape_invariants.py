@@ -207,7 +207,12 @@ def canonical_text(path_or_text):
         raise ValueError("served canonical N-Triples need rdflib to read") from exc
     from rdflib import RDF, BNode, Literal, URIRef
     graph = rdflib.Graph()
-    graph.parse(data=text, format="turtle")
+    try:
+        graph.parse(data=text, format="turtle")
+    except Exception as exc:  # rdflib BadSyntax is a SyntaxError, not a ValueError
+        # An auth or error page (JSON, HTML) from the store must read as UNKNOWN
+        # (exit 2), never escape as a traceback with exit 1 = "fatal violations".
+        raise ValueError("served shapes are not parseable RDF") from exc
 
     known = [("aegis", AEGIS_NS), ("sh", SH_NS), ("rdfs", RDFS_NS),
              ("quipu", QUIPU_NS[0]), ("quipu", QUIPU_NS[1])]
@@ -229,11 +234,19 @@ def canonical_text(path_or_text):
             return '"' + str(term).replace("\\", "\\\\").replace('"', '\\"') + '"'
         raise ValueError("unsupported blank-node object in served shapes")
 
+    # Only QUIPU_NS[0] is bound to quipu:. Terms in QUIPU_NS[1] are also emitted
+    # as quipu:x, under the wrong binding. Harmless while every reader matches
+    # text rather than resolving IRIs; revisit if a reader ever resolves them.
     out = [f"@prefix aegis: <{AEGIS_NS}> .", f"@prefix sh: <{SH_NS}> .",
            f"@prefix rdfs: <{RDFS_NS}> .", f"@prefix quipu: <{QUIPU_NS[0]}> .", ""]
     kinds = {URIRef(SH_NS + "NodeShape"): "NodeShape", URIRef(SH_NS + "PropertyShape"): "PropertyShape"}
     shapes = sorted({(str(s), kinds[o]) for s, o in graph.subject_objects(RDF.type)
                      if o in kinds and isinstance(s, URIRef)})
+    if not shapes:
+        # Parseable RDF holding no named shape (wrong graph, data not shapes, all
+        # shapes blank-noded) would otherwise print "ok" over zero shapes: the
+        # exact vacuous pass this reader exists to end.
+        raise ValueError("served RDF holds no named sh:NodeShape/sh:PropertyShape")
     for subject, kind in shapes:
         node = URIRef(subject)
         out.append(f"{curie(node)} a sh:{kind} ;")
@@ -562,12 +575,20 @@ def check_i1(shapes):
     return failures, proven
 
 
+def require_shapes(shapes, scope):
+    """Refuse (UNKNOWN, exit 2) an empty parse of the authority set: from any
+    reader, zero shapes is "not measured", never "clean" (aegis-nw7)."""
+    if not shapes:
+        raise ValueError(f"parsed 0 shapes from {scope}; refusing a vacuous pass")
+    return shapes
+
+
 def main():
     if "--selftest" in sys.argv:
         sys.exit(selftest())
     if not SHAPES.exists():
         sys.exit(f"FAIL: {SHAPES} not found")
-    shapes = parse(SHAPES)
+    shapes = require_shapes(parse(SHAPES), SHAPES.name)
     targeted = [s for s in shapes if s["target"]]
     failures = []
     proven = []
@@ -1025,6 +1046,29 @@ def selftest():
             pass
     if canonical_text(prefixed) != prefixed:
         fails.append("nw7-source: a prefixed source file was rewritten")
+    # Non-RDF bodies (an auth or error page) and RDF holding no shapes must
+    # REFUSE as ValueError (UNKNOWN), with or without rdflib.
+    no_shapes = "<http://x/a> <http://x/b> <http://x/c> .\n"
+    for label, body in (("json", '{"error":"unauthorized"}'),
+                        ("html", "<html><body>502 Bad Gateway</body></html>"),
+                        ("no-shapes", no_shapes)):
+        try:
+            canonical_text(body)
+            fails.append(f"nw7-refuse-{label}: body was read instead of refused")
+        except ValueError:
+            pass
+        except Exception as exc:
+            fails.append(f"nw7-refuse-{label}: escaped as {type(exc).__name__}, not ValueError")
+    for label, text in (("empty", ""), ("no-shapes-prefixed", "@prefix sh: <http://www.w3.org/ns/shacl#> .\n")):
+        try:
+            require_shapes(parse_text_for_selftest(text), label)
+            fails.append(f"nw7-vacuous-{label}: zero shapes passed instead of refusing")
+        except ValueError:
+            pass
+    try:
+        require_shapes(parse_text_for_selftest(prefixed), "prefixed")
+    except ValueError:
+        fails.append("nw7-vacuous: a real shape set was refused")
 
     if fails:
         print("SELFTEST FAILED:", file=sys.stderr)
