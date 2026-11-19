@@ -93,6 +93,13 @@ episodes resolve inside the writer barrier. Scoped writes do not perform a
 second global embedding update after their graph transaction; index maintenance
 remains an operator operation.
 
+`POST /fluent/observations` requires the `fluent_append` operation on a grant
+for the request's `graph`. The append runs inside the same writer barrier and
+transaction as the other scoped routes, and records the scoped principal as the
+observation writer. A ROOT or ungranted graph is refused before any store work.
+The fluent schema, property-shape binding and event-identity checks are
+unchanged.
+
 `/set` currently writes ROOT only and is refused for scoped credentials, even
 when supplied a `graph` field. All other mutation routes, including graph
 creation, deletion, labeling, import, patch, and policy enrollment, are refused.
