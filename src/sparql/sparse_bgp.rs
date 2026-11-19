@@ -1,4 +1,12 @@
-//! Use a proven small literal relation before constructing a whole graph model.
+//! Use a proven small fixed-object relation before constructing a whole graph model.
+//!
+//! First pass (unchanged): the first fixed literal relation of at most
+//! [`SMALL`] rows drives. Second pass (aegis-prna R3): otherwise the SMALLEST
+//! fixed literal or non-type IRI relation of at most [`WIDE`] rows drives.
+//! Without it, a seeds owner star such as `?s status "open" . ?s agent <p>`
+//! (1,229 and 390 rows) fell through to the resident whole-graph read model:
+//! a full current-fact scan per reader handle plus write catch-up, measured
+//! at 0.8-10 s per query and the dominant owner-rows store hold in production.
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
@@ -8,6 +16,9 @@ use super::{Bindings, TemporalContext};
 use crate::{Result, Store};
 
 pub(super) const SMALL: usize = 128;
+/// Largest driver of the second pass: each remaining pattern then costs at
+/// most this many bound-subject index probes, never a whole-graph build.
+pub(super) const WIDE: usize = 1024;
 
 pub(super) fn try_eval(
     store: &Store,
@@ -52,6 +63,9 @@ pub(super) fn try_eval(
             break;
         }
     }
+    if chosen.is_none() && !patterns.iter().any(|p| p.subject != patterns[0].subject) {
+        chosen = smallest_fixed_driver(store, patterns, ctx, seed)?;
+    }
     let Some((chosen, mut rows)) = chosen else {
         return Ok(None);
     };
@@ -89,4 +103,50 @@ pub(super) fn try_eval(
         rows = next;
     }
     Ok(Some((rows, variables)))
+}
+
+/// The smallest fixed-object relation of at most [`WIDE`] rows, if any.
+///
+/// Only same-subject stars over named predicates reach here (checked by the
+/// caller and below). `rdf:type` objects keep the entailment-aware planner,
+/// and an IRI object is skipped under RDFS entailment, where a sub-property
+/// could contribute rows that a direct lookup cannot see.
+fn smallest_fixed_driver(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<Option<(usize, Vec<Bindings>)>> {
+    if patterns
+        .iter()
+        .any(|p| !matches!(p.predicate, NamedNodePattern::NamedNode(_)))
+        || !matches!(patterns[0].subject, TermPattern::Variable(_))
+    {
+        return Ok(None);
+    }
+    let mut best: Option<(usize, Vec<Bindings>)> = None;
+    for (index, pattern) in patterns.iter().enumerate() {
+        let NamedNodePattern::NamedNode(predicate) = &pattern.predicate else {
+            continue;
+        };
+        let fixed = match &pattern.object {
+            TermPattern::Literal(_) => true,
+            TermPattern::NamedNode(_) => {
+                !ctx.entails_rdfs && predicate.as_str() != crate::namespace::RDF_TYPE
+            }
+            TermPattern::Variable(v) => {
+                matches!(seed.get(v.as_str()), Some(crate::types::Value::Str(_)))
+            }
+            _ => false,
+        };
+        if !fixed {
+            continue;
+        }
+        let bound = best.as_ref().map_or(WIDE, |(_, rows)| rows.len());
+        let rows = eval_triple_pattern_limited(store, pattern, seed, ctx, Some(bound + 1))?;
+        if rows.len() <= bound && best.as_ref().is_none_or(|(_, b)| rows.len() < b.len()) {
+            best = Some((index, rows));
+        }
+    }
+    Ok(best)
 }
