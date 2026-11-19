@@ -223,7 +223,7 @@ async fn episode_handler_refuses_expired_batch_then_commits_large_control() {
 }
 
 #[tokio::test]
-async fn expired_read_retains_query_timeout_response() {
+async fn expired_read_reports_request_timeout_response() {
     let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
     let result = admit_with_deadline(
         admission,
@@ -253,7 +253,12 @@ async fn expired_read_retains_query_timeout_response() {
         .await
         .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(body["error"].as_str().unwrap().contains("narrow the query"));
+    // aegis-3a99: a read whose admission budget was spent before evaluation
+    // never ran; it reports the request budget, not a query-shape hint or
+    // "exceeded 0ms (ran 0ms)". Still 408, no Retry-After, no write_started.
+    let error = body["error"].as_str().unwrap();
+    assert!(error.contains("request deadline exceeded"), "{error}");
+    assert!(!error.contains("exceeded 0ms"), "{error}");
     assert!(body.get("write_started").is_none());
 }
 
