@@ -179,6 +179,104 @@ REQUIRED_PREDICATE_PROVEN = {
 }
 
 
+SH_NS = "http://www.w3.org/ns/shacl#"
+RDFS_NS = "http://www.w3.org/2000/01/rdf-schema#"
+# The regex reader matched the TEXT quipu:onViolation, whatever IRI the file
+# bound quipu: to; both namespaces in use are accepted so served shapes keep that.
+QUIPU_NS = ("http://quipu.dev/ns#", "http://quipu.dev/ontology/")
+
+
+def canonical_text(path_or_text):
+    """Shape text in the layout the line-oriented readers below expect.
+
+    A source file (it declares @prefix) is returned UNCHANGED. Served shapes
+    (aegis-nw7) arrive as canonical N-Triples: full IRIs, no prefixes, one
+    triple per line, property shapes as blank nodes. Every regex here then
+    matched NOTHING, and I1/I2/I3 printed "ok" over zero shapes. That text is
+    parsed as RDF and re-emitted deterministically: one shape per block,
+    sh:targetClass on its own line, one line per property with sh:path BEFORE
+    sh:minCount, quipu:onViolation and rdfs:subClassOf statements kept. It
+    needs rdflib; without it the input is refused, never read as empty.
+    """
+    text = path_or_text.read_text() if isinstance(path_or_text, Path) else path_or_text
+    if re.search(r"(?im)^\s*(@prefix|prefix)\s", text) or not text.strip():
+        return text
+    try:
+        import rdflib
+    except ImportError as exc:
+        raise ValueError("served canonical N-Triples need rdflib to read") from exc
+    from rdflib import RDF, BNode, Literal, URIRef
+    graph = rdflib.Graph()
+    try:
+        graph.parse(data=text, format="turtle")
+    except Exception as exc:  # rdflib BadSyntax is a SyntaxError, not a ValueError
+        # An auth or error page (JSON, HTML) from the store must read as UNKNOWN
+        # (exit 2), never escape as a traceback with exit 1 = "fatal violations".
+        raise ValueError("served shapes are not parseable RDF") from exc
+
+    known = [("aegis", AEGIS_NS), ("sh", SH_NS), ("rdfs", RDFS_NS),
+             ("quipu", QUIPU_NS[0]), ("quipu", QUIPU_NS[1])]
+    extra = {}  # any other namespace gets a generated prefix: the readers split on whitespace
+
+    def curie(term):
+        if isinstance(term, URIRef):
+            iri = str(term)
+            for prefix, ns in known:
+                local = iri[len(ns):]
+                if iri.startswith(ns) and re.fullmatch(r"[A-Za-z_][\w-]*", local):
+                    return f"{prefix}:{local}"
+            m = re.fullmatch(r"(.*[/#])([A-Za-z_][\w-]*)", iri)
+            if m:
+                prefix = extra.setdefault(m.group(1), f"ns{len(extra) + 1}")
+                return f"{prefix}:{m.group(2)}"
+            return f"<{iri}>"
+        if isinstance(term, Literal):
+            return '"' + str(term).replace("\\", "\\\\").replace('"', '\\"') + '"'
+        raise ValueError("unsupported blank-node object in served shapes")
+
+    # Only QUIPU_NS[0] is bound to quipu:. Terms in QUIPU_NS[1] are also emitted
+    # as quipu:x, under the wrong binding. Harmless while every reader matches
+    # text rather than resolving IRIs; revisit if a reader ever resolves them.
+    out = [f"@prefix aegis: <{AEGIS_NS}> .", f"@prefix sh: <{SH_NS}> .",
+           f"@prefix rdfs: <{RDFS_NS}> .", f"@prefix quipu: <{QUIPU_NS[0]}> .", ""]
+    kinds = {URIRef(SH_NS + "NodeShape"): "NodeShape", URIRef(SH_NS + "PropertyShape"): "PropertyShape"}
+    shapes = sorted({(str(s), kinds[o]) for s, o in graph.subject_objects(RDF.type)
+                     if o in kinds and isinstance(s, URIRef)})
+    if not shapes:
+        # Parseable RDF holding no named shape (wrong graph, data not shapes, all
+        # shapes blank-noded) would otherwise print "ok" over zero shapes: the
+        # exact vacuous pass this reader exists to end.
+        raise ValueError("served RDF holds no named sh:NodeShape/sh:PropertyShape")
+    for subject, kind in shapes:
+        node = URIRef(subject)
+        out.append(f"{curie(node)} a sh:{kind} ;")
+        for target in sorted(graph.objects(node, URIRef(SH_NS + "targetClass")), key=str):
+            out.append(f"    sh:targetClass {curie(target)} ;")
+        for value in sorted({v for ns in QUIPU_NS
+                             for v in graph.objects(node, URIRef(ns + "onViolation"))}, key=str):
+            out.append(f"    quipu:onViolation {curie(value)} ;")
+        props = []
+        for prop in graph.objects(node, URIRef(SH_NS + "property")):
+            paths = sorted(graph.objects(prop, URIRef(SH_NS + "path")), key=str)
+            counts = [int(c) for c in graph.objects(prop, URIRef(SH_NS + "minCount"))]
+            if len(counts) > 1 or len(paths) > 1:
+                raise ValueError(f"unsupported property shape on {subject}")
+            if not paths or isinstance(paths[0], BNode):
+                continue  # a path expression is not a predicate; the text reader never recorded one
+            line = f"    sh:property [ sh:path {curie(paths[0])} ;"
+            if counts:
+                line += f" sh:minCount {counts[0]} ;"
+            props.append(line + " ] ;")
+        out.extend(sorted(props))
+        out.append("    .")
+        out.append("")
+    for child, parent in sorted(graph.subject_objects(URIRef(RDFS_NS + "subClassOf")), key=str):
+        if isinstance(child, URIRef) and isinstance(parent, URIRef):
+            out.append(f"{curie(child)} rdfs:subClassOf {curie(parent)} .")
+    header = [f"@prefix {p}: <{ns}> ." for ns, p in extra.items()]
+    return "\n".join(header + out) + "\n"
+
+
 def parse(path):
     """Yield (shape_name, targetclass|None, [(path, [constraints])]) per shape.
 
@@ -191,7 +289,7 @@ def parse(path):
     code plane could not be examined even when this function was pointed
     straight at its file.
     """
-    text = path.read_text()
+    text = canonical_text(path)
     prefixes = dict(re.findall(r"@prefix\s+([A-Za-z][\w-]*):\s+<([^>]+)>", text))
     ns_prefixes = {p for p, ns in prefixes.items() if ns == AEGIS_NS}
     shapes, cur = [], None
@@ -397,7 +495,11 @@ def live_kinds(url):
     )
     req = urllib.request.Request(
         url.rstrip("/") + "/query",
-        data=json.dumps({"query": query}).encode(),
+        # verbose: full IRIs. Compact output uses whatever prefix the loaded
+        # shape sets declare, and the shortest wins: two sets bind `a:` to the
+        # aegis namespace, so non-verbose rows read `a:Host` and this census
+        # saw ZERO domain types (aegis-nw7).
+        data=json.dumps({"query": query, "verbose": True}).encode(),
         headers={"Content-Type": "application/json", "X-Quipu-Client": "agent-adhoc"},
     )
     with urllib.request.urlopen(req, timeout=30) as response:
@@ -473,12 +575,20 @@ def check_i1(shapes):
     return failures, proven
 
 
+def require_shapes(shapes, scope):
+    """Refuse (UNKNOWN, exit 2) an empty parse of the authority set: from any
+    reader, zero shapes is "not measured", never "clean" (aegis-nw7)."""
+    if not shapes:
+        raise ValueError(f"parsed 0 shapes from {scope}; refusing a vacuous pass")
+    return shapes
+
+
 def main():
     if "--selftest" in sys.argv:
         sys.exit(selftest())
     if not SHAPES.exists():
         sys.exit(f"FAIL: {SHAPES} not found")
-    shapes = parse(SHAPES)
+    shapes = require_shapes(parse(SHAPES), SHAPES.name)
     targeted = [s for s in shapes if s["target"]]
     failures = []
     proven = []
@@ -545,7 +655,7 @@ def main():
             )
 
     reports = []
-    authority = targetclasses(SHAPES.read_text())
+    authority = targetclasses(canonical_text(SHAPES))
 
     # I5 — the extraction guide agrees with the shapes (guide->shapes fatal).
     guide = flag_value("--guide")
@@ -572,7 +682,7 @@ def main():
     if live_url:
         declared = set()
         for ttl in SHAPES.parent.glob("*.ttl"):
-            declared |= targetclasses(ttl.read_text())
+            declared |= targetclasses(canonical_text(ttl))
         in_use = live_kinds(live_url)
         undeclared = {k: n for k, n in in_use.items() if k not in declared}
         if undeclared:
@@ -593,7 +703,7 @@ def main():
         # I8 — an ABSTRACT parent must not be asserted directly on an instance.
         parents = set()
         for ttl in SHAPES.parent.glob("*.ttl"):
-            parents |= subclass_parents(ttl.read_text())
+            parents |= subclass_parents(canonical_text(ttl))
         abstract = abstract_parents(parents, declared)
         # in_use is the ASSERTED count: live_kinds() asks `?s a ?c` with ?c a
         # VARIABLE, which quipu does NOT expand over subClassOf. The constant
@@ -886,6 +996,79 @@ def selftest():
                 f"vt03v-proven: {key} has no measurement recorded — an entry here "
                 f"is a claim that coverage was MEASURED, so it must carry a number"
             )
+
+    # aegis-nw7: served shapes are canonical N-Triples. Reading them must give
+    # the same shapes as the prefixed source, or REFUSE; never zero shapes.
+    prefixed = (
+        "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n"
+        "@prefix sh: <http://www.w3.org/ns/shacl#> .\n"
+        "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
+        "aegis:HostShape a sh:NodeShape ;\n"
+        "    sh:targetClass aegis:Host ;\n"
+        "    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;\n"
+        "    sh:property [ sh:path aegis:runsOn ; ] .\n"
+        "aegis:Host rdfs:subClassOf aegis:Machine .\n"
+    )
+    served = (
+        "<http://aegis.gastown.local/ontology/HostShape> "
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#NodeShape> .\n"
+        "<http://aegis.gastown.local/ontology/HostShape> "
+        "<http://www.w3.org/ns/shacl#targetClass> <http://aegis.gastown.local/ontology/Host> .\n"
+        "<http://aegis.gastown.local/ontology/HostShape> <http://www.w3.org/ns/shacl#property> _:b1 .\n"
+        "_:b1 <http://www.w3.org/ns/shacl#minCount> \"1\"^^<http://www.w3.org/2001/XMLSchema#integer> .\n"
+        "_:b1 <http://www.w3.org/ns/shacl#path> <http://www.w3.org/2000/01/rdf-schema#label> .\n"
+        "<http://aegis.gastown.local/ontology/HostShape> <http://www.w3.org/ns/shacl#property> _:b2 .\n"
+        "_:b2 <http://www.w3.org/ns/shacl#path> <http://aegis.gastown.local/ontology/runsOn> .\n"
+        "<http://aegis.gastown.local/ontology/Host> "
+        "<http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://aegis.gastown.local/ontology/Machine> .\n"
+    )
+
+    def shape_view(text):
+        return [(s["name"], s["target"], sorted((p["path"], p["minCount"]) for p in s["props"]))
+                for s in parse_text_for_selftest(text)]
+
+    try:
+        import rdflib  # noqa: F401
+        have_rdflib = True
+    except ImportError:
+        have_rdflib = False
+    if have_rdflib:
+        if shape_view(served) != shape_view(prefixed) or not shape_view(served):
+            fails.append("nw7-served: N-Triples shapes did not read as the prefixed source")
+        if (targetclasses(canonical_text(served)) != {"Host"}
+                or subclass_parents(canonical_text(served)) != {"Machine"}):
+            fails.append("nw7-served: targetclasses/subclass_parents differ on N-Triples")
+    else:
+        try:
+            canonical_text(served)
+            fails.append("nw7-served: N-Triples without rdflib was read instead of refused")
+        except ValueError:
+            pass
+    if canonical_text(prefixed) != prefixed:
+        fails.append("nw7-source: a prefixed source file was rewritten")
+    # Non-RDF bodies (an auth or error page) and RDF holding no shapes must
+    # REFUSE as ValueError (UNKNOWN), with or without rdflib.
+    no_shapes = "<http://x/a> <http://x/b> <http://x/c> .\n"
+    for label, body in (("json", '{"error":"unauthorized"}'),
+                        ("html", "<html><body>502 Bad Gateway</body></html>"),
+                        ("no-shapes", no_shapes)):
+        try:
+            canonical_text(body)
+            fails.append(f"nw7-refuse-{label}: body was read instead of refused")
+        except ValueError:
+            pass
+        except Exception as exc:
+            fails.append(f"nw7-refuse-{label}: escaped as {type(exc).__name__}, not ValueError")
+    for label, text in (("empty", ""), ("no-shapes-prefixed", "@prefix sh: <http://www.w3.org/ns/shacl#> .\n")):
+        try:
+            require_shapes(parse_text_for_selftest(text), label)
+            fails.append(f"nw7-vacuous-{label}: zero shapes passed instead of refusing")
+        except ValueError:
+            pass
+    try:
+        require_shapes(parse_text_for_selftest(prefixed), "prefixed")
+    except ValueError:
+        fails.append("nw7-vacuous: a real shape set was refused")
 
     if fails:
         print("SELFTEST FAILED:", file=sys.stderr)
