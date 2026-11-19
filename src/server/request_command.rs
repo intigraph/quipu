@@ -45,6 +45,16 @@ impl CommandContext {
                                 | "update"
                                 | "close"
                                 | "comments"
+                                // aegis-jve: the real st callers behind
+                                // "st-other" (status segments, dispatch).
+                                | "crew"
+                                | "crewid"
+                                | "task"
+                                | "events"
+                                | "harness"
+                                | "go"
+                                | "status"
+                                | "census"
                         )
                     })
                 })
@@ -167,6 +177,21 @@ mod tests {
                 .unwrap();
         assert!(log["declared_source"].is_null());
         assert!(log["declared_operation"].is_null());
+    }
+
+    #[test]
+    fn status_segment_and_dispatch_callers_are_attributed() {
+        for command in [
+            "crew", "crewid", "task", "events", "harness", "go", "status", "census",
+        ] {
+            let mut headers = axum::http::HeaderMap::new();
+            let source = format!("st-{command}");
+            headers.insert("x-quipu-source", source.parse().unwrap());
+            let log: serde_json::Value =
+                serde_json::from_str(&CommandContext::from_headers(&headers).annotate("{}".into()))
+                    .unwrap();
+            assert_eq!(log["declared_source"], source.as_str());
+        }
     }
 
     #[test]
