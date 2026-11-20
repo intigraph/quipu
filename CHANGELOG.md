@@ -18,12 +18,16 @@ are generated from the versioned release records.
 
 - [**breaking**] Remove memory-files primitive (#1231)([2d0d4d2](https://github.com/scbrown/quipu/commit/2d0d4d2c3fa33a4a5f2c9c1552bec455685ad23a))
 
+
+
 ### Fixed
 
 - *(proposal-plan)* Bound the named-graph scan per graph (#1253)([7874861](https://github.com/scbrown/quipu/commit/7874861918ad6f84ac61c7dc51f3c876e0fc2085))
 - *(share)* Stop publishing former-name aliases in the repository pendant (#1254)([ac95f4c](https://github.com/scbrown/quipu/commit/ac95f4ccc050ef97a49117a6162ba1cf6c4f8583))
 - *(query)* Report a request budget spent queueing as RequestTimeout, not "exceeded 0ms (ran 0ms)" (#1256)([90bc2c3](https://github.com/scbrown/quipu/commit/90bc2c3899ed4c417e9ba13aaf0e181f939dd04c))
 - *(shapes)* Read served canonical shapes and census with full IRIs (#1263)([f30a915](https://github.com/scbrown/quipu/commit/f30a915a10f5b01840a1829367d35381682e8f7c))
+
+
 
 ### Reverted
 
@@ -33,17 +37,6 @@ are generated from the versioned release records.
 
 - *(sparql)* Drive a same-subject star from its smallest fixed relation (#1262)([c3854b2](https://github.com/scbrown/quipu/commit/c3854b29fac0e1c505cab6c018769b975899db62))
 - *(fluent)* Bind and read fluents from indexed slices, not a whole-graph reserialize (#1258)([8e797eb](https://github.com/scbrown/quipu/commit/8e797ebb17a7cadfeb9bc35a066c91d4c023bd9f))
-
-### Breaking changes
-
-- Remove the memory-files library, `quipu memory` CLI, `/memory/*` RPCs,
-  `memory_files` configuration and `quipu-memory` credential audience. Crew
-  memory belongs to clients using ordinary shapes and graph operations. Existing
-  Artifact/RDF-value records remain untouched and readable through normal graph
-  query/export; no store migration or record deletion is performed. Old scoped
-  memory credentials are refused rather than promoted to ordinary credentials.
-  Rollback is a normal source revert and CD of the previous build. Client
-  adoption is tracked separately from this removal.
 
 ## [0.18.2] - 2026-11-18
 
