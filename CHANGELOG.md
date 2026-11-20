@@ -7,6 +7,33 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-20
+
+### Added
+
+- *(scoped-writer)* Admit /fluent/observations as fluent_append on a granted graph (#1255)([aaa9542](https://github.com/scbrown/quipu/commit/aaa9542f2aa4e114e9d04f09094b3d7099a51d05))
+- *(scoped-writer)* Re-land /fluent/observations as fluent_append on a granted graph (#1265)([ac37d5e](https://github.com/scbrown/quipu/commit/ac37d5e3f13b87a99ae4dcc19621e7c9e20e6b82))
+
+### Changed
+
+- [**breaking**] Remove memory-files primitive (#1231)([2d0d4d2](https://github.com/scbrown/quipu/commit/2d0d4d2c3fa33a4a5f2c9c1552bec455685ad23a))
+
+### Fixed
+
+- *(proposal-plan)* Bound the named-graph scan per graph (#1253)([7874861](https://github.com/scbrown/quipu/commit/7874861918ad6f84ac61c7dc51f3c876e0fc2085))
+- *(share)* Stop publishing former-name aliases in the repository pendant (#1254)([ac95f4c](https://github.com/scbrown/quipu/commit/ac95f4ccc050ef97a49117a6162ba1cf6c4f8583))
+- *(query)* Report a request budget spent queueing as RequestTimeout, not "exceeded 0ms (ran 0ms)" (#1256)([90bc2c3](https://github.com/scbrown/quipu/commit/90bc2c3899ed4c417e9ba13aaf0e181f939dd04c))
+- *(shapes)* Read served canonical shapes and census with full IRIs (#1263)([f30a915](https://github.com/scbrown/quipu/commit/f30a915a10f5b01840a1829367d35381682e8f7c))
+
+### Reverted
+
+- *(scoped-writer)* Undo /fluent/observations fluent_append (#1255) (#1259)([9b99136](https://github.com/scbrown/quipu/commit/9b99136db04197fec6316d23f78cd83f97d9a552))
+
+### Perf
+
+- *(sparql)* Drive a same-subject star from its smallest fixed relation (#1262)([c3854b2](https://github.com/scbrown/quipu/commit/c3854b29fac0e1c505cab6c018769b975899db62))
+- *(fluent)* Bind and read fluents from indexed slices, not a whole-graph reserialize (#1258)([8e797eb](https://github.com/scbrown/quipu/commit/8e797ebb17a7cadfeb9bc35a066c91d4c023bd9f))
+
 ### Breaking changes
 
 - Remove the memory-files library, `quipu memory` CLI, `/memory/*` RPCs,
