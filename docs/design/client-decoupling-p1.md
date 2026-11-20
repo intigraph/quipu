@@ -5,11 +5,31 @@ aegis-kao.3 (parent aegis-kao). No code changes in this document.
 
 ## Rule
 
-Quipu is a generic RDF/SPARQL knowledge-graph product. Other programs depend on
-Quipu; Quipu depends on none of them. Quipu source names no client: no client
-executable it runs, no client file format it emits, no client vocabulary in its
-built-in queries. Client specifics live in the client, or in data and
-configuration that Quipu treats generically. (Operator ruling, 2026-11-20.)
+Quipu is a generic RDF/SPARQL knowledge-graph product. The other components of
+the stack it ships with (shantytown/`st`, seeds, camayoc, chaski, shuttle,
+yupana, bobbin, tambo, ...) depend on Quipu; Quipu depends on none of them.
+Quipu source names no stack component: no component executable it runs, no
+component file format it emits, no component vocabulary in its built-in
+queries. Component specifics live in the component, or in data and
+configuration that Quipu treats generically. (Operator ruling, 2026-11-20:
+"Quipu should not be coupled to the stack, but the opposite".)
+
+Scope of the rule as applied here:
+
+- **Source and shipped behaviour.** The book and design docs may name a
+  component *as an example* of something that consumes a generic contract
+  (for example, "a hook manager such as `st` can register this manifest").
+  Examples do not create a dependency; code paths do.
+- **Agent harnesses are not stack components.** Claude Code and Codex are
+  third-party runtimes that Quipu integrates with, in the same way a CLI
+  writes shell completions for bash or zsh. Writing their settings is a
+  harness integration, not stack coupling, and it stays in this wave.
+  Whether harness integrations should leave the Quipu binary too (for example
+  into the installer) is a separate question with its own item, aegis-kao.13.
+  This wave does not decide it.
+- **The shared Quechua vocabulary** is a stack component's vocabulary. Today's
+  work-item queries inline its prefix; that inlining leaves with kao.3, so no
+  separate item is needed.
 
 This wave covers the three places where Quipu reaches *out* to a specific
 client. The work is sized so each item lands, deploys and rolls back on its
@@ -37,7 +57,8 @@ sibling tools.
 
 - Quipu owns a **generic hook manifest**, `quipu.hooks/1`: the same fields it
   ships today (name, version, owner, roles, hooks[event, command, harnesses,
-  evidence]). It is documented in the book as Quipu's contract. Any manager
+  evidence]). The per-harness fields name harnesses (third-party runtimes;
+  see Scope), never a stack component. It is documented in the book as Quipu's contract. Any manager
   may consume it.
 - `quipu hooks bundle` prints that manifest (it already exists as a verb).
   `quipu hooks install/uninstall/status` only ever write and read harness
@@ -55,8 +76,9 @@ sibling tools.
    tooling manifest already lists Quipu). Land and install.
 2. **Quipu:** emit `schema: quipu.hooks/1`, delete `st_available`,
    `st_register` and `via_st`, and update the hook docs. Tests: install,
-   uninstall and status with no `st` on `PATH` (a fake HOME that contains no
-   `st`), and a negative control showing that nothing executes `st`.
+   uninstall and status with no `st` on `PATH` (the property under test is
+   `PATH`; the fake HOME also holds no copy), and a negative control showing
+   that nothing executes `st`.
 3. Verify on a managed host: the rendered settings still carry Quipu's Stop
    hook after a settings re-emit (the reason the `st` branch existed).
 
@@ -96,6 +118,19 @@ must survive.
   endpoints.
 - **Fail closed** when the verifier is unset, missing, killed or times out,
   exactly like a missing `tambo` today. An unset verifier is never "trust all".
+- **The verifier is a security decision, so its configuration is protected.**
+  The program must be an **absolute path**: no `PATH` lookup and no relative
+  path. Today's `tambo` was a `PATH` lookup, so this also closes an existing
+  gap. Quipu refuses (fails closed) when the program, any of its parent
+  directories, or the configuration file that names it is writable by anyone
+  other than the service owner or root. These checks run at every invocation,
+  not only at startup, so a later permission change cannot silently weaken
+  them. Tests cover a group-writable program, a world-writable config and a
+  relative path: each is refused.
+- **Repository identity still comes only from the receiver's own command
+  line** (the remote the operator named), never from a downloaded manifest
+  or pointer. The verifier receives that receiver-side value; nothing from
+  the fetched pack chooses which repository is trusted.
 - No program name appears in Quipu source. The book gives the installer's
   wrapper as one example of a verifier.
 
@@ -154,7 +189,10 @@ rule is what makes a gap-free migration possible.
   capability for every client, not a work-item feature.
 - `quipu_cooccurrence` becomes the stored query `work_item_cooccurrence`. The
   tool is kept for one release as a deprecated alias that forwards to
-  `quipu_ask` with that name, then removed.
+  `quipu_ask` with that name, then removed. While the alias exists it is the one
+  place Quipu source still names a component concept. That is deliberate and
+  time-boxed: the removal (step 4) belongs to the kao.3 assignee, who records
+  the removal release on kao.3 when step 3 lands.
 
 ### Migration
 
@@ -170,7 +208,14 @@ rule is what makes a gap-free migration possible.
    deprecated forwarder. Tests: dispatch reaches the stored copy. Acceptance on
    the deployment: before/after answers of `brief_ground`/`brief_related` for
    one item with recorded provenance, and of `entity_work` for one entity, are
-   identical.
+   identical. For the bitemporal query, which is the only one that runs through
+   the new temporal path: record `quipu_cooccurrence` for one work item that has
+   recorded provenance, at one fixed `valid_at` and one fixed `tx` (both before
+   the most recent provenance write for that item, so the as-of answer differs
+   from the current one), before step 3. After step 3, `quipu_ask
+   work_item_cooccurrence` with the same item, `valid_at` and `tx` must return
+   the same rows in the same order, and the current (no `valid_at`/`tx`) answer
+   must match too.
 4. **Next release:** remove the `quipu_cooccurrence` alias after its callers
    use `quipu_ask` (`rg quipu_cooccurrence` across the stack repos = 0).
 
