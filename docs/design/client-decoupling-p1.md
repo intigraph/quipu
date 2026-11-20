@@ -20,13 +20,12 @@ Scope of the rule as applied here:
   component *as an example* of something that consumes a generic contract
   (for example, "a hook manager such as `st` can register this manifest").
   Examples do not create a dependency; code paths do.
-- **Agent harnesses are not stack components.** Claude Code and Codex are
-  third-party runtimes that Quipu integrates with, in the same way a CLI
-  writes shell completions for bash or zsh. Writing their settings is a
-  harness integration, not stack coupling, and it stays in this wave.
-  Whether harness integrations should leave the Quipu binary too (for example
-  into the installer) is a separate question with its own item, aegis-kao.13.
-  This wave does not decide it.
+- **Agent harness settings also leave the binary** (lead ruling on
+  aegis-kao.13, 2026-11-20, option b). Quipu emits only its own documented
+  hook manifest. The installer or a harness manager renders it into Claude
+  Code / Codex settings. Quipu no longer writes `settings.json` or
+  `config.toml`, so kao.1 below removes both the `st` branch and the
+  direct-write branch.
 - **The shared Quechua vocabulary** is a stack component's vocabulary. Today's
   work-item queries inline its prefix; that inlining leaves with kao.3, so no
   separate item is needed.
@@ -61,32 +60,44 @@ sibling tools.
   see Scope), never a stack component. It is documented in the book as Quipu's contract. Any manager
   may consume it.
 - `quipu hooks bundle` prints that manifest (it already exists as a verb).
-  `quipu hooks install/uninstall/status` only ever write and read harness
-  settings directly. There is no `st` branch and no `Command::new("st")`.
-- A host that manages hooks centrally registers Quipu's manifest from its
-  own side, for example `st ops hooks register <(quipu hooks bundle)`. Quipu
-  is not involved, and that host's renderer stays its own business.
-- `status` reports what is actually in the harness settings. A manager's
-  own view of what it renders is the manager's check, not Quipu's.
+  That is Quipu's whole hook surface. There is no `st` branch, no
+  `Command::new("st")`, and in the end state no harness settings writer.
+- **Rendering belongs to the installer or a harness manager.** The installer
+  (tambo) renders `quipu.hooks/1` into each harness's settings with the merge
+  semantics shared with sibling tools (yupana, bobbin), and a manager such as
+  `st` may register the same manifest instead. Quipu is not involved in either.
+- `quipu hooks install/uninstall/status` survive one release as a deprecated
+  **built-in fallback** (the current direct writer), printing a notice that
+  points at the installer. They are then removed. `status` during the
+  fallback release reads the harness settings only.
 
 ### Migration
 
-1. **Client first (shantytown):** accept `quipu.hooks/1` as an alias of its
-   bundle schema, and register Quipu's manifest in its own provisioning (the
-   tooling manifest already lists Quipu). Land and install.
-2. **Quipu:** emit `schema: quipu.hooks/1`, delete `st_available`,
-   `st_register` and `via_st`, and update the hook docs. Tests: install,
-   uninstall and status with no `st` on `PATH` (the property under test is
-   `PATH`; the fake HOME also holds no copy), and a negative control showing
-   that nothing executes `st`.
-3. Verify on a managed host: the rendered settings still carry Quipu's Stop
-   hook after a settings re-emit (the reason the `st` branch existed).
+1. **Clients first.** The installer (tambo) gains a renderer for
+   `quipu.hooks/1`, using `quipu hooks bundle` as input and the shared merge
+   semantics. Shantytown accepts `quipu.hooks/1` as an alias of its bundle
+   schema and registers Quipu's manifest in its own provisioning. Land and
+   install both.
+2. **Quipu, fallback release:** emit `schema: quipu.hooks/1`; delete
+   `st_available`, `st_register` and `via_st`; keep the direct writer behind
+   `install/uninstall` with a deprecation notice; update the hook docs to point
+   at the installer. Tests: install, uninstall and status with no `st` on `PATH`
+   (the property under test is `PATH`; the fake HOME also holds no copy), plus
+   a negative control showing that nothing executes `st`.
+3. **Verify on a managed host and on an unmanaged host:** the settings
+   rendered by the installer or manager carry Quipu's Stop hook, and still carry
+   it after a settings re-emit (the reason the `st` branch existed).
+4. **Quipu, removal release:** delete the settings writer and the
+   `install/uninstall/status` verbs, with
+   `rg 'settings.json|config.toml' src/hooks_install.rs` = 0. Gate: step 3 has
+   been observed on every host that runs Quipu's hooks.
 
 ### Rollback
 
-Revert the Quipu change. The client keeps accepting both schema names, so the
-order of rollback does not matter. No settings file is rewritten by the
-revert itself.
+Revert the Quipu change: step 4 brings the fallback writer back, and step 2
+brings the `st` branch back. The installer and shantytown keep accepting both
+schema names, so the order of rollback does not matter. No settings file is
+rewritten by a revert itself.
 
 ### Risk
 
