@@ -74,8 +74,9 @@ stops being read.
 | `server.read_only` | `false` | Refuse all write endpoints and suppress event and superseded-vector retention workers. Writable servers retain their configured policy; zero retention disables the corresponding worker |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
-| `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap; initially accepts only `["owner-rows"]`. Does not classify undeclared queries or grant permissions. |
-| `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation. With read processes, one service-wide owner-rows executor runs on worker 0. See [Read concurrency](../reference/read-concurrency.md). |
+| `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap for the `X-Quipu-Operation` labels listed here (any well-formed label, each once). Does not classify undeclared queries or grant permissions. |
+| `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation. With read processes, one service-wide heavy-operation executor runs on worker 0. See [Read concurrency](../reference/read-concurrency.md). |
+| `server.declared_label_limit` | `256` | Distinct client-declared `X-Quipu-Source` labels, and separately `X-Quipu-Operation` labels, logged as themselves per process; later new labels log as `_overflow`. Applies to every client alike. |
 | `server.memory_budget_mib` | unset | One aggregate memory budget (MiB) for the primary and every read worker; sizes SQLite caches. Required for `read_processes`. |
 | `server.read_processes` | `0` | Separate read-only worker processes. Off by default: with workers on, every read endpoint is forwarded to them, each worker takes one request at a time, and overflow is an immediate 503. See [Read concurrency](../reference/read-concurrency.md). |
 | `server.read_process_base_port` | `3031` | First loopback port for read workers |

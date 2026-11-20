@@ -1,5 +1,19 @@
-//! Finite caller declarations; never authorization or metric labels.
-//! An explicit server policy may additionally cap owner-rows scheduling.
+//! Client-declared request labels for the completion log (aegis-z29i).
+//!
+//! Any client may declare `x-quipu-source` and `x-quipu-operation`. Quipu
+//! checks the syntax only ([`quipu::request_usage::request_label`]) and gives
+//! no particular client or value a meaning in source: each client owns its own
+//! label vocabulary, and a deployment may name labels in its own configuration
+//! (`heavy_read_operations`). Cardinality is bounded generically by
+//! `declared_label_limit`. Never authorization, never a metric label.
+
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock, PoisonError};
+
+/// Logged in place of a new label once a field already holds the configured
+/// number of distinct labels. It cannot collide with a client declaration:
+/// a declared label must start with a lowercase letter.
+pub(super) const OVERFLOW: &str = "_overflow";
 
 #[derive(Clone, Default)]
 pub(super) struct CommandContext {
@@ -7,17 +21,45 @@ pub(super) struct CommandContext {
     operation: Option<String>,
 }
 
-/// An st command label: `[a-z][a-z_-]{0,30}` (aegis-z29i). Shantytown emits
-/// only argparse-registered verbs here (`st-work-item`, `st-fleet-hold`); the
-/// bounded shape keeps the field finite without a list that must track every
-/// st release. Log-only: never authorization or a metric label.
-fn st_command_label(command: &str) -> bool {
-    let bytes = command.as_bytes();
-    (1..=31).contains(&bytes.len())
-        && bytes[0].is_ascii_lowercase()
-        && bytes[1..]
-            .iter()
-            .all(|b| b.is_ascii_lowercase() || *b == b'_' || *b == b'-')
+/// Distinct labels admitted to the log per field, for this process's lifetime.
+/// A new label past `limit` is logged as [`OVERFLOW`]; labels already seen
+/// keep logging as themselves.
+pub(super) struct LabelCap {
+    limit: usize,
+    seen: Mutex<[HashSet<String>; 2]>,
+}
+
+impl LabelCap {
+    pub(super) fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            seen: Mutex::new(Default::default()),
+        }
+    }
+
+    fn admit(&self, field: usize, label: &str) -> String {
+        let mut seen = self.seen.lock().unwrap_or_else(PoisonError::into_inner);
+        let set = &mut seen[field];
+        if set.contains(label) {
+            return label.to_owned();
+        }
+        if set.len() < self.limit {
+            set.insert(label.to_owned());
+            return label.to_owned();
+        }
+        OVERFLOW.to_owned()
+    }
+}
+
+static CAP: OnceLock<LabelCap> = OnceLock::new();
+
+/// Install the deployment's label cap. Later calls are ignored.
+pub(crate) fn init(config: &quipu::config::ServerConfig) {
+    let _ = CAP.set(LabelCap::new(config.declared_label_limit));
+}
+
+fn cap() -> &'static LabelCap {
+    CAP.get_or_init(|| LabelCap::new(quipu::config::ServerConfig::default().declared_label_limit))
 }
 
 impl CommandContext {
@@ -26,91 +68,36 @@ impl CommandContext {
     }
 
     pub(super) fn from_headers(headers: &axum::http::HeaderMap) -> Self {
+        // Exactly one well-formed value, or UNKNOWN. A repeated header is
+        // ambiguous and never resolved by picking one.
         let one = |name: &str| {
             let mut values = headers.get_all(name).iter();
             let value = values.next()?.to_str().ok()?;
-            values.next().is_none().then_some(value)
+            values
+                .next()
+                .is_none()
+                .then_some(value)
+                .filter(|value| quipu::request_usage::request_label(value))
         };
-        let source = one("x-quipu-source").filter(|value| {
-            matches!(*value, "seeds" | "shantytown")
-                || value.strip_prefix("st-").is_some_and(st_command_label)
-                || ["st-", "sd-"].iter().any(|prefix| {
-                    value.strip_prefix(prefix).is_some_and(|command| {
-                        matches!(
-                            command,
-                            "anchor"
-                                | "plate"
-                                | "inbox"
-                                | "stop_policy"
-                                | "stop_event"
-                                | "haul"
-                                | "tend"
-                                | "work"
-                                | "other"
-                                | "show"
-                                | "list"
-                                | "ready"
-                                | "where"
-                                | "search"
-                                | "count"
-                                | "info"
-                                | "stats"
-                                | "create"
-                                | "update"
-                                | "close"
-                                | "comments"
-                        )
-                    })
-                })
-        });
-        let operation = one("x-quipu-operation").filter(|value| {
-            matches!(
-                *value,
-                "query"
-                    | "health"
-                    | "graphs"
-                    | "show"
-                    | "list"
-                    | "ready"
-                    | "where"
-                    | "search"
-                    | "count"
-                    | "info"
-                    | "stats"
-                    | "tend"
-                    | "ready-count"
-                    | "uses-native-schema"
-                    | "closed-status"
-                    | "closed-statuses"
-                    | "owner-shape-supported"
-                    | "owner-rows"
-                    | "deferred-rows"
-                    | "unassigned-counts"
-                    | "unblocked-ids"
-                    | "due-rows"
-                    | "decision-lists"
-                    | "create"
-                    | "update"
-                    | "close"
-                    | "comments"
-            )
-        });
         Self {
-            source: source.map(str::to_owned),
-            operation: operation.map(str::to_owned),
+            source: one("x-quipu-source").map(str::to_owned),
+            operation: one("x-quipu-operation").map(str::to_owned),
         }
     }
 
     pub(super) fn annotate(&self, log: String) -> String {
+        self.annotate_with(cap(), log)
+    }
+
+    fn annotate_with(&self, cap: &LabelCap, log: String) -> String {
         let Ok(serde_json::Value::Object(mut record)) = serde_json::from_str(&log) else {
             return log;
         };
         // Null is UNKNOWN. Do not guess a command from the endpoint or agent.
-        record.insert("declared_source".into(), serde_json::json!(self.source));
-        record.insert(
-            "declared_operation".into(),
-            serde_json::json!(self.operation),
-        );
+        let source = self.source.as_deref().map(|label| cap.admit(0, label));
+        let operation = self.operation.as_deref().map(|label| cap.admit(1, label));
+        record.insert("declared_source".into(), serde_json::json!(source));
+        record.insert("declared_operation".into(), serde_json::json!(operation));
         serde_json::Value::Object(record).to_string()
     }
 }
@@ -119,19 +106,35 @@ impl CommandContext {
 mod tests {
     use super::*;
 
+    fn logged(source: Option<&str>, operation: Option<&str>) -> serde_json::Value {
+        let mut headers = axum::http::HeaderMap::new();
+        if let Some(source) = source {
+            headers.insert("x-quipu-source", source.parse().unwrap());
+        }
+        if let Some(operation) = operation {
+            headers.insert("x-quipu-operation", operation.parse().unwrap());
+        }
+        let context = CommandContext::from_headers(&headers);
+        serde_json::from_str(&context.annotate_with(
+            &LabelCap::new(16),
+            "{\"client\":\"example\",\"endpoint\":\"/query\",\"status\":200}".into(),
+        ))
+        .unwrap()
+    }
+
     #[test]
-    fn heavy_scheduling_uses_the_same_finite_duplicate_refusing_parser() {
+    fn scheduling_reads_the_same_single_well_formed_declaration() {
         let mut headers = axum::http::HeaderMap::new();
         assert_eq!(super::super::declared_operation(&headers), None);
-        headers.insert("x-quipu-operation", "owner-rows".parse().unwrap());
+        headers.insert("x-quipu-operation", "bulk-export".parse().unwrap());
         assert_eq!(
             super::super::declared_operation(&headers).as_deref(),
-            Some("owner-rows")
+            Some("bulk-export")
         );
-        headers.append("x-quipu-operation", "owner-rows".parse().unwrap());
+        headers.append("x-quipu-operation", "bulk-export".parse().unwrap());
         assert_eq!(super::super::declared_operation(&headers), None);
         headers.remove("x-quipu-operation");
-        headers.insert("x-quipu-operation", "invented".parse().unwrap());
+        headers.insert("x-quipu-operation", "Bulk Export".parse().unwrap());
         assert_eq!(super::super::declared_operation(&headers), None);
     }
 
@@ -140,7 +143,7 @@ mod tests {
         let base = quipu::request_usage::structured_request_log(
             "request_complete",
             7,
-            "seeds",
+            "example-client",
             "unattributed",
             "POST",
             "/query",
@@ -151,134 +154,89 @@ mod tests {
             None,
         );
         let mut headers = axum::http::HeaderMap::new();
-        headers.insert("x-quipu-source", "st-anchor".parse().unwrap());
-        headers.insert("x-quipu-operation", "list".parse().unwrap());
+        headers.insert("x-quipu-source", "example-client.sync".parse().unwrap());
+        headers.insert("x-quipu-operation", "list-items".parse().unwrap());
         let after = CommandContext::from_headers(&headers).annotate(base.clone());
         let before_value: serde_json::Value = serde_json::from_str(&base).unwrap();
         let after_value: serde_json::Value = serde_json::from_str(&after).unwrap();
         assert!(before_value.get("declared_source").is_none());
-        assert_eq!(after_value["declared_source"], "st-anchor");
-        assert_eq!(after_value["declared_operation"], "list");
+        assert_eq!(after_value["declared_source"], "example-client.sync");
+        assert_eq!(after_value["declared_operation"], "list-items");
         println!("before: {base}");
         println!("after: {after}");
     }
 
     #[test]
-    fn only_known_single_values_reach_the_log() {
-        let mut headers = axum::http::HeaderMap::new();
-        headers.insert("x-quipu-source", "st-anchor".parse().unwrap());
-        headers.insert("x-quipu-operation", "list".parse().unwrap());
-        headers.insert("authorization", "Bearer hidden".parse().unwrap());
-        let context = CommandContext::from_headers(&headers);
-        let log: serde_json::Value = serde_json::from_str(&context.annotate("{}".into())).unwrap();
-        assert_eq!(log["declared_source"], "st-anchor");
-        assert_eq!(log["declared_operation"], "list");
-        assert!(!log.to_string().contains("hidden"));
-        headers.append("x-quipu-source", "st-inbox".parse().unwrap());
-        headers.insert("x-quipu-operation", "private-argument".parse().unwrap());
-        let log: serde_json::Value =
-            serde_json::from_str(&CommandContext::from_headers(&headers).annotate("{}".into()))
-                .unwrap();
-        assert!(log["declared_source"].is_null());
-        assert!(log["declared_operation"].is_null());
-    }
-
-    #[test]
-    fn unknown_or_missing_declarations_are_explicit_without_inference() {
-        for source in [
-            None,
-            Some("st-Secret message"),
-            Some("st-1abc"),
-            Some("st-"),
-            Some("st-abcdefghijklmnopqrstuvwxyzabcdef"),
-            Some("/private/path"),
-            Some("st-anchor query"),
-            Some("sd-not-listed"),
+    fn any_client_declares_its_own_labels_without_a_server_list() {
+        // aegis-z29i / aegis-kao: Quipu holds no client vocabulary. Labels from
+        // unrelated clients, including ones no release has seen, reach the log.
+        for (source, operation) in [
+            ("billing-worker", "nightly.rollup"),
+            ("cli", "show"),
+            ("a", "q"),
+            ("tool-v2.reader_3", "page-7"),
         ] {
-            let mut headers = axum::http::HeaderMap::new();
-            if let Some(source) = source {
-                headers.insert("x-quipu-source", source.parse().unwrap());
-            }
-            let context = CommandContext::from_headers(&headers);
-            let log: serde_json::Value = serde_json::from_str(
-                &context.annotate("{\"client\":\"seeds\",\"endpoint\":\"/query\"}".into()),
-            )
-            .unwrap();
-            assert!(log["declared_source"].is_null());
-            assert!(log["declared_operation"].is_null());
-        }
-    }
-
-    #[test]
-    fn native_projection_operations_are_retained() {
-        // Finite operation names already emitted by Shantytown's native reads.
-        // They are diagnostic declarations, not an authenticated caller identity.
-        for operation in [
-            "uses-native-schema",
-            "closed-status",
-            "closed-statuses",
-            "owner-shape-supported",
-            "owner-rows",
-            "deferred-rows",
-            "unassigned-counts",
-            "unblocked-ids",
-            "due-rows",
-            "decision-lists",
-        ] {
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert("x-quipu-source", "st-anchor".parse().unwrap());
-            headers.insert("x-quipu-operation", operation.parse().unwrap());
-            let log: serde_json::Value =
-                serde_json::from_str(&CommandContext::from_headers(&headers).annotate(
-                    "{\"client\":\"seeds\",\"endpoint\":\"/query\",\"status\":200}".into(),
-                ))
-                .unwrap();
-            assert_eq!(log["declared_operation"], operation, "{operation}");
-            assert_eq!(log["declared_source"], "st-anchor");
-            assert_eq!(log["client"], "seeds");
+            let log = logged(Some(source), Some(operation));
+            assert_eq!(log["declared_source"], source);
+            assert_eq!(log["declared_operation"], operation);
+            assert_eq!(log["client"], "example");
             assert_eq!(log["endpoint"], "/query");
             assert_eq!(log["status"], 200);
         }
     }
 
     #[test]
-    fn unknown_and_repeated_native_operations_remain_unknown() {
-        for operation in ["private-operation", "owner-rows private", "/private/path"] {
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert("x-quipu-operation", operation.parse().unwrap());
-            let log: serde_json::Value =
-                serde_json::from_str(&CommandContext::from_headers(&headers).annotate("{}".into()))
-                    .unwrap();
-            assert!(log["declared_operation"].is_null());
+    fn malformed_repeated_or_reserved_declarations_stay_unknown() {
+        let long = "a".repeat(quipu::request_usage::REQUEST_LABEL_MAX + 1);
+        for value in [
+            "Secret message",
+            "1abc",
+            "-abc",
+            "/private/path",
+            "anchor query",
+            OVERFLOW,
+            long.as_str(),
+        ] {
+            let log = logged(Some(value), Some(value));
+            assert!(log["declared_source"].is_null(), "{value}");
+            assert!(log["declared_operation"].is_null(), "{value}");
         }
+        assert!(logged(Some(""), None)["declared_source"].is_null());
+        let max = "a".repeat(quipu::request_usage::REQUEST_LABEL_MAX);
+        assert_eq!(logged(Some(&max), None)["declared_source"], max.as_str());
+
         let mut headers = axum::http::HeaderMap::new();
-        headers.append("x-quipu-operation", "owner-rows".parse().unwrap());
-        headers.append("x-quipu-operation", "due-rows".parse().unwrap());
+        headers.append("x-quipu-source", "one".parse().unwrap());
+        headers.append("x-quipu-source", "two".parse().unwrap());
+        headers.insert("authorization", "Bearer hidden".parse().unwrap());
         let log: serde_json::Value =
             serde_json::from_str(&CommandContext::from_headers(&headers).annotate("{}".into()))
                 .unwrap();
+        assert!(log["declared_source"].is_null());
         assert!(log["declared_operation"].is_null());
+        assert!(!log.to_string().contains("hidden"));
     }
 
     #[test]
-    fn st_registered_verb_labels_reach_the_log() {
-        // aegis-z29i: `st work item show` arrived as "st-other" and a 408 burst
-        // could not be attributed. Shantytown now sends <group>-<leaf>.
-        for source in [
-            "st-work-item",
-            "st-fleet-hold",
-            "st-repo-worktree",
-            "st-anchor",
-            "st-other",
-        ] {
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert("x-quipu-source", source.parse().unwrap());
-            let context = CommandContext::from_headers(&headers);
-            let log: serde_json::Value = serde_json::from_str(
-                &context.annotate("{\"client\":\"seeds\",\"endpoint\":\"/query\"}".into()),
-            )
-            .unwrap();
-            assert_eq!(log["declared_source"], source);
-        }
+    fn label_cardinality_is_capped_per_field_by_configuration() {
+        let cap = LabelCap::new(2);
+        assert_eq!(cap.admit(0, "a"), "a");
+        assert_eq!(cap.admit(0, "b"), "b");
+        assert_eq!(cap.admit(0, "c"), OVERFLOW);
+        // Labels already admitted keep their name past the cap.
+        assert_eq!(cap.admit(0, "a"), "a");
+        // Fields are counted separately.
+        assert_eq!(cap.admit(1, "c"), "c");
+        let none = LabelCap::new(0);
+        assert_eq!(none.admit(0, "a"), OVERFLOW);
+
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("x-quipu-source", "third".parse().unwrap());
+        let log: serde_json::Value = serde_json::from_str(
+            &CommandContext::from_headers(&headers).annotate_with(&cap, "{}".into()),
+        )
+        .unwrap();
+        assert_eq!(log["declared_source"], OVERFLOW);
+        assert!(log["declared_operation"].is_null());
     }
 }

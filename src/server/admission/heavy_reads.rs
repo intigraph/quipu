@@ -20,8 +20,8 @@ pub(crate) fn init(config: &quipu::config::ServerConfig) {
         cap: Semaphore::new(config.heavy_read_permits),
     });
     eprintln!(
-        "heavy read cap: {} ordinary slot(s), cooperative owner-rows scheduling",
-        config.heavy_read_permits
+        "heavy read cap: {} ordinary slot(s), cooperative scheduling for {:?}",
+        config.heavy_read_permits, config.heavy_read_operations
     );
 }
 

@@ -20,6 +20,7 @@ fn routing(workers: usize) -> Routing {
         timeout: Duration::from_secs(3),
         response_limit: 65536,
         heavy_permits: 1,
+        heavy_operations: vec!["owner-rows".into(), "bulk-export".into()],
     }
 }
 
@@ -43,9 +44,11 @@ fn heavy_lane_is_global_and_does_not_take_ordinary_capacity() {
 }
 
 #[test]
-fn only_declared_query_owner_rows_use_the_heavy_lane() {
+fn only_configured_declared_query_operations_use_the_heavy_lane() {
     let mut routing = routing(1);
+    // aegis-z29i: the lane follows the deployment's list, not a source literal.
     assert!(routing.heavy("/query", Some("owner-rows")));
+    assert!(routing.heavy("/query", Some("bulk-export")));
     for operation in [None, Some("unknown"), Some("query")] {
         assert!(!routing.heavy("/query", operation));
     }
