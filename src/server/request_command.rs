@@ -264,7 +264,13 @@ mod tests {
     fn st_registered_verb_labels_reach_the_log() {
         // aegis-z29i: `st work item show` arrived as "st-other" and a 408 burst
         // could not be attributed. Shantytown now sends <group>-<leaf>.
-        for source in ["st-work-item", "st-fleet-hold", "st-repo-worktree", "st-anchor", "st-other"] {
+        for source in [
+            "st-work-item",
+            "st-fleet-hold",
+            "st-repo-worktree",
+            "st-anchor",
+            "st-other",
+        ] {
             let mut headers = axum::http::HeaderMap::new();
             headers.insert("x-quipu-source", source.parse().unwrap());
             let context = CommandContext::from_headers(&headers);
