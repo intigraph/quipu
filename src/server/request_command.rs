@@ -7,6 +7,19 @@ pub(super) struct CommandContext {
     operation: Option<String>,
 }
 
+/// An st command label: `[a-z][a-z_-]{0,30}` (aegis-z29i). Shantytown emits
+/// only argparse-registered verbs here (`st-work-item`, `st-fleet-hold`); the
+/// bounded shape keeps the field finite without a list that must track every
+/// st release. Log-only: never authorization or a metric label.
+fn st_command_label(command: &str) -> bool {
+    let bytes = command.as_bytes();
+    (1..=31).contains(&bytes.len())
+        && bytes[0].is_ascii_lowercase()
+        && bytes[1..]
+            .iter()
+            .all(|b| b.is_ascii_lowercase() || *b == b'_' || *b == b'-')
+}
+
 impl CommandContext {
     pub(super) fn operation(&self) -> Option<&str> {
         self.operation.as_deref()
@@ -20,6 +33,7 @@ impl CommandContext {
         };
         let source = one("x-quipu-source").filter(|value| {
             matches!(*value, "seeds" | "shantytown")
+                || value.strip_prefix("st-").is_some_and(st_command_label)
                 || ["st-", "sd-"].iter().any(|prefix| {
                     value.strip_prefix(prefix).is_some_and(|command| {
                         matches!(
@@ -173,9 +187,13 @@ mod tests {
     fn unknown_or_missing_declarations_are_explicit_without_inference() {
         for source in [
             None,
-            Some("st-secret-message"),
+            Some("st-Secret message"),
+            Some("st-1abc"),
+            Some("st-"),
+            Some("st-abcdefghijklmnopqrstuvwxyzabcdef"),
             Some("/private/path"),
             Some("st-anchor query"),
+            Some("sd-not-listed"),
         ] {
             let mut headers = axum::http::HeaderMap::new();
             if let Some(source) = source {
@@ -240,5 +258,21 @@ mod tests {
             serde_json::from_str(&CommandContext::from_headers(&headers).annotate("{}".into()))
                 .unwrap();
         assert!(log["declared_operation"].is_null());
+    }
+
+    #[test]
+    fn st_registered_verb_labels_reach_the_log() {
+        // aegis-z29i: `st work item show` arrived as "st-other" and a 408 burst
+        // could not be attributed. Shantytown now sends <group>-<leaf>.
+        for source in ["st-work-item", "st-fleet-hold", "st-repo-worktree", "st-anchor", "st-other"] {
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert("x-quipu-source", source.parse().unwrap());
+            let context = CommandContext::from_headers(&headers);
+            let log: serde_json::Value = serde_json::from_str(
+                &context.annotate("{\"client\":\"seeds\",\"endpoint\":\"/query\"}".into()),
+            )
+            .unwrap();
+            assert_eq!(log["declared_source"], source);
+        }
     }
 }
