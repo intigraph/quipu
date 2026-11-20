@@ -14,10 +14,12 @@ pub(super) fn load(store: &Store, graph: i64) -> Result<(Registry, Log)> {
         return Ok((registry, log));
     };
     let observable_type = store.lookup(&format!("{}Observable", crate::namespace::QUIPU_FLUENT))?;
-    let facts = store.current_facts_in_graph(graph)?;
-    let entities: BTreeSet<_> = facts
-        .iter()
-        .filter(|f| f.attribute == type_id && f.value == Value::Ref(fluent_type))
+    // Indexed (aegis-550z): declarations are the entities typed quipu:Fluent;
+    // each is then read from its own facts, never from a whole-graph load.
+    let entities: BTreeSet<_> = store
+        .current_facts_with_value_in_graph(&Value::Ref(fluent_type), graph)?
+        .into_iter()
+        .filter(|f| f.attribute == type_id)
         .map(|f| f.entity)
         .collect();
     if entities.len() > 256 {
@@ -27,7 +29,8 @@ pub(super) fn load(store: &Store, graph: i64) -> Result<(Registry, Log)> {
     let mut known = BTreeSet::new();
     let mut ready = BTreeSet::new();
     for entity in entities {
-        let rows: Vec<_> = facts.iter().filter(|f| f.entity == entity).collect();
+        let owned = store.entity_facts_in_graph(entity, graph)?;
+        let rows: Vec<_> = owned.iter().collect();
         let one = |name: &str| -> Result<Value> {
             let attribute = store
                 .lookup(&format!("{}{name}", crate::namespace::QUIPU_FLUENT))?

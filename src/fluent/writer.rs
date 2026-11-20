@@ -125,7 +125,7 @@ pub(super) fn binding_for(
         .get_combined_shapes()?
         .ok_or_else(|| invalid("missing fluent shapes"))?;
     let graph_iri = store.graph_iri_of(graph);
-    let facts = store.current_facts_in_graph(graph)?;
+    let facts = super::slice::binding_facts(store, graph, subject)?;
     let data = String::from_utf8(crate::rdf::serialize_facts(
         store,
         &facts,
@@ -323,7 +323,18 @@ pub(crate) fn read_log(store: &Store, graph: i64, fluent: &str, policy: Policy) 
     ) else {
         return Ok(Log::default());
     };
-    let facts = store.current_facts_in_graph(graph)?;
+    // Indexed (aegis-550z): a fluent's events point AT it through forFluent,
+    // and every check below reads only those candidate events' own facts.
+    let candidates: std::collections::BTreeSet<_> = store
+        .current_facts_with_value_in_graph(&Value::Ref(fluent_id), graph)?
+        .into_iter()
+        .filter(|f| f.attribute == for_fluent)
+        .map(|f| f.entity)
+        .collect();
+    let mut facts = Vec::new();
+    for candidate in candidates {
+        facts.extend(store.entity_facts_in_graph(candidate, graph)?);
+    }
     // Only native admission can create this protected type. An authenticated
     // caller's source label and untyped predicate lookalikes grant no origin.
     let admitted: std::collections::BTreeSet<_> = facts
