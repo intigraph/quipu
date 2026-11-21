@@ -45,6 +45,9 @@ pub(crate) struct StoreHandle {
     pub(crate) deck_http: bool,
     /// `[quipu.server] attest_http` (aegis-25k); off unless configured.
     pub(crate) attest_http: bool,
+    #[cfg(test)]
+    pub(crate) query_execution_count: std::sync::atomic::AtomicU64,
+    pub(crate) query_flights: Option<Arc<crate::query_endpoint::singleflight::Flights>>,
     pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
     pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
     /// A relay serves its children from this replica (s24.2 S4).
@@ -179,6 +182,9 @@ impl StoreHandle {
             log_query_phases: false,
             deck_http: false,
             attest_http: false,
+            #[cfg(test)]
+            query_execution_count: std::sync::atomic::AtomicU64::new(0),
+            query_flights: None,
             query_capture: None,
             replica: None,
             relay: None,
@@ -224,6 +230,9 @@ impl StoreHandle {
             log_query_phases: false,
             deck_http: false,
             attest_http: false,
+            #[cfg(test)]
+            query_execution_count: std::sync::atomic::AtomicU64::new(0),
+            query_flights: None,
             query_capture: None,
             replica: None,
             relay: None,

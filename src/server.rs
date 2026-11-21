@@ -352,8 +352,14 @@ async fn main() {
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
     admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 
+    let query_flights = query_endpoint::singleflight::configured(
+        &db_path,
+        config.server.query_singleflight,
+        store.has_attachments(),
+    );
     let relay = relay::open_configured(&store, &config);
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    handle.query_flights = query_flights;
     handle.process_writer_lock = _writer_lock;
     handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
