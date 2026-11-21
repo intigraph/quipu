@@ -14,18 +14,22 @@ use tokio::sync::watch;
 const MAX_FLIGHTS: usize = 32;
 const MAX_FOLLOWERS: usize = 16;
 const MAX_RESULT_BYTES: u64 = 1024 * 1024;
-type Generation = (i64, i64);
+type Generation = (i64, i64, [u8; 32]);
 type Key = ([u8; 32], Generation);
 
-pub(crate) fn configured(path: &str, enabled: bool, composed: bool) -> Option<Arc<Flights>> {
+pub(crate) fn configured(
+    path: &str,
+    enabled: bool,
+    sources: &[quipu::store::attach::Attachment],
+) -> Option<Arc<Flights>> {
     if !enabled {
         return None;
     }
-    let flights = (!composed).then(|| Flights::open(path)).flatten();
+    let flights = Flights::open_sources(path, sources);
     eprintln!(
         "query single-flight: {}",
         if flights.is_some() {
-            "enabled (32 flights, 16 followers, 1MiB/result)"
+            "ACTIVE (32 flights, 16 followers, 1MiB/result)"
         } else {
             "unavailable for this store; preserving ordinary reads"
         }
@@ -33,9 +37,32 @@ pub(crate) fn configured(path: &str, enabled: bool, composed: bool) -> Option<Ar
     flights
 }
 
+#[cfg(unix)]
+fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+#[cfg(not(unix))]
+fn same_file(_a: &std::fs::Metadata, _b: &std::fs::Metadata) -> bool {
+    // Until file identity is qualified here, composed reads bypass sharing.
+    false
+}
+
+fn registry(conn: &Connection) -> Option<Vec<(String, String)>> {
+    conn.prepare("SELECT alias,path FROM frozen_packs WHERE thawed_at IS NULL ORDER BY id")
+        .ok()?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .ok()?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .ok()
+}
+
 pub(crate) struct Flights {
     // One connection for generation probes only: no scans or evaluator work.
     marker: Mutex<Connection>,
+    sources: Vec<(String, Mutex<Connection>)>,
+    source_paths: Vec<(String, std::fs::Metadata)>,
+    frozen_registry: Vec<(String, String)>,
     probe: tokio::sync::Semaphore,
     active: Mutex<HashMap<Key, Arc<Flight>>>,
     stats: Mutex<Stats>,
@@ -69,7 +96,11 @@ impl Answer {
     }
 }
 impl Flights {
+    #[cfg(test)]
     pub(crate) fn open(path: &str) -> Option<Arc<Self>> {
+        Self::open_sources(path, &[])
+    }
+    fn open_sources(path: &str, sources: &[quipu::store::attach::Attachment]) -> Option<Arc<Self>> {
         if path == ":memory:" {
             return None;
         }
@@ -79,8 +110,34 @@ impl Flights {
         connection
             .execute_batch("PRAGMA cache_size=-64; PRAGMA mmap_size=0; PRAGMA query_only=ON;")
             .ok()?;
+        let frozen_registry = registry(&connection)?;
+        // An active archive must actually be among the served sources.
+        if frozen_registry
+            .iter()
+            .any(|(alias, path)| !sources.iter().any(|s| &s.alias == alias && &s.path == path))
+        {
+            return None;
+        }
+        let mut markers = Vec::new();
+        let mut source_paths = Vec::new();
+        for source in sources {
+            quipu::store::attach::validate_alias(&source.alias).ok()?;
+            if !source.read_only || source.path == ":memory:" {
+                return None;
+            }
+            let conn =
+                Connection::open_with_flags(&source.path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+            conn.busy_timeout(Duration::ZERO).ok()?;
+            conn.execute_batch("PRAGMA cache_size=-64; PRAGMA mmap_size=0; PRAGMA query_only=ON;")
+                .ok()?;
+            source_paths.push((source.path.clone(), std::fs::metadata(&source.path).ok()?));
+            markers.push((source.alias.clone(), Mutex::new(conn)));
+        }
         let flights = Arc::new(Self {
             marker: Mutex::new(connection),
+            sources: markers,
+            source_paths,
+            frozen_registry,
             probe: tokio::sync::Semaphore::new(1),
             active: Mutex::new(HashMap::new()),
             stats: Mutex::new(Stats::default()),
@@ -102,22 +159,43 @@ impl Flights {
                 .ok()
         };
         let before = version()?;
-        // Frozen packs and mounted sources have independent generations.
-        // Until all are fenced, never coalesce reads of a composed store.
-        let frozen: bool = conn
-            .query_row("SELECT EXISTS(SELECT 1 FROM frozen_packs)", [], |row| {
-                row.get(0)
-            })
-            .ok()?;
-        if frozen {
+        if registry(&conn)? != self.frozen_registry {
             return None;
+        }
+        let mut digest = Sha256::new();
+        for ((alias, marker), (path, original)) in self.sources.iter().zip(&self.source_paths) {
+            // A renamed replacement must not be confused with the inode already
+            // held by the serving connections. In-place commits use data_version.
+            let current = std::fs::metadata(path).ok()?;
+            if !same_file(&current, original) {
+                return None;
+            }
+            let source = marker.try_lock_for(wait)?;
+            let before: i64 = source
+                .query_row("PRAGMA data_version", [], |r| r.get(0))
+                .ok()?;
+            let head: i64 = source
+                .query_row("SELECT COALESCE(MAX(id),0) FROM transactions", [], |r| {
+                    r.get(0)
+                })
+                .ok()?;
+            let after: i64 = source
+                .query_row("PRAGMA data_version", [], |r| r.get(0))
+                .ok()?;
+            if before != after {
+                return None;
+            }
+            digest.update(alias.as_bytes());
+            digest.update([0]);
+            digest.update(before.to_le_bytes());
+            digest.update(head.to_le_bytes());
         }
         let tx = conn
             .query_row("SELECT COALESCE(MAX(id),0) FROM transactions", [], |row| {
                 row.get(0)
             })
             .ok()?;
-        (version()? == before).then_some((before, tx))
+        (version()? == before).then_some((before, tx, digest.finalize().into()))
     }
     async fn generation_for(&self, deadline: quipu::time::Deadline) -> Option<Generation> {
         // Concurrent followers must not turn a tiny proof probe into a storm
@@ -178,8 +256,31 @@ pub(super) struct Proof {
     valid: AtomicBool,
 }
 impl Proof {
-    pub(super) fn observe(&self, head: i64) {
-        let valid = head == self.generation.1
+    pub(super) fn invalidate(&self) {
+        self.valid.store(false, Ordering::Release);
+    }
+    pub(super) fn observe_sources(&self, head: i64, sources: &[(String, i64)]) {
+        // The evaluator pinned each attached snapshot before this probe. Verify
+        // its exact source set and heads as well as the admission generation.
+        let source_heads_match = sources.len() == self.owner.sources.len()
+            && sources.iter().zip(&self.owner.sources).all(
+                |((alias, head), (expected, marker))| {
+                    alias == expected
+                        && marker
+                            .try_lock_for(Duration::from_millis(5))
+                            .and_then(|conn| {
+                                conn.query_row(
+                                    "SELECT COALESCE(MAX(id),0) FROM transactions",
+                                    [],
+                                    |r| r.get::<_, i64>(0),
+                                )
+                                .ok()
+                            })
+                            == Some(*head)
+                },
+            );
+        let valid = source_heads_match
+            && head == self.generation.1
             && self.owner.generation_with_wait(Duration::from_millis(5)) == Some(self.generation);
         self.valid.store(valid, Ordering::Release);
         #[cfg(test)]

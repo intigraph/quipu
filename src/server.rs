@@ -355,7 +355,7 @@ async fn main() {
     let query_flights = query_endpoint::singleflight::configured(
         &db_path,
         config.server.query_singleflight,
-        store.has_attachments(),
+        store.attachments(),
     );
     let relay = relay::open_configured(&store, &config);
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());

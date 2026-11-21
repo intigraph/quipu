@@ -20,4 +20,32 @@ impl Store {
         }
         Ok(result)
     }
+
+    /// Pin every mounted file before evaluating a composed read. The returned
+    /// heads are per-source observations, not a globally atomic watermark.
+    /// A caller sharing answers must independently fence every source.
+    pub fn query_composed_snapshot<T>(
+        &self,
+        evaluate: impl FnOnce(i64, &[(String, i64)]) -> T,
+    ) -> Result<T> {
+        self.query_snapshot(|head| {
+            let heads = self
+                .attachments()
+                .iter()
+                .map(|source| {
+                    super::attach::validate_alias(&source.alias)?;
+                    let head = self.conn.query_row(
+                        &format!(
+                            "SELECT COALESCE(MAX(id),0) FROM {}.transactions",
+                            source.alias
+                        ),
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )?;
+                    Ok((source.alias.clone(), head))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(evaluate(head, &heads))
+        })?
+    }
 }

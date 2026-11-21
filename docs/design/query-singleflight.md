@@ -9,8 +9,18 @@ options), transport, content negotiation, substring contract, operation, and
 authority headers plus the verified principal/credential identity. Only outer query whitespace is trimmed. Whitespace inside a
 literal is significant. Keys and metrics do not expose query text or credentials.
 Remote SERVICE/federated reads and non-deterministic functions are excluded
-conservatively, as are execution profiles, mounted stores, stores with frozen-pack history,
-and stores without a file-backed generation probe.
+conservatively, as are execution profiles and stores without a file-backed
+generation probe. Read-only mounted stores, including active frozen packs,
+require generation proof for every mounted file.
+
+Mounted-source probes use dedicated read-only connections. The key also hashes
+each source alias, SQLite data version and transaction head. Before evaluation,
+the leader pins main and all mounted source snapshots and compares their heads
+with the admission proof. These are per-file observations, not a claim of an
+atomic cross-file transaction. A changed active frozen-pack registry, missing
+mount, uncertain probe or source-file replacement disables sharing. File identity
+is currently qualified on Unix; other platforms preserve ordinary composed reads.
+Startup reports `ACTIVE` only when the complete initial proof succeeds.
 
 Each process owns at most32 flights, each with at most16 live followers.
 Successful responses up to1MiB share immutable bytes; larger/streaming responses
@@ -41,7 +51,9 @@ represent executions; followers retain result-size/shape response extensions.
 
 Source controls cover an eight-request disabled/enabled burst, exact result
 parity, no completed-result reuse, differing text/scope/authority/format,
-writes before and after the actual snapshot pin, uncertain generation, bounds, cancellation and independent
+writes before and after the actual snapshot pin, mounted-source commits and file
+replacement, missing archive mounts, a frozen-pack duplicate burst, uncertain
+generation, bounds, cancellation and independent
 follower timeout. The ignored `identical_read_burst_ab` test runs a finite local
 fixture A/B and prints executed count and p95; it is not a production benchmark.
 Natural busy-window 408/request acceptance remains open after installation.

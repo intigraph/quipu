@@ -501,11 +501,17 @@ async fn answer_query(
                 // generation before sharing. A later commit does not invalidate
                 // this already-pinned answer for followers at the same watermark.
                 store
-                    .query_snapshot(|head| {
-                        proof.observe(head);
+                    .query_composed_snapshot(|head, sources| {
+                        proof.observe_sources(head, sources);
                         run(&store)
                     })
-                    .map_err(AppError::from)?
+                    // Uncertain source proof disables sharing. Even a failed
+                    // read-transaction commit must not publish a fallback under
+                    // the earlier admission generation.
+                    .unwrap_or_else(|_| {
+                        proof.invalidate();
+                        run(&store)
+                    })
             } else {
                 run(&store)
             }

@@ -91,7 +91,10 @@ overlapping identical local `/query` reads. It defaults to false. Complete
 input, scope, representation, authority and a live database generation fence
 separate flights; completed results are never cached. Flights, followers and
 shared response bytes are bounded, and each follower keeps its own wait budget.
-Remote/non-deterministic queries and composed stores use the ordinary path.
+Remote/non-deterministic queries use the ordinary path. Mounted and frozen-pack
+stores may share reads only when every source generation and evaluation snapshot
+is proven. An unavailable source, changed mount registry or replaced file bypasses
+sharing. Startup reports `ACTIVE` only after the probes succeed.
 The source design document `docs/design/query-singleflight.md` describes the
 qualification boundaries.
 
