@@ -167,6 +167,40 @@ mod tests {
     }
 
     #[test]
+    fn failed_requests_keep_declared_labels_and_original_completion_fields() {
+        // Timeout attribution must be as precise as successful reads. Labels
+        // remain client declarations; neither status nor agent invents them.
+        for status in [200, 408, 503] {
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert("x-quipu-source", "example-cli.inspect".parse().unwrap());
+            headers.insert("x-quipu-operation", "list-records".parse().unwrap());
+            let before = serde_json::json!({
+                "event": "request_complete", "agent": "example-producer",
+                "endpoint": "/query", "status": status, "elapsed_ms": 8000,
+            });
+            let after: serde_json::Value = serde_json::from_str(
+                &CommandContext::from_headers(&headers)
+                    .annotate_with(&LabelCap::new(16), before.to_string()),
+            )
+            .unwrap();
+            assert_eq!(after["declared_source"], "example-cli.inspect");
+            assert_eq!(after["declared_operation"], "list-records");
+            for (key, value) in before.as_object().unwrap() {
+                assert_eq!(&after[key], value);
+            }
+        }
+        let unknown: serde_json::Value = serde_json::from_str(
+            &CommandContext::from_headers(&axum::http::HeaderMap::new()).annotate_with(
+                &LabelCap::new(16),
+                r#"{"agent":"example-producer","status":408}"#.into(),
+            ),
+        )
+        .unwrap();
+        assert!(unknown["declared_source"].is_null());
+        assert!(unknown["declared_operation"].is_null());
+    }
+
+    #[test]
     fn any_client_declares_its_own_labels_without_a_server_list() {
         // aegis-z29i / aegis-kao: Quipu holds no client vocabulary. Labels from
         // unrelated clients, including ones no release has seen, reach the log.
