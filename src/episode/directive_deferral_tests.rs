@@ -61,7 +61,15 @@ a:decision a a:Directive ; rdfs:label "Keep this decision" "#;
             "; q:traceabilityDueAt \"2020-11-28T08:00:00Z\"^^xsd:dateTime .",
             true,
         ),
+        (
+            "; a:trackedBy a:work ; a:governedBy a:policy . a:work a a:WorkItem ; rdfs:label \"Work\" . a:policy a a:Policy ; rdfs:label \"Policy\" .",
+            true,
+        ),
         (".", false),
+        (
+            "; q:traceabilityDueAt \"2030-11-28T08:00:00\"^^xsd:dateTime .",
+            false,
+        ),
         ("; q:traceabilityDueAt \"later\" .", false),
         (
             "; q:traceabilityDueAt \"2030-11-28T08:00:00Z\"^^xsd:dateTime, \"2031-11-28T08:00:00Z\"^^xsd:dateTime .",
