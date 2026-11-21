@@ -77,7 +77,7 @@ pub(crate) fn render_health(out: &mut String) {
 /// Any unreadable or out-of-contract state renders only `collector_success 0`;
 /// a partial aggregate is never published.
 pub(crate) fn render_aggregate(out: &mut String) {
-    let body = match mode() {
+    let body: Result<String, ()> = match mode() {
         Mode::Off => return,
         Mode::Invalid => Err(()),
         #[cfg(unix)]
@@ -122,6 +122,7 @@ fn aggregate(conn: &rusqlite::Connection) -> Result<String, ()> {
     render_rows(&rows, i64::try_from(now).map_err(|_| ())?)
 }
 
+#[cfg(unix)]
 fn series_contract() -> &'static regex::Regex {
     static SERIES: OnceLock<regex::Regex> = OnceLock::new();
     SERIES.get_or_init(|| {
@@ -140,6 +141,7 @@ fn series_contract() -> &'static regex::Regex {
 
 /// Render validated rows exactly as the retired exporter did: the
 /// `quipu_search_aggregate_` families plus a per-surface last-capture gauge.
+#[cfg(unix)]
 fn render_rows(rows: &[(String, i64, i64)], now: i64) -> Result<String, ()> {
     use std::fmt::Write as _;
     if rows.len() > 4096 {
