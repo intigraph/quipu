@@ -826,14 +826,22 @@ pub struct ServerConfig {
     /// the remaining readers and admission permits. No extra connection opens.
     pub reserve_point_reads: bool,
 
-    /// Cooperative scheduling cap for declared heavy /query operations.
-    /// Empty by default: no scheduling change. Initially supports owner-rows.
-    /// This is neither authorization nor a classifier for undeclared queries.
+    /// Cooperative scheduling cap for declared heavy /query operations: the
+    /// `x-quipu-operation` labels this deployment schedules as heavy. Any
+    /// well-formed label may be listed; Quipu gives none a meaning in source.
+    /// Empty by default: no scheduling change. This is neither authorization
+    /// nor a classifier for undeclared queries.
     pub heavy_read_operations: Vec<String>,
 
     /// Maximum listed operations occupying ordinary readers simultaneously.
     /// When enabled, must be positive and less than actual ordinary readers.
     pub heavy_read_permits: usize,
+
+    /// Distinct client-declared labels (`x-quipu-source`, and separately
+    /// `x-quipu-operation`) the completion log records as themselves for this
+    /// process's lifetime. A new label past the cap is logged as `_overflow`.
+    /// Bounds log cardinality for every client alike (aegis-z29i).
+    pub declared_label_limit: usize,
 
     /// Include an optional permit-acquisition timestamp in query observation
     /// logs. Off by default; does not change admission or enable point reads.
@@ -888,6 +896,7 @@ impl Default for ServerConfig {
             reserve_point_reads: false,
             heavy_read_operations: Vec::new(),
             heavy_read_permits: 1,
+            declared_label_limit: 256,
             log_query_admission: false,
             log_query_phases: false,
             deck_http: false,
@@ -908,8 +917,18 @@ impl ServerConfig {
         if self.heavy_read_operations.is_empty() {
             return Ok(());
         }
-        if self.heavy_read_operations.as_slice() != ["owner-rows"] {
-            return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
+        for (index, operation) in self.heavy_read_operations.iter().enumerate() {
+            if !crate::request_usage::request_label(operation) {
+                return Err(format!(
+                    "heavy_read_operations: {operation:?} is not a valid declared label \
+                     ([a-z][a-z0-9._-]{{0,63}})"
+                ));
+            }
+            if self.heavy_read_operations[..index].contains(operation) {
+                return Err(format!(
+                    "heavy_read_operations: {operation:?} is listed twice"
+                ));
+            }
         }
         if self.heavy_read_permits == 0 || self.heavy_read_permits >= ordinary_readers {
             return Err("heavy reads require 0 < heavy_read_permits < ordinary_readers".into());

@@ -155,6 +155,7 @@ pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool
         } else {
             config.server.heavy_read_permits
         },
+        heavy_operations: config.server.heavy_read_operations.clone(),
     }));
     eprintln!(
         "read process pool: {} separate read-only workers; total memory budget {} bytes",
