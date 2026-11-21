@@ -18,6 +18,8 @@ pub enum WriteOperation {
     Knot,
     Set,
     EntityRefMint,
+    /// Native fluent observation append, on the granted graph only.
+    FluentAppend,
 }
 
 impl WriteOperation {
@@ -29,6 +31,7 @@ impl WriteOperation {
             "/knot" => Some(Self::Knot),
             "/set" => Some(Self::Set),
             "/entity_ref" => Some(Self::EntityRefMint),
+            "/fluent/observations" => Some(Self::FluentAppend),
             _ => None,
         }
     }

@@ -7,6 +7,13 @@
 //! (1,229 and 390 rows) fell through to the resident whole-graph read model:
 //! a full current-fact scan per reader handle plus write catch-up, measured
 //! at 0.8-10 s per query and the dominant owner-rows store hold in production.
+//!
+//! aegis-n0wc C: a follower may also be a whole-subject read `?s ?p ?o` once the
+//! driver has bound `?s` (a bound-subject index probe per driver row). The
+//! seeds family read `?s <parentItem> <item> . ?s ?p ?o` (314 comment facts on
+//! a busy item) otherwise fell through to the whole-graph model: 3.5-4.2 s of
+//! store per read, three reads per crew comment. The driver itself must still
+//! be a named, fixed relation, and RDFS entailment keeps the ordinary planner.
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
@@ -48,10 +55,7 @@ pub(super) fn try_eval(
         {
             continue;
         }
-        if patterns.iter().any(|other| {
-            other.subject != pattern.subject
-                || !matches!(other.predicate, NamedNodePattern::NamedNode(_))
-        }) {
+        if !indexed_star(patterns, ctx) {
             continue; // Only indexed same-subject stars; disconnected joins keep their planner.
         }
         // The ordinary triple reader composes and canonicalizes aliases before
@@ -117,11 +121,7 @@ fn smallest_fixed_driver(
     ctx: &TemporalContext,
     seed: &Bindings,
 ) -> Result<Option<(usize, Vec<Bindings>)>> {
-    if patterns
-        .iter()
-        .any(|p| !matches!(p.predicate, NamedNodePattern::NamedNode(_)))
-        || !matches!(patterns[0].subject, TermPattern::Variable(_))
-    {
+    if !indexed_star(patterns, ctx) {
         return Ok(None);
     }
     let mut best: Option<(usize, Vec<Bindings>)> = None;
@@ -148,4 +148,28 @@ fn smallest_fixed_driver(
         }
     }
     Ok(best)
+}
+
+/// A same-subject star every pattern of which is an indexed probe once the
+/// subject is bound: a named predicate, or (aegis-n0wc C) a whole-subject
+/// `?s ?p ?o` follower whose predicate variable is not the subject. At least
+/// one pattern must be named, because only a named relation can drive. Under
+/// RDFS entailment a variable predicate could need inferred facts that a
+/// direct lookup does not see, so it keeps the ordinary planner.
+fn indexed_star(patterns: &[TriplePattern], ctx: &TemporalContext) -> bool {
+    let TermPattern::Variable(subject) = &patterns[0].subject else {
+        return false;
+    };
+    let mut named = false;
+    for pattern in patterns {
+        if pattern.subject != patterns[0].subject {
+            return false;
+        }
+        match &pattern.predicate {
+            NamedNodePattern::NamedNode(_) => named = true,
+            NamedNodePattern::Variable(p) if !ctx.entails_rdfs && p != subject => {}
+            NamedNodePattern::Variable(_) => return false,
+        }
+    }
+    named
 }

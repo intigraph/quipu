@@ -417,6 +417,7 @@ impl Metrics {
         self.search_outcomes.render(&mut out);
         crate::search_outcome::render_capture_health(&mut out);
         crate::search_outcome::render_counter_health(&mut out);
+        crate::search_outcome::render_counter_aggregate(&mut out);
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.refusals.render(&mut out);
