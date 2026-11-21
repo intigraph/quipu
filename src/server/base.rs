@@ -216,6 +216,7 @@ pub(crate) async fn metrics_handler(
     }
     super::request_middleware::render_request_starts(&mut body);
     super::update::render_update_paths(&mut body);
+    super::handle::writer_timing::render(&mut body);
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
