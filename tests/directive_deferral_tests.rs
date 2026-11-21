@@ -1,5 +1,11 @@
+#![cfg(feature = "shacl")]
 //! rdj: warnings are advisory; traceability requirements remain blocking.
-use super::*;
+use quipu::{
+    Error,
+    episode::{Episode, ingest_episode},
+    namespace,
+    store::Store,
+};
 
 fn episode() -> Episode {
     serde_json::from_value(serde_json::json!({
@@ -45,7 +51,7 @@ a:TraceShape a sh:NodeShape ; sh:targetClass a:Directive ;
 
 #[test]
 fn published_directive_shape_accepts_typed_deadline_and_rejects_neither() {
-    let shapes = include_str!("../../shapes/aegis-ontology.shapes.ttl");
+    let shapes = include_str!("../shapes/aegis-ontology.shapes.ttl");
     let prefix = r#"
 @prefix a: <http://aegis.gastown.local/ontology/> .
 @prefix q: <https://w3id.org/intigraph/quechua/ns#> .
@@ -76,7 +82,7 @@ a:decision a a:Directive ; rdfs:label "Keep this decision" "#;
             false,
         ),
     ] {
-        let feedback = crate::shacl::validate_shapes(shapes, &format!("{prefix}{suffix}")).unwrap();
+        let feedback = quipu::shacl::validate_shapes(shapes, &format!("{prefix}{suffix}")).unwrap();
         assert_eq!(!feedback.blocks(), expected, "{suffix}: {feedback:?}");
         if !expected {
             assert!(feedback.violations > 0);
@@ -91,7 +97,7 @@ fn three_directive_episode_accepts_explicit_typed_dates_and_refuses_neither() {
         store
             .load_shapes(
                 "aegis-ontology",
-                include_str!("../../shapes/aegis-ontology.shapes.ttl"),
+                include_str!("../shapes/aegis-ontology.shapes.ttl"),
                 "2026-11-14",
             )
             .unwrap();

@@ -32,12 +32,12 @@ fn scalar(value: &Value) -> Result<Option<String>> {
     })
 }
 
-pub(super) fn render(key: &str, value: &Value) -> Result<Vec<String>> {
+pub(super) fn render(key: &str, value: &Value, prefix: &str) -> Result<Vec<String>> {
     let predicate = if address::absolute_syntax(key) {
         address::validate_absolute(key)?;
         format!("<{key}>")
     } else {
-        format!("aegis:{}", sanitize_iri_local(key))
+        format!("{prefix}:{}", sanitize_iri_local(key))
     };
     let values = match value {
         Value::Array(values) => values.as_slice(),
@@ -57,7 +57,7 @@ pub(super) fn validate_nodes(nodes: &[Node]) -> Result<()> {
     for node in nodes {
         if let Some(properties) = &node.properties {
             for (key, value) in properties {
-                render(key, value)?;
+                render(key, value, "ns")?;
             }
         }
     }
@@ -73,23 +73,19 @@ mod tests {
     fn explicit_typed_literal_preserves_predicate_datatype_and_escaping() {
         let value =
             json!({"value": "quote\"\n", "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"});
-        let terms = render(
-            "https://w3id.org/intigraph/quechua/ns#traceabilityDueAt",
-            &value,
-        )
-        .unwrap();
+        let terms = render("https://example.org/reviewDueAt", &value, "test").unwrap();
         assert_eq!(
             terms,
             vec![
-                " ;\n    <https://w3id.org/intigraph/quechua/ns#traceabilityDueAt> \"quote\\\"\\n\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+                " ;\n    <https://example.org/reviewDueAt> \"quote\\\"\\n\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
             ]
         );
         assert_eq!(
-            render("count", &json!([1, true, "plain"])).unwrap(),
+            render("count", &json!([1, true, "plain"]), "test").unwrap(),
             vec![
-                " ;\n    aegis:count \"1\"^^xsd:integer",
-                " ;\n    aegis:count \"true\"^^xsd:boolean",
-                " ;\n    aegis:count \"plain\"",
+                " ;\n    test:count \"1\"^^xsd:integer",
+                " ;\n    test:count \"true\"^^xsd:boolean",
+                " ;\n    test:count \"plain\"",
             ]
         );
     }
@@ -102,8 +98,8 @@ mod tests {
             json!({"value": "x", "datatype": "urn:type", "extra": true}),
             json!({"value": "x", "datatype": "urn:x> . <urn:evil>"}),
         ] {
-            assert!(render("field", &value).is_err(), "{value}");
+            assert!(render("field", &value, "test").is_err(), "{value}");
         }
-        assert!(render("https://example.org/x> . <urn:evil>", &json!("x")).is_err());
+        assert!(render("https://example.org/x> . <urn:evil>", &json!("x"), "test").is_err());
     }
 }

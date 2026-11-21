@@ -145,7 +145,7 @@ AEGIS_NS = "http://aegis.gastown.local/ontology/"
 # Stiwi 2026-11-14 explicitly changes this existing admission contract:
 # links OR a typed evaluation deadline; neither is refused. These are conditional
 # branch requirements, not a claim of 100% live link coverage. Paired native
-# controls live in src/episode/directive_deferral_tests.rs.
+# controls live in tests/directive_deferral_tests.rs.
 DIRECTIVE_CONTRACT_KEYS = frozenset({
     ("aegis:DirectiveTraceabilityShape", "aegis:trackedBy"),
     ("aegis:DirectiveTraceabilityShape", "aegis:governedBy"),

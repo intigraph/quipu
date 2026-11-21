@@ -612,7 +612,7 @@ fn episode_to_turtle(
         // preflight validates predicate/datatype IRIs before hashing or mutation.
         if let Some(props) = &node.properties {
             for (key, value) in props {
-                for triple in properties::render(key, value)
+                for triple in properties::render(key, value, "aegis")
                     .expect("episode properties validated before Turtle generation")
                 {
                     ttl.push_str(&triple);
@@ -738,6 +738,3 @@ mod graph_idempotency_tests;
 mod tests;
 #[cfg(test)]
 mod type_ns_tests;
-
-#[cfg(all(test, feature = "shacl"))]
-mod directive_deferral_tests;
