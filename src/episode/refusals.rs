@@ -13,7 +13,8 @@ pub(super) fn validate_or_refuse(
     timestamp: &str,
 ) -> Result<()> {
     let feedback = crate::shacl_context::validate_with_store_context(store, shapes, data)?;
-    if feedback.conforms {
+    // SHACL conformance includes advisory results; admission blocks violations only.
+    if !feedback.blocks() {
         return Ok(());
     }
     let messages: Vec<_> = feedback

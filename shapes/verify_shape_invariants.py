@@ -18,7 +18,9 @@ WHY EACH INVARIANT EXISTS — each is a bug that actually happened:
   I1  The only sh:minCount 1 in the file are rdfs:label, unless the requirement
       is backed either by measured 100% emitter coverage for a populated class,
       or by schema-first conformance fixtures for a brand-new class with zero
-      instances. Required scalar
+      instances. An explicit operator-authorized conditional admission contract
+      may instead carry its ruling and paired native controls; this does not
+      claim unconditional live coverage. Required scalar
       identity predicates (ctId, skillName, formulaName, beadId, hash, path,
       roleName, schedule, hostname, backend, pool, email, title) were required
       by the shapes and emitted by nothing: 133 violations across 11 populated
@@ -140,7 +142,17 @@ AEGIS_NS = "http://aegis.gastown.local/ontology/"
 # Do NOT add an entry to make a red run green. The 133-violation incident in I1
 # above is what that produces: shapes requiring predicates nothing emitted, and
 # ingestion for 11 classes one validate_on_write flag away from dying.
+# Stiwi 2026-11-14 explicitly changes this existing admission contract:
+# links OR a typed evaluation deadline; neither is refused. These are conditional
+# branch requirements, not a claim of 100% live link coverage. Paired native
+# controls live in tests/directive_deferral_tests.rs.
+DIRECTIVE_CONTRACT_KEYS = frozenset({
+    ("aegis:DirectiveTraceabilityShape", "aegis:trackedBy"),
+    ("aegis:DirectiveTraceabilityShape", "aegis:governedBy"),
+})
 REQUIRED_PREDICATE_PROVEN = {
+    **{key: "operator-contract Stiwi 2026-11-14 aegis-rdj: conditional links OR typed deadline; paired native admission/refusal fixtures (not live coverage)"
+       for key in DIRECTIVE_CONTRACT_KEYS},
     # Schema-first DailyBriefRow: complete record and each missing-field
     # negative are exercised in tests/daily_brief_shapes.rs (aegis-hqz).
     **{
@@ -985,10 +997,13 @@ def selftest():
     # count is not a proof, and is exactly what a premature flip would carry.
     for key, note in REQUIRED_PREDICATE_PROVEN.items():
         full = any(a == b for a, b in re.findall(r"(\d+)/(\d+)", note or ""))
-        if not (full or "schema-first" in (note or "")):
+        operator_contract = (key in DIRECTIVE_CONTRACT_KEYS
+                             and "operator-contract Stiwi 2026-11-14 aegis-rdj" in (note or ""))
+        if not (full or "schema-first" in (note or "") or operator_contract):
             fails.append(f"4c3ppi-proven: {key} cites no 100% measurement ({note!r})")
 
-    # Every proven-coverage entry must CARRY its measurement. An empty note
+    # Every proof entry must carry dated evidence (coverage or the narrowly
+    # scoped Directive operator contract). An empty note
     # turns the escape hatch into the exemption list I1's history forbids.
     for key, note in REQUIRED_PREDICATE_PROVEN.items():
         if not note or not any(ch.isdigit() for ch in note):
@@ -1081,7 +1096,7 @@ def selftest():
           "abstract set, isolates asserted parents, and is retired by shaping; "
           "parse() resolves the aegis namespace through any prefix and rejects "
           "foreign ones, I1/I2/I3 name the file they read, I9 stays non-fatal "
-          "and visible, and every proven-coverage entry carries its measurement.")
+          "and visible, and every proof entry carries its measurement or scoped operator contract.")
     return 0
 
 
