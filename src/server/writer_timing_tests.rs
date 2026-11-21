@@ -55,21 +55,34 @@ fn writer_timing_wait_and_post_unlock_work_are_excluded() {
     let held = handle.writer.lock();
     let copy = handle.clone();
     let (ready, wait) = std::sync::mpsc::channel();
+    let (report, reported) = std::sync::mpsc::channel();
+    let (finish, finished) = std::sync::mpsc::channel();
     let thread = std::thread::spawn(move || {
         quipu::write_provenance::scoped(Some(provenance("hold-wait", "/knot")), || {
             ready.send(()).unwrap();
-            drop(copy.lock());
-            std::thread::sleep(Duration::from_millis(40));
+            let guard = copy.lock();
+            let started = guard.started;
+            drop(guard);
+            report
+                .send((started, snapshot("hold-wait", "/knot")))
+                .unwrap();
+            // The request remains alive doing post-unlock work. No elapsed
+            // upper bound can fail merely because this thread is descheduled.
+            finished.recv().unwrap();
         });
     });
     wait.recv().unwrap();
-    std::thread::sleep(Duration::from_millis(80));
     assert_eq!(snapshot("hold-wait", "/knot"), (0, 0.0));
+    let before_release = Instant::now();
     drop(held);
+    let (started, recorded) = reported.recv().unwrap();
+    assert!(started >= before_release, "timer included acquisition wait");
+    assert_eq!(recorded.0, 1);
+    assert!(recorded.1 > 0.0);
+    assert_eq!(snapshot("hold-wait", "/knot"), recorded);
+    finish.send(()).unwrap();
     thread.join().unwrap();
-    let (count, seconds) = snapshot("hold-wait", "/knot");
-    assert_eq!(count, 1);
-    assert!(seconds < 0.04, "wait/deferred work included: {seconds}");
+    assert_eq!(snapshot("hold-wait", "/knot"), recorded);
 }
 
 #[test]
@@ -97,13 +110,66 @@ fn writer_timing_labels_and_registry_are_bounded() {
     assert_eq!(registry.0.lock().unwrap().len(), MAX_SERIES + 1);
     let mut output = String::new();
     registry.render(&mut output);
-    assert!(output.contains("endpoint=\"overflow\",client=\"other\""));
+    assert!(output.contains("endpoint=\"/knot\",client=\"other\""));
     quipu::write_provenance::scoped(
         Some(provenance("BAD\"\nclient", "/caller/path/123")),
         || {
             assert_eq!(labels(), ("other".into(), "bad".into()));
         },
     );
+}
+
+#[test]
+fn writer_timing_endpoint_survives_client_saturation() {
+    let registry = Registry::default();
+    for n in 0..300 {
+        registry.observe(("/knot/promote".into(), format!("client-{n}")), 1.0);
+    }
+    registry.observe(("/knot".into(), "late-client".into()), 2.5);
+    let mut output = String::new();
+    registry.render(&mut output);
+    assert!(
+        output.contains(
+            "quipu_writer_lock_held_seconds_total{endpoint=\"/knot\",client=\"late-client\"} 2.5"
+        ),
+        "late knot endpoint disappeared after caller saturation"
+    );
+    assert!(!output.contains("endpoint=\"overflow\""));
+}
+
+#[test]
+fn writer_timing_each_endpoint_keeps_its_overflow_and_known_clients() {
+    let registry = Registry::default();
+    for endpoint in [
+        "other",
+        "internal",
+        "/knot",
+        "/knot/promote",
+        "/import/promote",
+    ] {
+        for n in 0..300 {
+            registry.observe((endpoint.into(), format!("client-{n}")), 1.0);
+        }
+        registry.observe((endpoint.into(), "tail-client".into()), 3.0);
+        registry.observe((endpoint.into(), "client-0".into()), 2.0);
+        let entries = registry.0.lock().unwrap();
+        assert_eq!(
+            entries.get(&(endpoint.into(), "other".into())),
+            Some(&(45, 47.0))
+        );
+        assert_eq!(
+            entries.get(&(endpoint.into(), "client-0".into())),
+            Some(&(2, 3.0))
+        );
+        assert_eq!(
+            entries
+                .keys()
+                .filter(|(route, _)| route == endpoint)
+                .count(),
+            MAX_SERIES + 1
+        );
+    }
+    assert_eq!(registry.0.lock().unwrap().len(), 5 * (MAX_SERIES + 1));
 }
 
 #[tokio::test]

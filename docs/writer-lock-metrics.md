@@ -17,8 +17,10 @@ Attribution reuses existing write provenance carried into blocking, deep-stack
 and detached promotion work. It uses cooperative client declarations, not proof
 of authenticated identity. Only the three fixed endpoint names above receive
 separate labels; other write routes aggregate under `other`. Unattributed work
-uses `internal` and `unattributed`. There are at most 256 ordinary series plus
-one overflow series; arbitrary client labels cannot grow this registry forever.
+uses `internal` and `unattributed`. Each of the five fixed endpoint buckets admits at most 256 ordinary client
+series plus its own `client="other"` overflow series. Saturation never changes
+the endpoint label or prevents a previously unseen endpoint from appearing.
+Existing client counters remain monotonic; at most 1,285 series can exist.
 No payload, raw URI, agent/session identity or credential is a metric label.
 
 Reader interfaces, including writer-backed read fallback, do not contribute.

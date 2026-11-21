@@ -8,6 +8,7 @@ use std::time::Instant;
 
 type Key = (String, String);
 type Totals = BTreeMap<Key, (u64, f64)>;
+// Ordinary client series per fixed endpoint; `other` is always reserved.
 const MAX_SERIES: usize = 256;
 
 #[derive(Default)]
@@ -26,10 +27,18 @@ impl Registry {
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let key = if entries.contains_key(&key) || entries.len() < MAX_SERIES {
+        // Endpoint comes from the fixed server-owned set in labels(). A noisy
+        // caller may exhaust only this endpoint's client dimension, never an
+        // endpoint's existence. Reserve `other` independently of ordinary keys.
+        let ordinary_clients = entries
+            .keys()
+            .filter(|(endpoint, client)| endpoint == &key.0 && client != "other")
+            .count();
+        let key = if key.1 == "other" || entries.contains_key(&key) || ordinary_clients < MAX_SERIES
+        {
             key
         } else {
-            ("overflow".into(), "other".into())
+            (key.0, "other".into())
         };
         let entry = entries.entry(key).or_default();
         entry.0 += 1;
