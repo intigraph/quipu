@@ -64,6 +64,7 @@ pub mod evidence;
 mod journal;
 /// Logical-call scope and terminal accounting, shared by adapters and core.
 pub mod observation;
+pub(crate) use counters_only::render_aggregate as render_counter_aggregate;
 pub(crate) use counters_only::render_health as render_counter_health;
 pub(crate) use journal::render_health as render_capture_health;
 

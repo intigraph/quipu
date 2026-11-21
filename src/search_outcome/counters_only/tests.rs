@@ -176,3 +176,81 @@ fn selected_mode_never_falls_back_to_query_journal_even_on_failure() {
             .contains("private-query-sentinel")
     );
 }
+
+#[test]
+fn scrape_renders_the_recorded_aggregate_with_fixed_families() {
+    let dir = directory();
+    let mut conn = open(dir.path()).unwrap();
+    for (surface, hit) in [
+        (Surface::Http, true),
+        (Surface::Http, false),
+        (Surface::CliLocal, false),
+    ] {
+        record(
+            &mut conn,
+            &crate::metrics::search_counter_delta(&event(surface, hit)),
+        )
+        .unwrap();
+    }
+    let text = aggregate(&open(dir.path()).unwrap()).unwrap();
+    assert!(text.contains(
+        "quipu_search_aggregate_requests_total{surface=\"http\",operation=\"query\",outcome=\"hits\"} 1\n"
+    ));
+    assert!(text.contains(
+        "quipu_search_aggregate_zero_results_total{surface=\"cli_local\",operation=\"query\",kind=\"empty_rows\"} 1\n"
+    ));
+    assert!(text.contains("# TYPE quipu_search_aggregate_miss_reasons_total counter\n"));
+    assert!(
+        text.contains("quipu_search_aggregate_last_capture_timestamp_seconds{surface=\"http\"} ")
+    );
+    assert!(
+        text.contains(
+            "quipu_search_aggregate_last_capture_timestamp_seconds{surface=\"cli_local\"} "
+        )
+    );
+    assert!(!text.contains("quipu_search_requests_total"));
+    // Every sample line belongs to the fixed aggregate families.
+    for line in text.lines().filter(|l| !l.starts_with('#')) {
+        assert!(line.starts_with("quipu_search_aggregate_"), "{line}");
+    }
+}
+
+#[test]
+fn scrape_refuses_out_of_contract_state_whole() {
+    let ok = "quipu_search_requests_total{surface=\"http\",operation=\"query\",outcome=\"hits\"}";
+    let now = 1_000_000;
+    assert!(render_rows(&[(ok.into(), 3, now)], now).is_ok());
+    for (series, value, stamp) in [
+        (
+            "quipu_search_requests_total{surface=\"http\",operation=\"query\",outcome=\"hits\",query=\"x\"}",
+            1,
+            now,
+        ),
+        (
+            "quipu_search_requests_total{surface=\"vati\",operation=\"query\",outcome=\"hits\"}",
+            1,
+            now,
+        ),
+        ("quipu_search_logical_call_total{}", 1, now),
+        (ok, -1, now),
+        (ok, 1, 0),
+        (ok, 1, now + 6),
+    ] {
+        let rows = vec![(ok.to_string(), 1, now), (series.to_string(), value, stamp)];
+        assert!(render_rows(&rows, now).is_err(), "{series} {value} {stamp}");
+    }
+    let many: Vec<_> = (0..4097).map(|_| (ok.to_string(), 1, now)).collect();
+    assert!(render_rows(&many, now).is_err());
+    // A text-typed count fails the strict column read, so nothing is published.
+    let dir = directory();
+    let conn = open(dir.path()).unwrap();
+    conn.execute(
+        "INSERT INTO counts(series,value,last_success) VALUES(?1,1,unixepoch())",
+        [ok],
+    )
+    .unwrap();
+    assert!(aggregate(&conn).is_ok());
+    conn.execute_batch("PRAGMA ignore_check_constraints=ON; UPDATE counts SET value='seven';")
+        .unwrap();
+    assert!(aggregate(&conn).is_err());
+}
