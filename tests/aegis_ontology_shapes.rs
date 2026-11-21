@@ -402,19 +402,29 @@ fn directive_traceability_admits_a_date_and_refuses_an_untraced_directive() {
     let accepted = quipu::validate_shapes(SHAPES, &dated).unwrap();
     assert!(accepted.conforms, "{:?}", accepted.results);
     assert!(!accepted.blocks());
-    for deadline in [
-        "",
-        r#"; <https://w3id.org/intigraph/quechua/ns#traceabilityDueAt> "2026-12-01T00:00:00Z""#,
-        r#"; aegis:traceabilityDueAt "2026-12-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>"#,
+    for (deadline, component) in [
+        ("", "OrConstraintComponent"),
+        (
+            r#"; <https://w3id.org/intigraph/quechua/ns#traceabilityDueAt> "2026-12-01T00:00:00Z""#,
+            "DatatypeConstraintComponent",
+        ),
+        (
+            r#"; aegis:traceabilityDueAt "2026-12-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>"#,
+            "OrConstraintComponent",
+        ),
     ] {
         let refused = quipu::validate_shapes(SHAPES, &fixture(deadline)).unwrap();
         assert!(refused.blocks(), "{:?}", refused.results);
-        assert!(refused.results.iter().any(|r| {
-            r.severity.contains("Violation")
-                && r.source_shape
-                    .as_deref()
-                    .is_some_and(|shape| shape.contains("DirectiveTraceabilityShape"))
-        }));
+        // A property constraint reports its own source shape (a blank node),
+        // while the missing-traceability OR reports the parent node shape.
+        assert!(
+            refused
+                .results
+                .iter()
+                .any(|r| { r.severity.contains("Violation") && r.component.ends_with(component) }),
+            "{component}: {:?}",
+            refused.results
+        );
     }
 }
 
