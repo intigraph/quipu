@@ -463,6 +463,7 @@ async fn query_error_is_not_shared_or_cached_as_a_successful_empty_answer() {
 
 mod boundaries;
 
+#[cfg(unix)]
 #[test]
 fn mounted_source_writes_and_replacements_invalidate_the_generation() {
     let dir = tempfile::tempdir().unwrap();
@@ -499,6 +500,7 @@ fn frozen_registry_requires_the_actual_mounted_source() {
     assert!(Flights::open(main.to_str().unwrap()).is_none());
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn frozen_pack_duplicate_burst_shares_one_pinned_evaluation() {
     let dir = tempfile::tempdir().unwrap();
