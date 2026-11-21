@@ -228,13 +228,14 @@ fn fingerprint(input: &JsonValue, headers: &HeaderMap, is_post: bool) -> Option<
         return None;
     }
     let text = input.get("query")?.as_str()?;
-    let upper = text.to_ascii_uppercase();
-    // Conservative exclusion: remote state and non-deterministic functions
-    // cannot be fenced by the local generation. False negatives are safe.
-    if ["SERVICE", "RAND", "UUID", "BNODE", "NOW"]
-        .iter()
-        .any(|word| upper.contains(word))
-    {
+    // Match tokens, not substrings such as ?known or the value "UNKNOWN".
+    // Comments may separate a function keyword from its opening parenthesis.
+    // Conservatively matching inside a literal can still bypass sharing safely.
+    static NONDETERMINISTIC: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let excluded = NONDETERMINISTIC.get_or_init(|| regex::Regex::new(
+        r"(?i)(?:^|[^[:alnum:]_?:$])SERVICE(?:\s|#|<|\?)|\b(?:RAND|UUID|STRUUID|BNODE|NOW)(?:\s|#[^\r\n]*(?:[\r\n]|$))*\("
+    ).expect("constant SPARQL non-determinism guard"));
+    if excluded.is_match(text) {
         return None;
     }
     let mut normalized = input.clone();

@@ -182,3 +182,25 @@ async fn verified_principals_and_credentials_separate_identical_wire_inputs() {
     assert_ne!(one, other_credential);
     assert_ne!(one, fingerprint(&input, &headers, true));
 }
+
+#[test]
+fn known_names_are_shareable_but_commented_non_deterministic_functions_are_not() {
+    let headers = HeaderMap::new();
+    for query in [
+        "SELECT ?known WHERE { ?known <urn:known> ?o }",
+        "SELECT ?service WHERE { ?service <urn:service> ?o }",
+        "SELECT ?s WHERE { ?s <urn:p> \"UNKNOWN\" }",
+    ] {
+        assert!(
+            fingerprint(&json!({"query":query}), &headers, true).is_some(),
+            "ordinary name was mistaken for NOW"
+        );
+    }
+    for query in [
+        "SELECT (NOW # comment\n() AS ?n) WHERE {}",
+        "SELECT (RAND # comment\n() AS ?r) WHERE {}",
+        "SELECT (STRUUID() AS ?u) WHERE {}",
+    ] {
+        assert!(fingerprint(&json!({"query":query}), &headers, true).is_none());
+    }
+}
