@@ -17,9 +17,10 @@ fn compressed_members(sizes: &[usize]) -> Vec<u8> {
 
 #[test]
 fn expanded_limit_accepts_measured_release_and_exact_boundary_but_refuses_one_more_byte() {
-    // Same total as the checksum-verified v0.17 release, not a tiny fixture that
-    // would also pass under the broken 64 MiB bound. The transport sees both views.
-    for total in [69_411_571, 96 * 1024 * 1024] {
+    // Same totals as the checksum-verified v0.17 and v0.18.2 releases, not tiny
+    // fixtures that would also pass under the old 64/96 MiB bounds. The transport
+    // sees both views.
+    for total in [69_411_571, 110_252_524, 128 * 1024 * 1024] {
         let first = total / 2;
         let compressed = compressed_members(&[first, total - first]);
         assert!(compressed.len() < MAX_SHARE_DOWNLOAD_BYTES);
@@ -31,7 +32,7 @@ fn expanded_limit_accepts_measured_release_and_exact_boundary_but_refuses_one_mo
         assert_eq!(files.values().map(String::len).sum::<usize>(), total);
     }
     // Split across files: accounting must be cumulative, not per member.
-    let compressed = compressed_members(&[48 * 1024 * 1024, 48 * 1024 * 1024 + 1]);
+    let compressed = compressed_members(&[64 * 1024 * 1024, 64 * 1024 * 1024 + 1]);
     let error = archive_files(
         flate2::read::GzDecoder::new(Cursor::new(compressed)),
         "expanded bomb",
@@ -40,7 +41,7 @@ fn expanded_limit_accepts_measured_release_and_exact_boundary_but_refuses_one_mo
     assert!(
         error
             .to_string()
-            .contains("exceeds 100663296 expanded bytes")
+            .contains("exceeds 134217728 expanded bytes")
     );
 }
 

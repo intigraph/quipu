@@ -220,10 +220,10 @@ reads reverify the bytes and recheck trust. Cached archives work offline. A
 corrupt cache entry refuses rather than silently fetching a replacement.
 Fetch, integrity and validation failures name the requested pointer and leave
 no partial composition. Nested pointers are reported, not recursively loaded.
-The download limit is 16 MiB and the expanded archive limit is 96 MiB, including
-both RDF views and metadata. The v0.17 repository share expands to 69,411,571
-bytes after adding compatibility mappings; the finite bound accommodates it
-without skipping validation. Larger archives are refused before import.
+The download limit is 16 MiB and the expanded archive limit is 128 MiB, including
+both RDF views and metadata. The v0.18.2 repository share expands to 110,252,524
+bytes (v0.17: 69,411,571); the finite bound accommodates it without skipping
+validation. Larger archives are refused before import.
 
 Library consumers supply their own trust and transport callbacks plus an
 `ArchiveCache`. Construction performs no network access. Invoke `use_graph`

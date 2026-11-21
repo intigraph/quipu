@@ -12,8 +12,9 @@ use crate::share_import::ShareImportRequest;
 
 /// Maximum compressed response accepted by the CLI importer.
 pub const MAX_SHARE_DOWNLOAD_BYTES: usize = 16 * 1024 * 1024;
-/// Bounded expansion, including both RDF views; the v0.17 repository is 69,411,571 bytes.
-pub const MAX_SHARE_EXPANDED_BYTES: usize = 96 * 1024 * 1024;
+/// Bounded expansion, including both RDF views. The v0.18.2 repository share is
+/// 110,252,524 bytes (v0.17 was 69,411,571); 128 MiB leaves about 22% headroom.
+pub const MAX_SHARE_EXPANDED_BYTES: usize = 128 * 1024 * 1024;
 
 const REQUIRED: [&str; 3] = ["manifest.json", "export.nt", "shapes.ttl"];
 const QUERIES: &str = crate::share_queries::QUERIES_FILE;
