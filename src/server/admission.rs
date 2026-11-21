@@ -11,6 +11,8 @@ use tracked::admit_tracked;
 
 #[path = "admission/heavy_reads.rs"]
 pub(crate) mod heavy_reads;
+#[path = "admission/shed.rs"]
+pub(crate) mod shed;
 
 /// Admit one write before moving it onto Tokio's uncancellable blocking pool.
 ///
@@ -413,6 +415,10 @@ mod write_timeout_tests;
 #[cfg(test)]
 #[path = "admission/point_timeout_tests.rs"]
 mod point_timeout_tests;
+
+#[cfg(test)]
+#[path = "admission/shed_tests.rs"]
+mod shed_tests;
 
 #[cfg(test)]
 #[path = "admission/observation_tests.rs"]
