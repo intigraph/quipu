@@ -1119,6 +1119,8 @@ pub(super) fn pooled_handle_with_provider(
         log_query_phases: false,
         deck_http: false,
         attest_http: false,
+        query_execution_count: std::sync::atomic::AtomicU64::new(0),
+        query_flights: None,
         query_capture: None,
         replica: None,
         relay: None,

@@ -84,6 +84,17 @@ Two budgets bound a read; both answer HTTP 408 when they run out:
 The first message points at queueing (capacity or other callers), the second
 at the query itself.
 
+## Identical overlapping queries
+
+`[quipu.server] query_singleflight = true` opts into per-process sharing of
+overlapping identical local `/query` reads. It defaults to false. Complete
+input, scope, representation, authority and a live database generation fence
+separate flights; completed results are never cached. Flights, followers and
+shared response bytes are bounded, and each follower keeps its own wait budget.
+Remote/non-deterministic queries and composed stores use the ordinary path.
+The source design document `docs/design/query-singleflight.md` describes the
+qualification boundaries.
+
 ## Replicas and relays
 
 A follower server (`[quipu.server.replica]`, built by `quipu follow`) serves
@@ -100,6 +111,7 @@ follows an upstream and serves its own children. These add read capacity on
 |---|---|---|
 | `read_pool_size` | `4` | In-process read-only connections; `0` serialises reads behind the writer |
 | `reserve_point_reads` | `false` | Reserve one reader for bounded ground point-ASK requests (needs at least 2 readers) |
+| `query_singleflight` | `false` | Share only overlapping identical local reads; no completed-result cache |
 | `heavy_read_operations` | `[]` | Cooperative cap; currently accepts only `["owner-rows"]` |
 | `heavy_read_permits` | `1` | Max concurrent declared heavy reads; `0 < K < ordinary readers` |
 | `memory_budget_mib` | unset | One aggregate budget for primary and workers; required for workers |

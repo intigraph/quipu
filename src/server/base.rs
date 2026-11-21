@@ -211,6 +211,9 @@ pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
     let mut body = store.graph_metrics.render();
+    if let Some(flights) = &store.query_flights {
+        flights.render(&mut body);
+    }
     if let Some(replica) = &store.replica {
         body.push_str(&replica.metrics());
     }
