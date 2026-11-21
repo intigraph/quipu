@@ -6,6 +6,8 @@ use std::sync::Arc;
 use parking_lot::FairMutex;
 #[path = "resolution_cache.rs"]
 mod resolution_cache;
+#[path = "writer_timing.rs"]
+pub(crate) mod writer_timing;
 
 /// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
 /// sustained stream of episode writers could re-acquire the lock ahead of
@@ -246,17 +248,14 @@ impl StoreHandle {
     /// The WRITER connection. Unchanged semantics: one at a time, FIFO-fair.
     /// Every pre-existing `.lock()` call site means exactly what it meant
     /// before, which is why this refactor does not have to audit them.
-    pub(crate) fn lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+    pub(crate) fn lock(&self) -> writer_timing::StoreGuard<'_> {
         self.lock_observed(|| {})
     }
 
     /// Observe acquisition before settlement, without changing writer custody.
     /// The callback only records fixed-size timing; it must not acquire a store.
-    pub(crate) fn lock_observed(
-        &self,
-        acquired: impl FnOnce(),
-    ) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        let guard = self.writer.lock();
+    pub(crate) fn lock_observed(&self, acquired: impl FnOnce()) -> writer_timing::StoreGuard<'_> {
+        let guard = writer_timing::StoreGuard::new(self.writer.lock());
         acquired();
         // A signed write settles HERE, in the same lock hold as its work: its
         // binding is re-checked (a revocation that landed while it queued is
@@ -276,8 +275,8 @@ impl StoreHandle {
     /// (aegis-ehf): no attestation settlement and no reader provider sync, so
     /// holding it spends no nonce and remounts nothing. Callers must refuse an
     /// attested request BEFORE calling this, and must not write through it.
-    pub(crate) fn metadata_lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        self.writer.lock()
+    pub(crate) fn metadata_lock(&self) -> writer_timing::StoreGuard<'_> {
+        writer_timing::StoreGuard::new(self.writer.lock())
     }
 
     /// A cancelled promotion must also leave the queue without waiting for an
@@ -285,13 +284,14 @@ impl StoreHandle {
     pub(crate) fn promotion_lock(
         &self,
         control: &quipu::promotion_control::PromotionControl,
-    ) -> quipu::Result<parking_lot::FairMutexGuard<'_, quipu::Store>> {
+    ) -> quipu::Result<writer_timing::StoreGuard<'_>> {
         loop {
             control.check()?;
             if let Some(guard) = self
                 .writer
                 .try_lock_for(std::time::Duration::from_millis(50))
             {
+                let guard = writer_timing::StoreGuard::new(guard);
                 control.check()?;
                 if let Some(pending) = quipu::transaction_auth::current_attestation() {
                     let _ = guard.settle_attestation(&pending);
@@ -306,8 +306,8 @@ impl StoreHandle {
     /// attestation settlement, so a refused unrun write does not spend its nonce.
     pub(crate) fn write_lock(
         &self,
-    ) -> Result<parking_lot::FairMutexGuard<'_, quipu::Store>, super::base::AppError> {
-        let guard = self.writer.lock();
+    ) -> Result<writer_timing::StoreGuard<'_>, super::base::AppError> {
+        let guard = writer_timing::StoreGuard::new(self.writer.lock());
         super::admission::reject_expired_write()?;
         if let Some(pending) = quipu::transaction_auth::current_attestation() {
             let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
@@ -386,7 +386,16 @@ impl StoreHandle {
         if self.vector_reads_pooled {
             self.read()
         } else {
-            self.lock()
+            // Preserve lock()'s attestation settlement even though this reader
+            // interface intentionally contributes no explicit-writer metric.
+            let guard = self.writer.lock();
+            if let Some(pending) = quipu::transaction_auth::current_attestation() {
+                let _refusal_is_recorded_on_the_request = quipu::write_observation::observe(
+                    quipu::write_observation::Stage::Attestation,
+                    || guard.settle_attestation(&pending),
+                );
+            }
+            guard
         }
     }
 }
