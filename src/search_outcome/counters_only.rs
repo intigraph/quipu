@@ -71,6 +71,116 @@ pub(crate) fn render_health(out: &mut String) {
     }
 }
 
+/// Scrape-time read of the cross-process aggregate (aegis-85x). Replaces the
+/// scheduled textfile exporter with a pull on Prometheus's own scrape: same
+/// fixed label set, same 4096-series bound, read-only, no schedule or result FD.
+/// Any unreadable or out-of-contract state renders only `collector_success 0`;
+/// a partial aggregate is never published.
+pub(crate) fn render_aggregate(out: &mut String) {
+    let body = match mode() {
+        Mode::Off => return,
+        Mode::Invalid => Err(()),
+        #[cfg(unix)]
+        Mode::Ready(conn) => conn
+            .lock()
+            .map_err(|_| ())
+            .and_then(|conn| aggregate(&conn)),
+    };
+    let success = u8::from(body.is_ok());
+    if let Ok(text) = body {
+        out.push_str(&text);
+    }
+    out.push_str("# TYPE quipu_search_aggregate_collector_success gauge\n");
+    out.push_str("quipu_search_aggregate_collector_success ");
+    out.push_str(if success == 1 { "1\n" } else { "0\n" });
+}
+
+#[cfg(unix)]
+fn aggregate(conn: &rusqlite::Connection) -> Result<String, ()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| ())?
+        .as_secs();
+    // One read snapshot; strict column types (a text value or integer series errors).
+    let tx = conn.unchecked_transaction().map_err(|_| ())?;
+    let rows = {
+        let mut stmt = tx
+            .prepare("SELECT series,value,last_success FROM counts ORDER BY series LIMIT 4097")
+            .map_err(|_| ())?;
+        stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
+        })
+        .map_err(|_| ())?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|_| ())?
+    };
+    tx.finish().map_err(|_| ())?;
+    render_rows(&rows, i64::try_from(now).map_err(|_| ())?)
+}
+
+fn series_contract() -> &'static regex::Regex {
+    static SERIES: OnceLock<regex::Regex> = OnceLock::new();
+    SERIES.get_or_init(|| {
+        let prefix = r#"surface="(?:http|mcp|cli_local|library)",operation="(?:search|hybrid_search|search_nodes|search_facts|search_query|query|named_query)","#;
+        regex::Regex::new(&format!(
+            concat!(
+                r#"^quipu_search_(?:requests_total\{{{p}outcome="(?:hits|empty|no_context|error|timeout|refused|unknown)"\}}"#,
+                r#"|zero_results_total\{{{p}kind="(?:no_candidates|all_rejected|empty_rows)"\}}"#,
+                r#"|miss_reasons_total\{{{p}reason="(?:no_candidates|empty_rows|no_result_above_floor|top_result_below_floor|identifier_not_covered|insufficient_term_coverage|subject_not_covered|query_too_long|query_terms_unavailable|other|unknown)"\}})$"#
+            ),
+            p = prefix
+        ))
+        .expect("fixed counter contract")
+    })
+}
+
+/// Render validated rows exactly as the retired exporter did: the
+/// `quipu_search_aggregate_` families plus a per-surface last-capture gauge.
+fn render_rows(rows: &[(String, i64, i64)], now: i64) -> Result<String, ()> {
+    use std::fmt::Write as _;
+    if rows.len() > 4096 {
+        return Err(());
+    }
+    let mut stamps = std::collections::BTreeMap::<&str, i64>::new();
+    for (series, value, stamp) in rows {
+        if !series_contract().is_match(series) || *value < 0 || !(0 < *stamp && *stamp <= now + 5) {
+            return Err(());
+        }
+        if series.starts_with("quipu_search_requests_total{") {
+            let surface = series["quipu_search_requests_total{surface=\"".len()..]
+                .split('"')
+                .next()
+                .ok_or(())?;
+            let entry = stamps.entry(surface).or_insert(0);
+            *entry = (*entry).max(*stamp);
+        }
+    }
+    let mut out = String::new();
+    for name in ["requests_total", "zero_results_total", "miss_reasons_total"] {
+        let _ = writeln!(out, "# TYPE quipu_search_aggregate_{name} counter");
+        let source = format!("quipu_search_{name}{{");
+        for (series, value, _) in rows.iter().filter(|row| row.0.starts_with(&source)) {
+            let _ = writeln!(
+                out,
+                "quipu_search_aggregate_{} {value}",
+                &series["quipu_search_".len()..]
+            );
+        }
+    }
+    out.push_str("# TYPE quipu_search_aggregate_last_capture_timestamp_seconds gauge\n");
+    for (surface, stamp) in stamps {
+        let _ = writeln!(
+            out,
+            "quipu_search_aggregate_last_capture_timestamp_seconds{{surface=\"{surface}\"}} {stamp}"
+        );
+    }
+    Ok(out)
+}
+
 #[cfg(unix)]
 fn open(directory: &std::path::Path) -> Result<rusqlite::Connection, Box<dyn std::error::Error>> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
