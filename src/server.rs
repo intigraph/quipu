@@ -118,6 +118,8 @@ mod update_eval;
 mod update_slice;
 #[path = "server/wal_maintenance.rs"]
 mod wal_maintenance;
+#[path = "server/writer_instance.rs"]
+mod writer_instance;
 
 use base::metrics_handler;
 use entity::{
@@ -580,6 +582,7 @@ fn api_routes() -> Router<SharedStore> {
         // without being able to LABEL it yields separate graphs every query
         // still reads at equal trust, so these ship together.
         .route("/graphs", get(graphs_list))
+        .merge(writer_instance::routes())
         .route("/graph/create", post(graph_create))
         .route("/graph/label", post(graph_label))
         .route("/graph/freeze", post(graph_freeze))
