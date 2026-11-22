@@ -1,10 +1,10 @@
-//! Protected read computation, distinct from graph-write classification.
+//! Protected reads, distinct from graph-write classification.
 use super::{
     AccessDecision, AuthGeneration, Authorization, BearerPolicy, authorize_bearers,
     is_write_request, requires_read_identity,
 };
 
-/// HTTP rendering is a protected computation, not a graph write. Keep the
+/// HTTP rendering and owner-instance observation are protected reads. Keep the
 /// read-only handle and read-only-server support while requiring a real bearer.
 pub fn authorize_http_bearers(
     path: &str,
@@ -14,6 +14,15 @@ pub fn authorize_http_bearers(
     auth_header: Option<&str>,
     now_epoch_secs: u64,
 ) -> Authorization {
+    // Scoped writer credentials grant graph writes, not owner-instance reads.
+    // Keep this boundary local to the new endpoint; other protected reads retain
+    // their existing credential contract.
+    if path == "/graph/writer-instance" && policy.scoped_writer_principal(auth_header).is_some() {
+        return Authorization {
+            decision: AccessDecision::Unauthorized,
+            generation: None,
+        };
+    }
     // A presented replication credential cannot fall through to an open-read,
     // shared-write or ordinary named-write policy on any other operation.
     if policy.replication_principal(auth_header).is_some() {
@@ -34,7 +43,7 @@ pub fn authorize_http_bearers(
         };
     }
     let write = is_write_request(path, method);
-    let protected_read = path == "/render";
+    let protected_read = matches!(path, "/render" | "/graph/writer-instance");
     let authorization = authorize_bearers(
         write || protected_read || requires_read_identity(path),
         write && read_only,

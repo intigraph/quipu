@@ -18,6 +18,8 @@ pub fn classify(path: &str, method: &str) -> RouteClass {
         ("GET", "/graphs") => RouteClass::Scoped(ReadOperation::Metadata),
         // Completion receipts are bound to the authenticated original writer.
         (_, "/knot/status") => RouteClass::OwnerOnly,
+        // Writer pins are owner-local authority metadata, never tenant reads.
+        (_, "/graph/writer-instance") => RouteClass::OwnerOnly,
         _ if !CENSUS.contains(&path) => RouteClass::Unclassified,
         _ if crate::http_auth::is_write_request(path, method) => RouteClass::Write,
         _ => RouteClass::OwnerOnly,
@@ -82,6 +84,7 @@ const CENSUS: &[&str] = &[
     "/graph/freeze",
     "/graph/label",
     "/graph/thaw",
+    "/graph/writer-instance",
     "/graphs",
     "/health",
     "/hybrid_search",

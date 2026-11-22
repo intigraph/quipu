@@ -368,6 +368,10 @@ fn routes_in_server_source() -> Vec<String> {
             include_str!("../server/knot_durable.rs"),
         ),
         ("server/base.rs", include_str!("../server/base.rs")),
+        (
+            "server/writer_instance.rs",
+            include_str!("../server/writer_instance.rs"),
+        ),
         // Handler-only today; scan future route additions too.
         ("server/fluents.rs", include_str!("../server/fluents.rs")),
         (
