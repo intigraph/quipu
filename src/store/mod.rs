@@ -126,6 +126,7 @@ pub use projections::{
 };
 #[cfg(feature = "owl")]
 mod ontology_window;
+mod query_snapshot;
 mod registry;
 pub mod registry_list;
 pub mod respace;

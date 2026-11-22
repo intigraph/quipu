@@ -847,6 +847,9 @@ pub struct ServerConfig {
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
 
+    /// Share overlapping identical local /query reads. Off until separately admitted.
+    pub query_singleflight: bool,
+
     /// Add per-query `SQLite` statement totals (count, rows, time, costliest
     /// statement texts) to query observation logs (aegis-xacr). Off by default;
     /// when on, every connection carries a profile hook, so measure its
@@ -898,6 +901,7 @@ impl Default for ServerConfig {
             heavy_read_permits: 1,
             declared_label_limit: 256,
             log_query_admission: false,
+            query_singleflight: false,
             log_query_phases: false,
             deck_http: false,
             attest_http: false,

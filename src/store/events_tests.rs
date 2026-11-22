@@ -879,12 +879,9 @@ fn shacl_refused_episode_records_refusal_event() {
     );
 }
 
-/// aegis-4c3ppi (ian's ruling B, condition 2): the runtime HONOURS emit for the
-/// real `DirectiveTraceabilityShape`, loaded from the production shapes file,
-/// not a fixture copy. An untraced directive still COMMITS and leaves a
-/// `shacl.violation` naming that shape; a traced one and an exempt Policy
-/// leave none. Routing: `shacl::split_shapes_by_policy` +
-/// `episode::ingest_episode` (`validate_with_store_context` on the emit half).
+/// Production traceability contract: typed links OR an evaluation deadline.
+/// Neither is refused; traced directives and exempt Policy nodes emit nothing.
+/// Generic emit routing remains covered by the explicit MCP fixture controls.
 #[cfg(feature = "shacl")]
 mod directive_traceability_emit {
     use super::*;
@@ -909,26 +906,27 @@ mod directive_traceability_emit {
     }
 
     #[test]
-    fn untraced_directive_commits_and_emits_traceability_violation() {
+    fn untraced_directive_without_deadline_is_refused() {
         let mut store = store_with_real_shapes();
         let episode = ep(
             "dt-untraced",
             vec![node("dt-untraced-rule", "Directive")],
             vec![],
         );
-        let (tx, count) = ingest_episode(
+        let before = store.current_facts().unwrap().len();
+        let result = ingest_episode(
             &mut store,
             &episode,
             "2026-10-01T00:00:01Z",
             DEFAULT_BASE_NS,
-        )
-        .expect("an emit-mode shape must not gate the directive write");
-        assert!(tx > 0 && count > 0, "write committed");
-        let evs = traceability_events(&store);
-        assert_eq!(evs.len(), 1, "exactly one traceability violation");
-        assert_eq!(evs[0].tx_id, tx);
-        let payload: serde_json::Value = serde_json::from_str(&evs[0].payload).unwrap();
-        assert_eq!(payload["mode"], "emit");
+        );
+        assert!(matches!(result, Err(crate::Error::ValidationFailed { .. })));
+        assert_eq!(
+            store.current_facts().unwrap().len(),
+            before,
+            "refused directive cannot commit"
+        );
+        assert!(traceability_events(&store).is_empty());
     }
 
     #[test]

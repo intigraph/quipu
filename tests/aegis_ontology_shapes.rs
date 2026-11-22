@@ -82,9 +82,7 @@ fn text_rule_cases_reject_non_string_values_for_both_polarities() {
 
 #[test]
 fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
-    // The REJECT half: what the write gate enforces. The full file also carries
-    // the emit-mode DirectiveTraceabilityShape (aegis-4c3ppi), which reports this
-    // untraced fixture by design; that is `quipu validate`'s job, not this test's.
+    // Satisfy traceability independently so this control isolates issuer type.
     let reject = quipu::shacl::split_shapes_by_policy(SHAPES).reject;
     let fixture = |issuer: &str| {
         format!(
@@ -93,7 +91,8 @@ fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
                 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
                 aegis:test-directive a aegis:Directive ;
                     rdfs:label "Test directive" ;
-                    aegis:issuedBy {issuer} .
+                    aegis:issuedBy {issuer} ;
+                    <https://w3id.org/intigraph/quechua/ns#traceabilityDueAt> "2026-12-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
             "#
         )
     };
@@ -382,39 +381,51 @@ fn lead_for_shapes_route_to_the_rejecting_document_together() {
     );
 }
 
-/// aegis-1mv0to: the production `DirectiveTraceabilityShape` REPORTS an
-/// untraced directive as a warning, and the warning does not BLOCK. Validated
-/// against the FULL file (both halves), the path share import and compose take.
-/// If this fails, a release's repository share quarantines again.
+/// The production shape admits typed traceability OR one typed deadline.
+/// Exercise the FULL profile used by share import/compose, not a reduced shape.
 #[test]
-fn directive_traceability_is_a_warning_on_the_full_shapes_file() {
-    let data = r#"
+fn directive_traceability_admits_a_date_and_refuses_an_untraced_directive() {
+    let fixture = |deadline: &str| {
+        format!(
+            r#"
         @prefix aegis: <http://aegis.gastown.local/ontology/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
         aegis:untraced-directive a aegis:Directive ;
             rdfs:label "Untraced directive" ;
-            aegis:issuedBy "Stiwi" .
-    "#;
-    let feedback = quipu::validate_shapes(SHAPES, data).unwrap();
-    assert!(
-        !feedback.blocks(),
-        "an untraced directive must not block: {:?}",
-        feedback.results
+            aegis:issuedBy "Stiwi" {deadline} .
+    "#
+        )
+    };
+    let dated = fixture(
+        r#"; <https://w3id.org/intigraph/quechua/ns#traceabilityDueAt> "2026-12-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>"#,
     );
-    assert_eq!(feedback.violations, 0);
-    // SHACL's own sh:conforms stays false on a warning; only the gate is narrower.
-    assert!(!feedback.conforms);
-    assert!(
-        feedback
-            .results
-            .iter()
-            .any(|r| r.severity.contains("Warning")
-                && r.source_shape
-                    .as_deref()
-                    .is_some_and(|s| s.contains("DirectiveTraceabilityShape"))),
-        "the traceability gap must still be reported: {:?}",
-        feedback.results
-    );
+    let accepted = quipu::validate_shapes(SHAPES, &dated).unwrap();
+    assert!(accepted.conforms, "{:?}", accepted.results);
+    assert!(!accepted.blocks());
+    for (deadline, component) in [
+        ("", "OrConstraintComponent"),
+        (
+            r#"; <https://w3id.org/intigraph/quechua/ns#traceabilityDueAt> "2026-12-01T00:00:00Z""#,
+            "DatatypeConstraintComponent",
+        ),
+        (
+            r#"; aegis:traceabilityDueAt "2026-12-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>"#,
+            "OrConstraintComponent",
+        ),
+    ] {
+        let refused = quipu::validate_shapes(SHAPES, &fixture(deadline)).unwrap();
+        assert!(refused.blocks(), "{:?}", refused.results);
+        // A property constraint reports its own source shape (a blank node),
+        // while the missing-traceability OR reports the parent node shape.
+        assert!(
+            refused
+                .results
+                .iter()
+                .any(|r| { r.severity.contains("Violation") && r.component.ends_with(component) }),
+            "{component}: {:?}",
+            refused.results
+        );
+    }
 }
 
 const BEAD_PREFIXES: &str = r#"

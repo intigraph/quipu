@@ -235,3 +235,89 @@ fn pack_cli_invalid_destination_refuses_without_artifact_for_both_formats() {
         }
     }
 }
+
+#[test]
+fn conditional_namespace_cli_removes_and_restores_exact_policy_and_refuses_replay() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join(".bobbin")).unwrap();
+    let config_path = dir.path().join(".bobbin/config.toml");
+    let configured = "[[quipu.namespaces]]\nprefix = 'fixture'\nbase_iri = 'https://example.test/private/'\nvisibility = 'private'\naudience = 'org:test'\ngraphs = ['urn:example:graph']\ntypes = ['urn:example:Host']\n";
+    std::fs::write(&config_path, "[quipu]\n").unwrap();
+    let db = dir.path().join("store.db");
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_quipu"))
+            .current_dir(dir.path())
+            .env("HOME", dir.path())
+            .args(args)
+            .args(["--db", db.to_str().unwrap()])
+            .output()
+            .unwrap()
+    };
+    let success = |args: &[&str]| -> serde_json::Value {
+        let output = run(args);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice(&output.stdout).unwrap()
+    };
+    let initial = success(&["namespaces", "list"]);
+    std::fs::write(&config_path, configured).unwrap();
+    success(&["namespaces", "apply"]);
+    std::fs::write(&config_path, "[quipu]\n").unwrap();
+    let retained = success(&["namespaces", "list"]);
+    assert_eq!(retained["namespaces"].as_array().unwrap().len(), 1);
+    let request = serde_json::json!({
+        "expected_registry_hash": retained["registry_hash"],
+        "namespace": retained["namespaces"][0],
+    });
+    std::fs::write(
+        dir.path().join("request.json"),
+        serde_json::to_vec(&request).unwrap(),
+    )
+    .unwrap();
+    let mut malformed = request.clone();
+    malformed["unexpected"] = true.into();
+    std::fs::write(
+        dir.path().join("bad.json"),
+        serde_json::to_vec(&malformed).unwrap(),
+    )
+    .unwrap();
+    assert!(!run(&["namespaces", "remove", "bad.json"]).status.success());
+    assert_eq!(success(&["namespaces", "list"]), retained);
+    assert!(!run(&["namespaces", "remove"]).status.success());
+    assert_eq!(success(&["namespaces", "list"]), retained);
+    success(&["namespaces", "remove", "request.json"]);
+    let removed = success(&["namespaces", "list"]);
+    assert_eq!(removed["namespaces"], initial["namespaces"]);
+    assert_ne!(removed["registry_hash"], retained["registry_hash"]);
+    assert!(
+        !run(&["namespaces", "remove", "request.json"])
+            .status
+            .success()
+    );
+    assert_eq!(success(&["namespaces", "list"]), removed);
+    std::fs::write(&config_path, configured).unwrap();
+    // Configuring the declaration changes the effective registry and receipt.
+    let restore_predecessor = success(&["namespaces", "list"]);
+    let mut restore = request;
+    restore["expected_registry_hash"] = restore_predecessor["registry_hash"].clone();
+    std::fs::write(
+        dir.path().join("restore.json"),
+        serde_json::to_vec(&restore).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        !run(&["namespaces", "apply-if", "request.json"])
+            .status
+            .success()
+    );
+    assert_eq!(success(&["namespaces", "list"]), restore_predecessor);
+    success(&["namespaces", "apply-if", "restore.json"]);
+    std::fs::write(&config_path, "[quipu]\n").unwrap();
+    assert_eq!(
+        success(&["namespaces", "list"])["namespaces"],
+        retained["namespaces"]
+    );
+}

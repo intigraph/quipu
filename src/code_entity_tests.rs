@@ -174,9 +174,9 @@ fn repository_metadata_without_document_type_is_still_targeted() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 bobbin:span bobbin:inDocument bobbin:doc1 .
-bobbin:doc1 bobbin:filePath "README.md" .
+bobbin:doc1 bobbin:filePath 42 .
 "#;
-    fails_on(SHAPES, data, "label");
+    fails_on(SHAPES, data, "filePath");
 }
 
 #[test]
@@ -199,7 +199,7 @@ bobbin:sec1 a bobbin:Section ;
 }
 
 #[test]
-fn section_missing_heading_fails() {
+fn section_heading_is_optional_but_typed_when_present() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
@@ -208,7 +208,12 @@ bobbin:sec1 a bobbin:Section ;
     rdfs:label "Intro" ;
     bobbin:headingDepth "1"^^xsd:integer .
 "#;
-    fails_on(SHAPES, data, "heading");
+    assert!(validate_shapes(SHAPES, data).unwrap().conforms);
+    fails_on(
+        SHAPES,
+        &format!("{data}\nbobbin:sec1 bobbin:heading 42 ."),
+        "heading",
+    );
 }
 
 #[test]
@@ -260,12 +265,11 @@ bobbin:bundle1 a bobbin:Bundle ;
     fails_on(SHAPES, data, "contains");
 }
 
-// The `rdfs:label` requirement covers FOUR classes; only Bundle had a
-// missing-label test. Without these, dropping the constraint from any of the
-// other three would leave this whole file green.
+// Shared structural views may omit owner presentation metadata. Owned symbols
+// and bundles still require labels; any present shared label remains typed.
 
 #[test]
-fn code_module_missing_label_fails() {
+fn code_module_label_is_optional_but_typed_when_present() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 bobbin:mod1 a bobbin:CodeModule ;
@@ -273,7 +277,12 @@ bobbin:mod1 a bobbin:CodeModule ;
     bobbin:repo "quipu" ;
     bobbin:language "rust" .
 "#;
-    fails_on(SHAPES, data, "label");
+    assert!(validate_shapes(SHAPES, data).unwrap().conforms);
+    fails_on(
+        SHAPES,
+        &format!("{data}\nbobbin:mod1 <http://www.w3.org/2000/01/rdf-schema#label> 42 ."),
+        "label",
+    );
 }
 
 #[test]
@@ -295,18 +304,23 @@ bobbin:sym1 a bobbin:CodeSymbol ;
 }
 
 #[test]
-fn document_missing_label_fails() {
+fn document_label_is_optional_but_typed_when_present() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 bobbin:span bobbin:inDocument bobbin:doc1 .
 bobbin:doc1 a bobbin:Document ;
     bobbin:filePath "docs/README.md" .
 "#;
-    fails_on(SHAPES, data, "label");
+    assert!(validate_shapes(SHAPES, data).unwrap().conforms);
+    fails_on(
+        SHAPES,
+        &format!("{data}\nbobbin:doc1 <http://www.w3.org/2000/01/rdf-schema#label> 42 ."),
+        "label",
+    );
 }
 
 #[test]
-fn section_missing_label_fails() {
+fn section_label_is_optional_but_typed_when_present() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
@@ -314,7 +328,12 @@ bobbin:sec1 a bobbin:Section ;
     bobbin:heading "Getting Started" ;
     bobbin:headingDepth "2"^^xsd:integer .
 "#;
-    fails_on(SHAPES, data, "label");
+    assert!(validate_shapes(SHAPES, data).unwrap().conforms);
+    fails_on(
+        SHAPES,
+        &format!("{data}\nbobbin:sec1 <http://www.w3.org/2000/01/rdf-schema#label> 42 ."),
+        "label",
+    );
 }
 
 /// A language-TAGGED label is `rdf:langString`, not `xsd:string`, so it does NOT
@@ -380,7 +399,9 @@ fn code_entity_debt_policy_only_routes_four_narrow_shapes_to_emit() {
     );
     fails_on(
         &split.reject,
-        &format!("{prefix}a:span a:inDocument a:doc . a:doc a:filePath \"README.md\" ."),
+        &format!(
+            "{prefix}a:span a:inDocument a:doc . a:doc a:filePath \"README.md\" ; rdfs:label 42 ."
+        ),
         "label",
     );
 }

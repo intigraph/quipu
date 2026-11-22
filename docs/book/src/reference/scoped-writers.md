@@ -8,6 +8,17 @@ grant authority. Read grants and human WebAuthn enrollment are separate.
 
 ## Enrollment
 
+The serving owner can read an existing committed local graph's enrollment pin
+without stopping the listener: `GET /graph/writer-instance?graph=<encoded-IRI>`.
+This protected read requires an existing authenticated operator identity even
+when ordinary reads or writes are open. Its JSON is exactly
+`{store_id, graph, generation}`, from the same owner primitive as
+`quipu graph writer-instance`. It creates no graph, grant, term or pin and opens
+no second store. Unknown, ROOT, attached, overlay and frozen graphs refuse;
+an unknown graph is never permission to create one. Repeat reads remain stable
+until a real graph-instance change. Read-only serving does not turn this into
+a write. Enrollment itself remains owner-local and separately authorized.
+
 This is local owner administration, not an HTTP or MCP operation. Keep database
 files, policy records, and verifier files under owner control. Configure a
 normal operator `auth_token` and a separate verifier-only credential registry:

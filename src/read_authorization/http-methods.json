@@ -155,6 +155,9 @@
   "/graph/thaw": [
     "post"
   ],
+  "/graph/writer-instance": [
+    "get"
+  ],
   "/graphs": [
     "get"
   ],

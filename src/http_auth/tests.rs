@@ -368,6 +368,10 @@ fn routes_in_server_source() -> Vec<String> {
             include_str!("../server/knot_durable.rs"),
         ),
         ("server/base.rs", include_str!("../server/base.rs")),
+        (
+            "server/writer_instance.rs",
+            include_str!("../server/writer_instance.rs"),
+        ),
         // Handler-only today; scan future route additions too.
         ("server/fluents.rs", include_str!("../server/fluents.rs")),
         (
@@ -398,6 +402,7 @@ fn routes_in_server_source() -> Vec<String> {
         "server/stats_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",
+        "server/writer_timing.rs", // lock timing only, no routes
         "server/input_fields.rs",
         "server/query_usage.rs",
         // Bounded point-query scheduling recognizer; no HTTP routes.

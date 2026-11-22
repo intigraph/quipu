@@ -208,6 +208,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/query",
     // Read-only computation, but authorize_http_bearers requires a credential.
     "/render",
+    // Authenticated owner observation; never graph/authority mutation.
+    "/graph/writer-instance",
     "/cord",
     // Render-ready node-link projection for the UI. Reads the fact log only.
     "/graph",

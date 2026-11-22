@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/thread-workshop/quipu.png" width="704" alt="Quipu: knotted cords hold connected facts, in the shared Thread Workshop illustration style"/></p>
+
 <p align="center">
   <img src="assets/logo.svg" width="160" alt="Quipu logo: knotted strings forming a knowledge graph"/>
 </p>

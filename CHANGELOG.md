@@ -7,6 +7,28 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-22
+
+### Added
+
+- *(metrics)* Serve the counters-only search aggregate at scrape time (#1268)([a97d2f8](https://github.com/scbrown/quipu/commit/a97d2f8c1a74510dd2830f9fddb639157d2a3e7c))
+- *(shapes)* Admit directives with a traceability review deadline (#1269)([1fc72ba](https://github.com/scbrown/quipu/commit/1fc72ba6a57132d063bb38af9ded2521595fcbcb))
+- *(query)* Coalesce identical overlapping in-process reads (#1270)([d694f00](https://github.com/scbrown/quipu/commit/d694f00dd64c4c68b39d41c96eef108681affb93))
+- *(metrics)* Measure completed writer holds for knot and promotion (#1272)([d2a5fb7](https://github.com/scbrown/quipu/commit/d2a5fb7d26af9d6f9aecea4ec04a604ebfeb19aa))
+- *(namespaces)* Expose conditional owner-local removal and restoration (#1275)([5483ea6](https://github.com/scbrown/quipu/commit/5483ea64580c27a7c4d43bd1b200773d9df12355))
+
+### Fixed
+
+- *(query)* Share composed-store reads with per-source fences (#1273)([027c424](https://github.com/scbrown/quipu/commit/027c424146e735697dae94f18f6b88944f99aca5))
+- *(shapes)* Admit shared structural views without owner metadata (#1274)([48ff74e](https://github.com/scbrown/quipu/commit/48ff74ee5ee52cf966b7f550b5de6c3ca8902446))
+- *(metrics)* Expose baselines for first query failures (#1276)([8472a74](https://github.com/scbrown/quipu/commit/8472a74faa0b246e75079968e277581fd72880cb))
+
+
+
+### Perf
+
+- *(sparql)* Let a whole-subject follower ride a fixed-relation star (#1267)([da767e8](https://github.com/scbrown/quipu/commit/da767e826a34e01fa7c71fa9a419b65c6d4eeb44))
+
 ## [0.19.0] - 2026-11-20
 
 ### Added
