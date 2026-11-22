@@ -108,15 +108,12 @@ fn text_from_facts(store: &Store, facts: &[crate::types::Fact]) -> Result<String
         return Ok(String::new());
     }
 
-    // Track (tx, value) for the single-valued fields so the most recent
-    // assertion wins. entity_facts orders only by attribute, so when a label or
-    // comment has been updated by a plain assert that left the prior value
-    // active, choosing among them by row order would be nondeterministic and
-    // could embed stale text — the embedding would drift from current facts
-    // (hq-xqc). Selecting the highest tx keeps the embedding tracking the
-    // current value regardless of row order.
+    // The newest transaction wins, excluding superseded plain assertions
+    // (hq-xqc). Comments asserted together are a description cohort, not
+    // competing updates: keep every distinct value tied at that transaction
+    // in stable lexical order, never concatenate older transaction history.
     let mut label: Option<(i64, String)> = None;
-    let mut comment: Option<(i64, String)> = None;
+    let mut comments: Option<(i64, BTreeSet<String>)> = None;
     let mut types = Vec::new();
     let mut literals = Vec::new();
 
@@ -146,10 +143,15 @@ fn text_from_facts(store: &Store, facts: &[crate::types::Fact]) -> Result<String
                 label = Some((fact.tx, s.clone()));
             }
         } else if Some(fact.attribute) == rdfs_comment {
-            if let Value::Str(s) = &fact.value
-                && comment.as_ref().is_none_or(|(t, _)| fact.tx >= *t)
-            {
-                comment = Some((fact.tx, s.clone()));
+            if let Value::Str(s) = &fact.value {
+                if comments.as_ref().is_none_or(|(tx, _)| fact.tx > *tx) {
+                    comments = Some((fact.tx, BTreeSet::new()));
+                }
+                if let Some((tx, values)) = &mut comments
+                    && fact.tx == *tx
+                {
+                    values.insert(s.clone());
+                }
             }
         } else if Some(fact.attribute) == rdf_type {
             if let Value::Ref(type_id) = &fact.value
@@ -182,8 +184,8 @@ fn text_from_facts(store: &Store, facts: &[crate::types::Fact]) -> Result<String
     if let Some((_, l)) = label {
         parts.push(l);
     }
-    if let Some((_, c)) = comment {
-        parts.push(c);
+    if let Some((_, values)) = comments {
+        parts.extend(values);
     }
     if !types.is_empty() {
         parts.push(format!("type: {}", types.join(", ")));
