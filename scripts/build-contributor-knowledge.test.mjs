@@ -51,3 +51,13 @@ test("private literals fail before any output is published", (t) => {
   registry.vision.summary = "Connect to " + ["private", "svc"].join(".");
   assert.match(run().stderr, /private identifier/);
 });
+test("public contributor knowledge carries no untraceable governed Directive", (t) => {
+  // aegis:DirectiveTraceabilityShape rejects a Directive without trackedBy/
+  // governedBy or traceabilityDueAt, and the repository share receiver loads
+  // that shape: one such node quarantines the whole share (v0.19.1).
+  const { dir, run } = fixture(t);
+  assert.equal(run().status, 0);
+  const out = readFileSync(join(dir, "out.ttl"), "utf8");
+  assert.doesNotMatch(out, /rdf-syntax-ns#type> <[^>]*\/ontology\/Directive>/);
+  assert.match(out, /knowledge\/trust-directive> <http:\/\/www.w3.org\/1999\/02\/22-rdf-syntax-ns#type> <[^>]*\/ontology\/DecisionRecord>/);
+});
