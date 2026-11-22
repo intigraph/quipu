@@ -3,6 +3,6 @@
   "tests/test_code_structural_views.py": "a6992b63982b0047a4daa59cf4ac1e966d8db895f59a661b1b316b6ea3c62ec7",
   "docs/demos/structural-shape-compat/run.sh": "d5f1c4a62c6c5b2c444cc6b11f731ea346b1dd8a74d769bff206fc9945cf6b14",
   "docs/demos/structural-shape-compat/fixture.ttl": "04abf1f798aa760c5cd4d68d44ec02f2fbad4c89b31ca870a4b03b95df726b21",
-  "docs/demos/structural-shape-compat/output.log": "1c3358ae2a7b41e99c09dfc4543f07e49b6bbfa0ce95ce1e6edfaafdc916a341",
-  "docs/demos/structural-shape-compat/timing.log": "1c01d6d635498b14677cff8f48682b494986e7f6e722984f384ed50a3d2b2696"
+  "docs/demos/structural-shape-compat/timing.log": "1c01d6d635498b14677cff8f48682b494986e7f6e722984f384ed50a3d2b2696",
+  "docs/demos/structural-shape-compat/output.log.gz": "85e50acefbf138ab04a09d3491c47e99a71cea67014ce467eb81020cdd491980"
 }

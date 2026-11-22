@@ -7,7 +7,8 @@ shape contract and passes under the compatible contract.
 
 Run `sh docs/demos/structural-shape-compat/run.sh` from the repository root with
 an installed Quipu binary. It reads files only, with no server or database write.
-The terminal recording is output.log with timing.log (`scriptreplay` playback).
+The terminal recording is output.log.gz with timing.log; decompress the recording
+before `scriptreplay` playback. Raw terminal bytes and timing are preserved.
 
 Five native tests also verify that present labels/headings retain string types,
 structural requirements remain required and CodeSymbol/Chunk label floors remain.
