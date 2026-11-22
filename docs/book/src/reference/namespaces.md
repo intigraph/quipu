@@ -89,6 +89,48 @@ REST `GET /namespaces` (also `POST /namespaces` with `{}`) and MCP
 `quipu_namespaces` expose the same effective list, without applying config.
 There is no remote namespace-policy application endpoint.
 
+## Conditional removal and restoration
+
+Listing also returns a store-bound, transaction-bound `registry_hash` receipt.
+Any intervening transaction invalidates it.
+
+Remove an unused, retained declaration using a reviewed local-owner request:
+
+```text
+qp namespaces remove <request.json>
+```
+
+First remove the declaration from local configuration. It remains effective
+through the retained registry. Obtain a fresh `qp namespaces list` receipt and
+review a request containing `expected_registry_hash` and the complete exact
+`namespace` object from that listing, including graph and type selectors.
+Unknown request fields are refused. Optional `max_reference_facts` sets an
+explicit inventory budget (default 100000); exceeding it refuses as unknown
+coverage. Increasing that budget requires reviewing the local operation's cost.
+
+Removal holds the SQLite writer reservation from predecessor comparison through
+commit. It refuses allocated terms (including retracted identities), historical
+or foreign references, loaded shape references, authenticated request principals,
+and attached or frozen stores whose reference coverage is unknown. This narrow
+inverse also refuses when **any** local writer or client changeset grant exists,
+including a revoked enrollment. Missing grant inventory is an error. It retracts
+only the exact declaration through normal transaction admission; dictionary,
+identity keys, grants and history are preserved. Private policy and overlapping
+base protections continue to apply.
+
+To restore, declare the exact reviewed namespace in local configuration again,
+obtain and review a fresh receipt, then use:
+
+```text
+qp namespaces apply-if <request.json>
+```
+
+Conditional apply refuses a changed predecessor or any additional unregistered
+configuration declaration. Restoration requires its own local authorization;
+the removal receipt does not authorize a later apply. Neither conditional action
+is exposed through HTTP or MCP, and neither fetches a resolver URL. An uncertain
+write response requires reading the current registry before taking another action.
+
 ## Mint and reference
 
 A mint request selects a registered namespace and a type IRI:
