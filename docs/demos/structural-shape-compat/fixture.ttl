@@ -1,0 +1,4 @@
+@prefix a: <http://aegis.gastown.local/ontology/> .
+<urn:module> a a:CodeModule ; a:filePath "src/new.rs" ; a:repo "fixture" ; a:language "rust" .
+<urn:doc> a a:Document ; a:filePath "guide.md" .
+<urn:section> a a:Section ; a:headingDepth 1 ; a:inDocument <urn:doc> .

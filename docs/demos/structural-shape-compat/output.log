@@ -1,0 +1,17 @@
+Script started on 2026-11-21 19:24:34-05:00 [COMMAND="sh docs/demos/structural-shape-compat/run.sh" <not executed on terminal>]
+BEFORE: structural projection under the prior contract
+invalid: 4 violation(s), 0 warning(s)
+  [Violation] urn:module -- MinCount(1) not satisfied (path: http://www.w3.org/2000/01/rdf-schema#label)
+  [Violation] urn:doc -- MinCount(1) not satisfied (path: http://www.w3.org/2000/01/rdf-schema#label)
+  [Violation] urn:section -- MinCount(1) not satisfied (path: http://www.w3.org/2000/01/rdf-schema#label)
+  [Violation] urn:section -- MinCount(1) not satisfied (path: http://aegis.gastown.local/ontology/heading)
+AFTER: identical projection under the compatible contract
+valid (0 warnings)
+NEGATIVE CONTROLS: owner labels, structural fields, datatype constraints
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.092s
+
+OK
+
+Script done on 2026-11-21 19:24:34-05:00 [COMMAND_EXIT_CODE="0"]
