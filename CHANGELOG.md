@@ -23,6 +23,8 @@ are generated from the versioned release records.
 - *(shapes)* Admit shared structural views without owner metadata (#1274)([48ff74e](https://github.com/scbrown/quipu/commit/48ff74ee5ee52cf966b7f550b5de6c3ca8902446))
 - *(metrics)* Expose baselines for first query failures (#1276)([8472a74](https://github.com/scbrown/quipu/commit/8472a74faa0b246e75079968e277581fd72880cb))
 
+
+
 ### Perf
 
 - *(sparql)* Let a whole-subject follower ride a fixed-relation star (#1267)([da767e8](https://github.com/scbrown/quipu/commit/da767e826a34e01fa7c71fa9a419b65c6d4eeb44))
