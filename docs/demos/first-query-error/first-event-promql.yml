@@ -1,0 +1,25 @@
+rule_files: []
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'quipu_http_requests_total{endpoint="/query",status="408",case="lazy"}'
+        values: '_ 1 1'
+      - series: 'quipu_http_requests_total{endpoint="/query",status="408",case="baseline"}'
+        values: '0 1 1'
+    promql_expr_test:
+      - expr: 'increase(quipu_http_requests_total{case="lazy"}[5m]) > bool 0'
+        eval_time: 2m
+        exp_samples:
+          - labels: '{endpoint="/query",status="408",case="lazy"}'
+            value: 0
+      - expr: 'increase(quipu_http_requests_total{case="baseline"}[5m]) > bool 0'
+        eval_time: 2m
+        exp_samples:
+          - labels: '{endpoint="/query",status="408",case="baseline"}'
+            value: 1
+      - expr: 'rate(quipu_http_requests_total{case="baseline"}[5m]) > bool 0'
+        eval_time: 2m
+        exp_samples:
+          - labels: '{endpoint="/query",status="408",case="baseline"}'
+            value: 1

@@ -1,0 +1,2 @@
+$ promtool test rules first-event-promql.yml
+SUCCESS
