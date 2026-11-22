@@ -384,7 +384,7 @@ async fn identical_read_burst_ab() {
 fn independent_store_handles_do_not_share_a_registry() {
     let (_a, _sa, one) = fixture(true);
     let (_b, _sb, two) = fixture(true);
-    let key = ([0; 32], (1, 0));
+    let key = ([0; 32], (1, 0, [0; 32]));
     let _leader = one.join(key).unwrap();
     assert!(matches!(two.join(key), Some(Join::Leader(_))));
 }
@@ -462,3 +462,109 @@ async fn query_error_is_not_shared_or_cached_as_a_successful_empty_answer() {
 }
 
 mod boundaries;
+
+#[cfg(unix)]
+#[test]
+fn mounted_source_writes_and_replacements_invalidate_the_generation() {
+    let dir = tempfile::tempdir().unwrap();
+    let main = dir.path().join("main.db");
+    let source = dir.path().join("source.db");
+    let _store = quipu::Store::open(main.to_str().unwrap()).unwrap();
+    let writer = Connection::open(&source).unwrap();
+    writer.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE transactions(id INTEGER); INSERT INTO transactions VALUES(1);").unwrap();
+    let sources = [quipu::store::attach::Attachment::read_only(
+        "archive",
+        source.to_str().unwrap(),
+    )];
+    let flights = Flights::open_sources(main.to_str().unwrap(), &sources).unwrap();
+    let before = flights.generation().unwrap();
+    writer
+        .execute("INSERT INTO transactions VALUES(2)", [])
+        .unwrap();
+    assert_ne!(flights.generation().unwrap(), before);
+    let held = flights.sources[0].1.lock();
+    assert!(flights.generation().is_none());
+    drop(held);
+    std::fs::rename(&source, dir.path().join("old.db")).unwrap();
+    std::fs::write(&source, b"replacement").unwrap();
+    assert!(flights.generation().is_none());
+}
+
+#[test]
+fn frozen_registry_requires_the_actual_mounted_source() {
+    let dir = tempfile::tempdir().unwrap();
+    let main = dir.path().join("main.db");
+    let _store = quipu::Store::open(main.to_str().unwrap()).unwrap();
+    let writer = Connection::open(&main).unwrap();
+    writer.execute("INSERT INTO frozen_packs(graph_iri,alias,path,space,content_hash,frozen_at) VALUES('urn:cold','cold','missing',1,'hash','2026-11-21T00:00:00Z')", []).unwrap();
+    assert!(Flights::open(main.to_str().unwrap()).is_none());
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn frozen_pack_duplicate_burst_shares_one_pinned_evaluation() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("frozen.db");
+    let mut writer = quipu::Store::open(path.to_str().unwrap()).unwrap();
+    writer.graph_create("urn:cold").unwrap();
+    quipu::tool_knot(
+        &mut writer,
+        &json!({"graph":"urn:cold", "turtle":"<urn:s> <urn:p> <urn:o> ."}),
+    )
+    .unwrap();
+    writer
+        .freeze_graph(
+            "urn:cold",
+            dir.path().to_str().unwrap(),
+            "2026-11-21T00:00:00Z",
+            None,
+        )
+        .unwrap();
+    assert!(!writer.attachments().is_empty());
+    let flights = configured(path.to_str().unwrap(), true, writer.attachments()).unwrap();
+    let mut handle = crate::StoreHandle::writer_only(writer);
+    handle.query_flights = Some(flights.clone());
+    let store = Arc::new(handle);
+    let (held_tx, held_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let locked = store.clone();
+    let blocker = std::thread::spawn(move || {
+        let _guard = locked.lock();
+        held_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    held_rx.await.unwrap();
+    let first_store = store.clone();
+    let first = tokio::spawn(async move {
+        call(
+            first_store,
+            "SELECT ?o WHERE { GRAPH <urn:cold> { <urn:s> <urn:p> ?o } }",
+        )
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while flights.active.lock().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let second_store = store.clone();
+    let second = tokio::spawn(async move {
+        call(
+            second_store,
+            "SELECT ?o WHERE { GRAPH <urn:cold> { <urn:s> <urn:p> ?o } }",
+        )
+        .await
+    });
+    wait_followers(&flights, 1).await;
+    release_tx.send(()).unwrap();
+    blocker.join().unwrap();
+    let answer = first.await.unwrap();
+    assert_eq!(answer, second.await.unwrap());
+    assert!(std::str::from_utf8(&answer).unwrap().contains("urn:o"));
+    assert_eq!(store.query_execution_count.load(Ordering::Relaxed), 1);
+    assert_eq!(flights.stats.lock().coalesced, 1);
+    call(store.clone(), "ASK {}").await;
+    assert_eq!(store.query_execution_count.load(Ordering::Relaxed), 2);
+}
