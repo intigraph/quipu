@@ -248,12 +248,14 @@ impl StoreHandle {
     /// The WRITER connection. Unchanged semantics: one at a time, FIFO-fair.
     /// Every pre-existing `.lock()` call site means exactly what it meant
     /// before, which is why this refactor does not have to audit them.
+    #[track_caller]
     pub(crate) fn lock(&self) -> writer_timing::StoreGuard<'_> {
         self.lock_observed(|| {})
     }
 
     /// Observe acquisition before settlement, without changing writer custody.
     /// The callback only records fixed-size timing; it must not acquire a store.
+    #[track_caller]
     pub(crate) fn lock_observed(&self, acquired: impl FnOnce()) -> writer_timing::StoreGuard<'_> {
         let guard = writer_timing::StoreGuard::new(self.writer.lock());
         acquired();
@@ -275,12 +277,14 @@ impl StoreHandle {
     /// (aegis-ehf): no attestation settlement and no reader provider sync, so
     /// holding it spends no nonce and remounts nothing. Callers must refuse an
     /// attested request BEFORE calling this, and must not write through it.
+    #[track_caller]
     pub(crate) fn metadata_lock(&self) -> writer_timing::StoreGuard<'_> {
         writer_timing::StoreGuard::new(self.writer.lock())
     }
 
     /// A cancelled promotion must also leave the queue without waiting for an
     /// unrelated long writer. Settle signed authority only after acquisition.
+    #[track_caller]
     pub(crate) fn promotion_lock(
         &self,
         control: &quipu::promotion_control::PromotionControl,
@@ -304,6 +308,7 @@ impl StoreHandle {
 
     /// First writer acquisition for tool handlers. Budget rejection precedes
     /// attestation settlement, so a refused unrun write does not spend its nonce.
+    #[track_caller]
     pub(crate) fn write_lock(
         &self,
     ) -> Result<writer_timing::StoreGuard<'_>, super::base::AppError> {

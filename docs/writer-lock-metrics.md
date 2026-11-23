@@ -35,3 +35,12 @@ percentile and cannot identify the holder of a past timeout on its own.
 Production acceptance requires observing natural knot/promotion activity after
 the normal deployment; no production promotion or load replay is required here.
 Rollback is a normal source revert through the existing deploy lane.
+
+Completed holds of at least one second also emit a `writer_lock_slow` JSON log
+record with the server process ID, source file/line of the acquisition, held
+milliseconds and the existing bounded endpoint/client attribution. The source
+location identifies background acquisition sites even when no HTTP provenance
+exists. It is log evidence only, never a new Prometheus label. The guard releases
+the actual mutex before forming/emitting this diagnostic. Acquisition wait and
+post-unlock work remain excluded. A recovered incident on an older build cannot
+be assigned retrospectively from a new diagnostic; retain that uncertainty.

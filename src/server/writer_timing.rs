@@ -93,14 +93,17 @@ pub(crate) struct StoreGuard<'a> {
     guard: Option<parking_lot::FairMutexGuard<'a, quipu::Store>>,
     started: Instant,
     key: Key,
+    site: &'static std::panic::Location<'static>,
 }
 impl<'a> StoreGuard<'a> {
+    #[track_caller]
     pub(crate) fn new(guard: parking_lot::FairMutexGuard<'a, quipu::Store>) -> Self {
         let started = Instant::now();
         Self {
             guard: Some(guard),
             started,
             key: labels(),
+            site: std::panic::Location::caller(),
         }
     }
 }
@@ -115,11 +118,35 @@ impl DerefMut for StoreGuard<'_> {
         self.guard.as_mut().unwrap()
     }
 }
+impl StoreGuard<'_> {
+    fn release(&mut self) -> Option<serde_json::Value> {
+        let guard = self.guard.take()?;
+        let seconds = self.started.elapsed().as_secs_f64();
+        drop(guard);
+        // Attribution is static source location, not a new metric dimension.
+        // Unlock FIRST: logging must never extend the hold it diagnoses.
+        let key = std::mem::take(&mut self.key);
+        let slow = (seconds >= 1.0).then(|| {
+            serde_json::json!({
+                "event": "writer_lock_slow",
+                "timestamp": quipu::time::now_iso(),
+                "server_process_id": std::process::id(),
+                "source_file": self.site.file(),
+                "source_line": self.site.line(),
+                "endpoint": key.0,
+                "client": key.1,
+                "held_ms": seconds * 1000.0,
+            })
+        });
+        registry().observe(key, seconds);
+        slow
+    }
+}
 impl Drop for StoreGuard<'_> {
     fn drop(&mut self) {
-        let seconds = self.started.elapsed().as_secs_f64();
-        drop(self.guard.take());
-        registry().observe(std::mem::take(&mut self.key), seconds);
+        if let Some(event) = self.release() {
+            eprintln!("{event}");
+        }
     }
 }
 
