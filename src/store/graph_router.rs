@@ -32,6 +32,46 @@ pub struct Router {
     owners: BTreeMap<String, Owner>,
 }
 
+/// Source-pilot admission only; not a server configuration or cutover command.
+/// Default OFF avoids preparing an owner. The caller must inventory whether
+/// its selected graph is regenerable; a graph never determines a file path.
+#[derive(Debug, Clone, Default)]
+pub struct IngestPilot {
+    /// Explicit opt-in for a disposable, single-graph qualification.
+    pub enabled: bool,
+    /// Exact graph already pinned in the supplied catalog.
+    pub graph: Option<String>,
+}
+
+impl IngestPilot {
+    /// Admit one graph through existing owner/fence checks. Disabled admission
+    /// does not call `prepare`, open a file or install a fence. Preparation
+    /// supplies an already configured owner, never weaker writer defaults.
+    pub fn admit(
+        &self,
+        catalog: Arc<Catalog>,
+        legacy: &Store,
+        prepare: impl FnOnce() -> Result<Owner>,
+    ) -> Result<Option<Router>> {
+        if !self.enabled {
+            return Ok(None);
+        }
+        let mut routes = catalog.routes();
+        let route = routes
+            .next()
+            .ok_or_else(|| refused("pilot requires one route"))?;
+        if routes.next().is_some() || self.graph.as_deref() != Some(route.graph.as_str()) {
+            return Err(refused(
+                "pilot requires exactly its explicitly selected graph",
+            ));
+        }
+        drop(routes);
+        Router::check_fence(&catalog, legacy)?;
+        let owner = prepare()?;
+        Router::admit(catalog, legacy, vec![owner]).map(Some)
+    }
+}
+
 impl Router {
     /// Admit a router. `owners` must be exactly one prepared owner per catalog
     /// route, each prepared against this catalog. `legacy` is the legacy
@@ -94,6 +134,17 @@ impl Router {
         request: &WriteRequest<'_>,
         input: &Value,
     ) -> Result<Value> {
+        match self.routed_knot(request, input)? {
+            Some(result) => Ok(result),
+            None => crate::tool_knot(legacy, input),
+        }
+    }
+
+    /// Dispatch a routed knot without borrowing or locking the legacy writer.
+    /// `None` selects legacy without executing it; only then should a caller
+    /// acquire its legacy writer. An error is a refusal, never legacy fallback.
+    /// The caller's authentication/provenance scopes are retained as in `knot`.
+    pub fn routed_knot(&self, request: &WriteRequest<'_>, input: &Value) -> Result<Option<Value>> {
         if request.graph != input.get("graph").and_then(Value::as_str) {
             return Err(refused("request graph differs from the write's graph"));
         }
@@ -102,8 +153,9 @@ impl Router {
                 .owners
                 .get(&route.graph)
                 .ok_or_else(|| refused("routed graph has no owner"))?
-                .knot(request, input),
-            WriteTarget::Legacy => crate::tool_knot(legacy, input),
+                .knot(request, input)
+                .map(Some),
+            WriteTarget::Legacy => Ok(None),
         }
     }
 

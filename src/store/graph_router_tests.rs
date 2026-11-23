@@ -5,6 +5,9 @@ use std::path::PathBuf;
 
 const GRAPH: &str = "https://example.test/graphs/ingest";
 
+#[path = "graph_router_pilot_tests.rs"]
+mod pilot;
+
 struct Fixture {
     _dir: tempfile::TempDir,
     root: PathBuf,

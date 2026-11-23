@@ -73,7 +73,7 @@ The columns are discovered from the live schema; each needs a reviewed class:
 | Authoritative | `facts`, `graphs`, `forks`, `writer_graph_instances`, `frozen_packs`, `pendant_repo_graphs` | insert, update, delete |
 | Log, staging or cursor | `graph_events`, `graph_consumers`, `snapshot_uploads`, `denial_quarantine` | insert, update (retention may delete) |
 | Reference | `dataset_members` | none: consumer dataset configuration must name routed graphs |
-| Derived | `substring_facts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
+| Derived | `substring_facts`, `lexical_fts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
 
 An unclassified graph-bearing column refuses installation and
 `verify_routed_fence`; so does a missing trigger. Term-id columns resolve the
@@ -90,6 +90,13 @@ derivations, are covered only after `verify_routed_fence` passes or the fence
 is re-installed. The fence is never installed in an owner file. Removing a
 fence row after the owner accepted writes still needs fenced reverse
 reconciliation.
+
+The lexical profile is qualified both when its FTS schema predates the fence
+and when it is initialized afterward. `lexical_fts.graph_id` is a derived
+column from `lexical_source`, not an independent graph writer. No fence trigger
+is installed on the virtual table. Routed fact writes still refuse, unrelated
+fact writes still maintain the index, and a drop/backfill rebuild preserves the
+retained index without releasing the authoritative fact fence.
 
 ### Producer source cutover
 
@@ -145,6 +152,31 @@ the legacy writer, and the request and input must name the same graph. A
 caller that bypasses the router still meets the legacy file's fence.
 `Router::recheck` repeats the fence check, e.g. after legacy maintenance. The
 router is not wired into the server, CLI or startup.
+
+### Default-off source pilot
+
+`graph_router::IngestPilot` defaults to disabled. Its library admission method
+returns no router without invoking owner preparation. When explicitly enabled,
+it accepts exactly one selected catalog graph and verifies the legacy fence
+before preparing that owner, then repeats ordinary router admission. The caller
+must establish that the selected producer is regenerable; the option does not
+infer ownership or supply a production configuration switch.
+
+`Router::routed_knot` takes no legacy writer reference. A routed request executes
+in its prepared owner; a legacy selection returns `None` without writing, so an
+adapter can acquire its legacy mutex only after selection. A refusal stays an
+error and must never trigger legacy fallback. `Router::knot` retains the existing
+combined interface using this dispatch method. Authentication and provenance
+remain the caller's scopes, and ordinary owner guards still apply.
+
+Disposable qualification holds both the legacy application mutex and a SQLite
+`BEGIN IMMEDIATE` transaction while a worker replaces an ingest snapshot and
+reads its current value. Completion is checked before releasing either lock.
+Idle and held-writer samples report microseconds and p50/p95, with unchanged
+legacy `total_changes` and `data_version` witnesses. These are synthetic source
+controls, not natural-run acceptance or a production memory profile. Enrolled
+startup, server dispatch, composed consumer parity and migration/inverse
+qualification remain required before a production route is advertised.
 
 ## Composed reads are part of the first slice
 

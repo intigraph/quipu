@@ -80,6 +80,61 @@ fn inventory_classifies_every_graph_bearing_column() {
 }
 
 #[test]
+fn lexical_index_before_or_after_fencing_remains_derived_from_fenced_facts() {
+    for initialize_first in [true, false] {
+        let (_dir, _path, mut store) = legacy();
+        store.graph_create(ROUTED).unwrap();
+        store.graph_create(OTHER).unwrap();
+        knot(&mut store, ROUTED, "retained").unwrap();
+        knot(&mut store, OTHER, "other").unwrap();
+        if initialize_first {
+            store.initialize_lexical_index().unwrap();
+        }
+        store.fence_routed_graph(ROUTED, 7, 4).unwrap();
+        store.initialize_lexical_index().unwrap();
+        while !store.backfill_lexical_batch(8).unwrap().complete {}
+        let inventory = store.routed_fence_inventory().unwrap();
+        assert!(inventory.iter().any(|column| column.table == "lexical_fts"
+            && column.column == "graph_id"
+            && column.class == FenceClass::Derived));
+        store.verify_routed_fence().unwrap();
+        assert_eq!(
+            count(
+                &store,
+                "SELECT count(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'quipu_routed_fence_lexical_%'"
+            ),
+            0
+        );
+
+        let before = count(&store, "SELECT count(*) FROM lexical_fts");
+        assert!(before > 0, "positive control: retained facts are indexed");
+        assert_fenced(
+            knot(&mut store, ROUTED, "blocked"),
+            "lexical profile bypass",
+        );
+        assert_eq!(count(&store, "SELECT count(*) FROM lexical_fts"), before);
+        knot(&mut store, OTHER, "new-other").unwrap();
+        knot(&mut store, crate::schema::ROOT_GRAPH_IRI, "new-root").unwrap();
+        let after = count(&store, "SELECT count(*) FROM lexical_fts");
+        assert!(
+            after > before,
+            "unrelated graph writes still update the index"
+        );
+
+        // Rebuilding a derived index does not change or unlock retained facts.
+        store.drop_lexical_index().unwrap();
+        store.initialize_lexical_index().unwrap();
+        while !store.backfill_lexical_batch(8).unwrap().complete {}
+        store.verify_routed_fence().unwrap();
+        assert_eq!(count(&store, "SELECT count(*) FROM lexical_fts"), after);
+        assert_fenced(
+            knot(&mut store, ROUTED, "after-rebuild"),
+            "rebuild removed fence",
+        );
+    }
+}
+
+#[test]
 fn fluent_receipts_stay_fenced_while_native_permit_cleanup_runs() {
     let (_dir, path, store) = legacy();
     let routed = store.intern(ROUTED).unwrap();
