@@ -73,7 +73,7 @@ The columns are discovered from the live schema; each needs a reviewed class:
 | Authoritative | `facts`, `graphs`, `forks`, `writer_graph_instances`, `frozen_packs`, `pendant_repo_graphs` | insert, update, delete |
 | Log, staging or cursor | `graph_events`, `graph_consumers`, `snapshot_uploads`, `denial_quarantine` | insert, update (retention may delete) |
 | Reference | `dataset_members` | none: consumer dataset configuration must name routed graphs |
-| Derived | `substring_facts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
+| Derived | `substring_facts`, `lexical_fts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
 
 An unclassified graph-bearing column refuses installation and
 `verify_routed_fence`; so does a missing trigger. Term-id columns resolve the
@@ -90,6 +90,13 @@ derivations, are covered only after `verify_routed_fence` passes or the fence
 is re-installed. The fence is never installed in an owner file. Removing a
 fence row after the owner accepted writes still needs fenced reverse
 reconciliation.
+
+The lexical profile is qualified both when its FTS schema predates the fence
+and when it is initialized afterward. `lexical_fts.graph_id` is a derived
+column from `lexical_source`, not an independent graph writer. No fence trigger
+is installed on the virtual table. Routed fact writes still refuse, unrelated
+fact writes still maintain the index, and a drop/backfill rebuild preserves the
+retained index without releasing the authoritative fact fence.
 
 ### Producer source cutover
 

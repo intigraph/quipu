@@ -30,8 +30,8 @@ controls still exercise ordinary ROOT writes and legacy bypass fencing.
 Observed transcript, microseconds per complete write plus read:
 
 ```text
-idle_p50_p95=(10344, 17279)
-held_p50_p95=(11347, 14269)
+idle_p50_p95=(12438, 18118)
+held_p50_p95=(10581, 13793)
 legacy_changes_delta=0 legacy_data_version_delta=0
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured
@@ -43,3 +43,25 @@ last snapshot is replayed and still yields exactly one current value. The pilot
 is disabled by default and this change adds no production server switch.
 Startup integration, full consumer parity and a separately admitted migration
 remain open.
+
+## Lexical-index profile control
+
+The original fence fixture had no FTS schema. A fresh CLI-initialized store
+also contains `lexical_fts.graph_id`. The new regression was first run against
+`a6dc4fa570975fe824b8d8e5cf22de453bf6f541` plus the test, before the classifier fix:
+
+```text
+PolicyDenied("graph owner: unclassified graph-bearing column lexical_fts.graph_id; review its fence class before routing")
+test result: FAILED. 0 passed; 1 failed
+```
+
+After classifying that exact column as derived, all eleven fence controls pass.
+The new control creates the index before and after fencing, proves routed fact
+writes still refuse, checks unrelated writes still update the index, and
+drop/backfill rebuilds it without releasing the fact fence. It also verifies
+that no fence trigger is installed on the FTS virtual table. Reproduce with:
+
+```sh
+just test --locked --no-default-features --features shacl --lib \
+  lexical_index_before_or_after_fencing -- --nocapture
+```
