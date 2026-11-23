@@ -47,12 +47,10 @@ async fn quiet_progress_is_opt_in_and_reuses_one_shared_observation() {
         hub.observations.load(Ordering::Relaxed) <= count + 1,
         "one shared first-subscriber wake, never one read per subscriber"
     );
-    // A repeated cached checkpoint cannot refresh this connection.
-    assert!(
-        tokio::time::timeout(Duration::from_millis(50), a.next_frame())
-            .await
-            .is_err()
-    );
+    // A repeated cached checkpoint cannot refresh this connection. Account
+    // for the one first-lease wake without racing its async scheduling.
+    a.progress_observed = hub.ring.lock().unwrap().observed_at.unwrap();
+    assert!(a.progress_frame().is_none());
     let params = serde_json::from_value(json!({"since":head,"graph":BOARD})).unwrap();
     let mut ordinary = Cursor::open(shared.clone(), head, params, true, None);
     assert!(
@@ -171,24 +169,25 @@ async fn catchup_and_multipart_never_skip_matching_data_for_progress() {
     {
         let mut store = shared.lock();
         let graph = store.registered_graph_id(BOARD).unwrap().unwrap();
-        let d = quipu::store::Datum {
-            entity: store.intern("urn:large").unwrap(),
-            attribute: store.intern("urn:p:title").unwrap(),
-            value: quipu::types::Value::Str("x".repeat(200_000)),
-            valid_from: super::tests::T.into(),
-            valid_to: None,
-            op: quipu::types::Op::Assert,
-        };
+        let mut data = Vec::new();
+        for n in 0..2 {
+            data.push(quipu::store::Datum {
+                entity: store.intern(&format!("urn:large:{n}")).unwrap(),
+                attribute: store.intern("urn:p:title").unwrap(),
+                value: quipu::types::Value::Str("x".repeat(650_000)),
+                valid_from: super::tests::T.into(),
+                valid_to: None,
+                op: quipu::types::Op::Assert,
+            });
+        }
         store
-            .transact_to_graph(&[d], super::tests::T, None, None, graph)
+            .transact_to_graph(&data, super::tests::T, None, None, graph)
             .unwrap();
     }
     settled(&shared, &hub).await;
     let f = frame(&mut c).await;
-    assert_ne!(f.event, "quipu.changes.progress");
-    if f.event == "quipu.error" {
-        assert_eq!(c.offset(), since);
-    }
+    assert_eq!(f.event, "quipu.changes.begin");
+    assert!(c.offset() > since);
     // Pending multipart frames always drain before any progress frame.
     while !c.pending.is_empty() {
         assert_ne!(frame(&mut c).await.event, "quipu.changes.progress");

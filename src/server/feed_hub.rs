@@ -375,6 +375,9 @@ fn read_new(read: &quipu::Store, hub: &Hub, observed_at: f64) -> quipu::Result<(
                 "change observation incomplete".into(),
             ));
         };
+        // In-flight pages may move the ring head before the snapshot is fully
+        // scanned. Never pair that partial head with the previous timestamp.
+        ring.observed_at = None;
         if !ring.ready || ring.source != source {
             // First read, or a different history: start empty at the head.
             let Ok(head) = read.latest_tx_id() else {
