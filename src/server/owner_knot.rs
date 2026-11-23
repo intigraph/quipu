@@ -10,6 +10,13 @@ use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
+#[path = "owner_pilot_http.rs"]
+pub(crate) mod http;
+
+#[cfg(feature = "ownership-witness-s3")]
+#[path = "owner_pilot_dataset.rs"]
+pub(crate) mod dataset;
+
 /// Trusted request pins, not authentication or writer authority.
 #[derive(Clone)]
 pub(crate) struct Pin {
@@ -34,6 +41,29 @@ fn refuse(message: &str) -> AppError {
 }
 
 impl PreparedOwner {
+    /// Default-off startup bridge. The initializer supplies the immutable
+    /// catalog, protected configuration and ordinary served writer policy.
+    /// There is no discovery, enrollment, retry or fallback on failed S1.
+    #[cfg(feature = "ownership-witness-s3")]
+    pub(crate) fn initialize(
+        pilot: &quipu::store::graph_router::IngestPilot,
+        catalog: Arc<quipu::graph_catalog::Catalog>,
+        legacy: &quipu::Store,
+        config: &quipu::store::graph_router::EnrolledPilotConfig,
+        credentials: impl FnOnce() -> quipu::Result<(String, String)>,
+        configure: impl FnOnce(&mut quipu::Store) -> quipu::Result<()>,
+    ) -> Result<Option<Arc<Self>>, AppError> {
+        let Some(router) = pilot.admit_enrolled(catalog, legacy, config, credentials, configure)?
+        else {
+            return Ok(None);
+        };
+        let graph = router
+            .single_routed_graph()
+            .ok_or_else(|| refuse("startup admitted no single graph"))?
+            .to_owned();
+        Self::new(router, graph).map(Some)
+    }
+
     pub(crate) fn new(router: Router, graph: String) -> Result<Arc<Self>, AppError> {
         if router.single_routed_graph() != Some(graph.as_str()) {
             return Err(refuse("one explicitly selected admitted graph required"));

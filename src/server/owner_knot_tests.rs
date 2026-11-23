@@ -214,3 +214,101 @@ async fn invalid_contracts_refuse_before_consuming_an_id() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn http_adapter_routes_owner_receipts_and_refuses_missing_pins() {
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
+    let (_dir, _legacy, owner, _pin, input) = fixture();
+    let app = super::http::routes(owner);
+    let request = |path: &str, body: Value, pins: bool| {
+        let mut r = Request::post(path)
+            .header("content-type", "application/json")
+            .header("x-quipu-completion-contract", crate::knot_durable::CONTRACT)
+            .header("x-quipu-write-id", ID);
+        if pins {
+            r = r
+                .header("x-quipu-catalog-revision", "7")
+                .header("x-quipu-owner-generation", "4")
+                .header("x-quipu-owner-policy", "policy-v1");
+        }
+        r.body(Body::from(body.to_string())).unwrap()
+    };
+    let response = crate::auth::run_identified(
+        Some(identity("named_bearer")),
+        app.clone().oneshot(request("/knot", input.clone(), false)),
+    )
+    .await
+    .unwrap();
+    assert!(!response.status().is_success());
+    let response = crate::auth::run_identified(
+        Some(identity("named_bearer")),
+        app.clone().oneshot(request("/knot", input.clone(), true)),
+    )
+    .await
+    .unwrap();
+    assert!(response.status().is_success(), "{}", response.status());
+    let response = crate::auth::run_identified(
+        Some(identity("named_bearer")),
+        app.oneshot(request(
+            "/knot/status",
+            json!({"write_id":ID,"request":input}),
+            true,
+        )),
+    )
+    .await
+    .unwrap();
+    assert!(response.status().is_success());
+    let body = axum::body::to_bytes(response.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let proof: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(proof["state"], "finished");
+}
+
+#[cfg(feature = "ownership-witness-s3")]
+#[test]
+fn disabled_initializer_never_resolves_invalid_config_or_credentials() {
+    use quipu::store::graph_router::{EnrolledPilotConfig, IngestPilot};
+    let (_dir, legacy, _owner, _pin, _input) = fixture();
+    let catalog = Arc::new(
+        Catalog::new(
+            7,
+            "legacy",
+            vec![],
+            Budget {
+                max_owners: 1,
+                queued_per_owner: 1,
+                readers_per_owner: 1,
+                max_queued: 1,
+                max_connections: 4,
+            },
+        )
+        .unwrap(),
+    );
+    let config = EnrolledPilotConfig {
+        root: "relative".into(),
+        inventory: "absent".into(),
+        profile: String::new(),
+        endpoint: String::new(),
+        bucket: String::new(),
+        region: String::new(),
+        prefix: String::new(),
+        timeout: Duration::ZERO,
+        witness_ca_der: None,
+        installed_policy: String::new(),
+        allocation: quipu::memory_budget::MemoryAllocation::for_connections(1024, 4).unwrap(),
+    };
+    assert!(
+        PreparedOwner::initialize(
+            &IngestPilot::default(),
+            catalog,
+            &legacy,
+            &config,
+            || panic!("OFF resolved credentials"),
+            |_| panic!("OFF configured owner")
+        )
+        .unwrap()
+        .is_none()
+    );
+}

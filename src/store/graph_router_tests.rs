@@ -8,6 +8,10 @@ const GRAPH: &str = "https://example.test/graphs/ingest";
 #[path = "graph_router_pilot_tests.rs"]
 mod pilot;
 
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+#[path = "graph_router_enrolled_tests.rs"]
+mod enrolled;
+
 #[test]
 fn identical_routes_from_a_different_catalog_cannot_supply_an_owner_budget() {
     let f = fixture();

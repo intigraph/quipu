@@ -22,6 +22,12 @@ use crate::{
     graph_catalog::{Catalog, WriteRequest, WriteTarget},
 };
 
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+#[path = "graph_router_enrolled.rs"]
+mod enrolled;
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub use enrolled::EnrolledPilotConfig;
+
 fn refused(message: impl std::fmt::Display) -> Error {
     Error::PolicyDenied(format!("graph router: {message}"))
 }
