@@ -431,6 +431,11 @@ impl Cursor {
                 {
                     self.scanned = self.scanned.max(watermark);
                 }
+                // Catch-up can finish at a quiet head. Do not wait for a new
+                // commit before publishing an already-complete observation.
+                if let Some(frame) = self.progress_frame() {
+                    return Some(frame);
+                }
                 // A stream that just attached asks the hub before it waits, so
                 // a commit the hub read meanwhile is not slept through.
                 self.wait = !attached;
