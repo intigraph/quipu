@@ -16,7 +16,7 @@ pub(super) const T: &str = "2026-10-24T00:00:00Z";
 pub(super) const BOARD: &str = "urn:graph:board";
 pub(super) const OTHER: &str = "urn:graph:other";
 
-fn write(shared: &SharedStore, graph: &str, entity: &str) {
+pub(super) fn write(shared: &SharedStore, graph: &str, entity: &str) {
     let mut store = shared.lock();
     let datum = Datum {
         entity: store.intern(entity).unwrap(),

@@ -260,3 +260,38 @@ async fn writer_timing_native_knot_stage_and_detached_promotion() {
         "quipu_writer_lock_held_seconds_total{endpoint=\"/knot/promote\",client=\"hold-native\"}"
     ));
 }
+
+#[test]
+fn slow_writer_records_actual_caller_only_after_unlock() {
+    let handle = StoreHandle::writer_only(quipu::Store::open_in_memory().unwrap());
+    let expected_line = line!() + 1;
+    let mut held = handle.lock();
+    assert!(handle.writer.try_lock().is_none());
+    // Deterministic elapsed-time boundary; no production sleep or large store.
+    held.started = Instant::now() - Duration::from_secs(2);
+    let event = held.release().expect("slow hold must be observable");
+    assert!(
+        handle.writer.try_lock().is_some(),
+        "diagnostic retained writer"
+    );
+    assert_eq!(event["source_file"], file!());
+    assert_eq!(event["source_line"], expected_line);
+    assert_eq!(event["event"], "writer_lock_slow");
+    assert_eq!(event["endpoint"], "internal");
+    assert_eq!(event["client"], "unattributed");
+    assert!(event["held_ms"].as_f64().unwrap() >= 2000.0);
+    assert!(
+        held.release().is_none(),
+        "double release duplicated diagnostic"
+    );
+}
+
+#[test]
+fn ordinary_writer_releases_without_slow_event() {
+    let handle = StoreHandle::writer_only(quipu::Store::open_in_memory().unwrap());
+    let mut held = handle.lock();
+    // Pin elapsed to zero independently of scheduler delays.
+    held.started = Instant::now() + Duration::from_secs(3600);
+    assert!(held.release().is_none());
+    assert!(handle.writer.try_lock().is_some());
+}
