@@ -178,6 +178,47 @@ controls, not natural-run acceptance or a production memory profile. Enrolled
 startup, server dispatch, composed consumer parity and migration/inverse
 qualification remain required before a production route is advertised.
 
+### Owner admission and durable completion source boundary
+
+The prepared server boundary consumes one admitted single-graph router and
+reserves its configured writer queue and existing reader pool. It installs no
+HTTP route, startup resolver or runtime switch. Every owner must have exactly one
+shared boundary; constructing another queue for the same owner is not supported.
+The owner must have been prepared against the identical immutable catalog,
+including its resource budget, rather than an independently reconstructed route.
+
+Routed writes use an owned per-owner semaphore through the ordinary tracked
+blocking helper. They never acquire the legacy global write permit. Active and
+waiting requests have a bounded combined population. Queued cancellation releases
+only that reservation; after dispatch, the actual worker retains its reservation
+and permit through effect, deferred embedding and receipt finalization even if
+the request future disappears. Request deadlines, identity, provenance and write
+kind still cross the same blocking boundary. Status reads reserve an existing
+owner reader before dispatch, refuse when busy, and never queue behind a writer.
+
+The first durable contract supports stable authenticated, unsigned, unscoped
+single-graph requests. Exact graph, catalog, generation and policy pins must
+match before admission. Scoped v2 refuses before consuming an ID: its existing
+outer writer-scope transaction does not compose with the current outermost
+ticketed effect contract. Ordinary scoped v1 keeps its writer-scope guards;
+it does not gain a durable transport contract from this boundary.
+
+Admission, atomic commit evidence and terminal completion all live in the owner
+file. The original wire write ID remains the ledger primary key. An owner-context
+digest binds catalog revision, graph, file/store identity, epoch, generation and
+policy in the same admission row. Changing context cannot turn a consumed ID
+into a fresh execution. Body, principal or context mismatch produces UNKNOWN or
+refusal, never permission to replay. A nullable private column admits old legacy
+rows without re-keying them; status reads never migrate the ledger. Legacy status
+does not disclose an owner-bound receipt. Explicit sealing retains the consumed
+ID and cannot seal an already committed effect.
+
+These source primitives do not reconcile historical IDs between different files.
+Physical cutover still needs a reviewed disposition for legacy receipt history,
+ambiguous attempts and downgrade prevention across file boundaries. Startup S1
+admission, graph grants, dependency datasets, bypass fencing and composed reads
+remain necessary before a server can advertise this boundary.
+
 ## Composed reads are part of the first slice
 
 Ingest previously visible in ROOT must remain visible to its existing consumers
