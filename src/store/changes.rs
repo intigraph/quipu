@@ -199,6 +199,21 @@ fn id_list(graphs: &[i64]) -> String {
 }
 
 impl Store {
+    /// Run a change-log observation in one SQLite read snapshot. The callback
+    /// must only read; an existing caller-owned transaction is preserved.
+    pub fn with_change_snapshot<T>(&self, observe: impl FnOnce(&Self) -> Result<T>) -> Result<T> {
+        let snapshot = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        let result = observe(self)?;
+        if let Some(snapshot) = snapshot {
+            snapshot.commit()?;
+        }
+        Ok(result)
+    }
+
     /// Serve change records for transactions STRICTLY AFTER `since_tx`, at
     /// most `max_txs` transactions (whole transactions only). `graph`
     /// restricts to one graph id (`0` = ROOT); `None` spans all graphs, with

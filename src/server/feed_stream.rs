@@ -47,6 +47,9 @@ pub(crate) fn routes() -> Router<SharedStore> {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Params {
     since: Option<i64>,
+    /// Opt-in fresh empty-range proofs for one named graph and predicate.
+    #[serde(default)]
+    progress: bool,
     types: Option<String>,
     group: Option<String>,
     graph: Option<String>,
@@ -108,6 +111,9 @@ pub(crate) struct Cursor {
     /// The hub's hold on this stream's `member` condition. A member stream
     /// without one is served from the store only, never unfiltered.
     member: Option<feed_hub::MemberLease>,
+    progress_lease: Option<feed_hub::ProgressLease>,
+    progress_source: Option<Value>,
+    progress_observed: f64,
     _slot: Option<OwnedSemaphorePermit>,
 }
 
@@ -173,7 +179,17 @@ pub(crate) fn scope_ok(params: &Params, changes: bool) -> bool {
         list.as_ref()
             .is_some_and(|s| s.len() > 2048 || feed::term_list(s).is_none())
     };
-    !(changes && (params.types.is_some() || params.group.is_some())
+    !(params.progress
+        && (!changes
+            || params.graph.is_none()
+            || params
+                .predicate
+                .as_deref()
+                .and_then(feed::term_list)
+                .is_none_or(|v| v.len() != 1)
+            || params.subject.is_some()
+            || params.member.is_some())
+        || changes && (params.types.is_some() || params.group.is_some())
         || !changes
             && (params.predicate.is_some() || params.subject.is_some() || params.member.is_some())
         || params
@@ -217,8 +233,36 @@ impl Cursor {
             hub: None,
             scanned: 0,
             member: None,
+            progress_lease: None,
+            progress_source: None,
+            progress_observed: 0.0,
             _slot: slot,
         }
+    }
+
+    fn progress_frame(&mut self) -> Option<FeedFrame> {
+        if !self.params.progress {
+            return None;
+        }
+        let (hub, _) = self.hub.as_ref()?;
+        let (next, observed) = hub.progress(self.scanned, self.progress_source.as_ref()?)?;
+        if next < self.offset || observed <= self.progress_observed {
+            return None;
+        }
+        let body = json!({
+            "schema": "quipu.change-progress/v1", "source": self.progress_source,
+            "scope": {"graphs": [self.params.graph], "predicate": self.params.predicate.as_deref()?.trim()},
+            "since": self.offset, "next_tx": next, "watermark_tx": next,
+            "records": [], "complete": true, "observed_at": observed,
+        });
+        self.offset = next;
+        self.progress_observed = observed;
+        self.wait = true;
+        Some(FeedFrame {
+            event: "quipu.changes.progress",
+            id: Some(next),
+            data: body.to_string(),
+        })
     }
 
     /// The last cursor this subscription delivered.
@@ -284,6 +328,9 @@ impl Cursor {
             let page = if let feed_hub::Serve::Page(body) = served {
                 Ok(axum::Json(body))
             } else if matches!(served, feed_hub::Serve::Wait) {
+                if let Some(frame) = self.progress_frame() {
+                    return Some(frame);
+                }
                 self.wait = true;
                 continue;
             } else if self.changes {
@@ -348,7 +395,24 @@ impl Cursor {
             if attached {
                 let hub = feed_hub::Hub::of(&self.store);
                 let head = hub.watch();
+                if self.params.progress {
+                    self.progress_lease = Some(hub.progress_lease());
+                }
                 self.hub = Some((hub, head));
+            }
+            if self.params.progress {
+                let source = body["source"].clone();
+                if self
+                    .progress_source
+                    .as_ref()
+                    .is_some_and(|old| *old != source)
+                {
+                    self.terminal = true;
+                    return Some(FeedFrame::error(
+                        "change source changed; rebootstrap required",
+                    ));
+                }
+                self.progress_source = Some(source);
             }
             let key = if self.changes {
                 "next_tx"
