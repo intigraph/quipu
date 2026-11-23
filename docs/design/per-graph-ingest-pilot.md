@@ -424,3 +424,19 @@ or a general cross-file SPARQL evaluator. Per-participant SPARQL projections in
 the combined fixture check visibility in the captured stores; arbitrary joins,
 RDFS/temporal/default-dataset parity remain separate publication prerequisites.
 Production main still does not mount the owner adapter or initialize this path.
+
+### Enrolled evaluator qualification control
+
+The source control joins ROOT and the owner graph through the actual
+authorized composed evaluator after real TLS/S1 startup and the admitted HTTP
+write. Both pools open before the new owner terms are written. One explicit
+service allocation covers the legacy and owner handles plus a scratch view;
+the view retains the shared admission permit through evaluation. The query must
+return the shared IRI and its language-tagged value, while an excluded graph
+refuses. Publication rechecks the captured bindings and read authority.
+
+The focused startup group passes all five tests, including this join; the
+composed authorization group passes 14 tests. Full witness-feature Clippy and
+all `just check` gates pass. These are source qualification controls. They do
+not certify general evaluator parity, RSS sizing, production mutation fencing
+or physical cutover. No production query route is added. Startup remains OFF.
