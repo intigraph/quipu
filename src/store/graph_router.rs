@@ -81,7 +81,9 @@ impl Router {
         let mut by_graph = BTreeMap::new();
         for owner in owners {
             let route = owner.catalog_route().clone();
-            if catalog.routes().find(|r| r.graph == route.graph) != Some(&route) {
+            if !owner.prepared_for(&catalog)
+                || catalog.routes().find(|r| r.graph == route.graph) != Some(&route)
+            {
                 return Err(refused("owner route is not this catalog's route"));
             }
             if by_graph.insert(route.graph.clone(), owner).is_some() {
@@ -162,6 +164,16 @@ impl Router {
     /// The owner serving `graph`, if it is routed.
     pub fn owner(&self, graph: &str) -> Option<&Owner> {
         self.owners.get(graph)
+    }
+
+    /// Immutable request revision; does not grant a graph or writer capability.
+    pub fn catalog_revision(&self) -> u64 {
+        self.catalog.revision()
+    }
+
+    /// The source pilot admits one explicit graph, never an inferred default.
+    pub fn single_routed_graph(&self) -> Option<&str> {
+        (self.owners.len() == 1).then(|| self.owners.keys().next().unwrap().as_str())
     }
 }
 

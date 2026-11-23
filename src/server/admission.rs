@@ -12,6 +12,9 @@ use tracked::admit_tracked;
 #[path = "admission/heavy_reads.rs"]
 pub(crate) mod heavy_reads;
 
+#[path = "admission/owner.rs"]
+pub(crate) mod owner;
+
 /// Admit one write before moving it onto Tokio's uncancellable blocking pool.
 ///
 /// A request future can be cancelled while it waits for this permit, so an

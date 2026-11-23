@@ -3,6 +3,9 @@ use crate::graph_catalog::Budget;
 use serde_json::json;
 use std::{fs::File, sync::mpsc, time::Duration};
 
+#[path = "graph_owner_durable_tests.rs"]
+mod durable;
+
 fn fixture(root: &Path, name: &str) -> (Store, Route) {
     let path = root.join(format!("{name}.db"));
     let path = path.to_str().unwrap();

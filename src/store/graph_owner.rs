@@ -285,6 +285,20 @@ impl Owner {
         &self.route
     }
 
+    /// Already reserved writer queue slots; excludes the active worker.
+    pub fn queued_per_owner(&self) -> usize {
+        self.capacity - 1
+    }
+
+    /// Dedicated read connections already reserved by the owner initializer.
+    pub fn read_pool_size(&self) -> usize {
+        self.readers.len()
+    }
+
+    pub(crate) fn prepared_for(&self, catalog: &Arc<Catalog>) -> bool {
+        Arc::ptr_eq(&self.catalog, catalog)
+    }
+
     fn check_identity(route: &Route, store: &Store) -> Result<()> {
         store.require_ownership()?;
         if store.store_id()? != route.store_id || store.log_epoch()? != route.log_epoch {
@@ -314,21 +328,52 @@ impl Owner {
     /// No signed replay or cross-file synchronous validation is admitted.
     /// A post-commit embedding failure remains an error, never an implicit retry.
     pub fn knot(&self, request: &WriteRequest<'_>, input: &Value) -> Result<Value> {
+        self.check_knot_request(request, input)?;
+        let _admission = self.admit()?;
+        self.execute_knot(input, None)
+    }
+
+    fn check_knot_request(&self, request: &WriteRequest<'_>, input: &Value) -> Result<()> {
         if self.catalog.write_target(request)? != WriteTarget::Routed(&self.route)
             || input.get("graph").and_then(Value::as_str) != Some(self.route.graph.as_str())
             || crate::transaction_auth::current_attestation().is_some()
         {
             return Err(refused("request does not select this unsigned owner"));
         }
-        let _admission = self.admit()?;
+        Ok(())
+    }
+
+    fn execute_knot(
+        &self,
+        input: &Value,
+        ticket: Option<&super::knot_completion::Ticket>,
+    ) -> Result<Value> {
         let (result, work, provider, batch_size) = {
             let mut store = self.writer.lock();
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
-            let result = store.ownership_operation(|store| crate::tool_knot(store, input))?;
+            let targets = std::collections::BTreeSet::from([self.route.graph.clone()]);
+            let result = store.ownership_operation(|store| {
+                store.with_writer_scope(
+                    crate::writer_scope::WriteOperation::Knot,
+                    &targets,
+                    |store| match ticket {
+                        Some(ticket) => {
+                            crate::mcp::knot::tool_knot_with_completion(store, input, ticket)
+                        }
+                        None => crate::tool_knot(store, input),
+                    },
+                )
+            })?;
+            let work = if crate::writer_scope::is_scoped_request() {
+                let _ = store.take_deferred_embed();
+                None
+            } else {
+                store.take_deferred_embed()
+            };
             (
                 result,
-                store.take_deferred_embed(),
+                work,
                 store.embedding_provider(),
                 match store.embedding_config().embed_batch_size {
                     0 => 32,
@@ -394,6 +439,9 @@ impl Owner {
 #[path = "graph_owner_read.rs"]
 mod strict_read;
 pub use strict_read::CapturedRead;
+
+#[path = "graph_owner_durable.rs"]
+mod durable;
 
 #[cfg(test)]
 #[path = "graph_owner_tests.rs"]

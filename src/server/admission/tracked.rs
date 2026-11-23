@@ -15,13 +15,67 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
+    admit_tracked_permit(
+        admission.acquire(),
+        kind,
+        deadline,
+        started,
+        stamp,
+        f,
+        registry,
+    )
+    .await
+}
+
+/// Dynamic owners retain an owned permit rather than borrowing the legacy
+/// static semaphore. Everything after acquisition follows the same path.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) async fn admit_tracked_owned<T, F>(
+    admission: std::sync::Arc<tokio::sync::Semaphore>,
+    kind: &'static str,
+    deadline: Option<quipu::time::Deadline>,
+    started: std::time::Instant,
+    stamp: Option<AdmissionStamp>,
+    f: F,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    admit_tracked_permit(
+        admission.acquire_owned(),
+        kind,
+        deadline,
+        started,
+        stamp,
+        f,
+        registry,
+    )
+    .await
+}
+
+pub(super) async fn admit_tracked_permit<T, F, A, P>(
+    acquire: A,
+    kind: &'static str,
+    deadline: Option<quipu::time::Deadline>,
+    started: std::time::Instant,
+    stamp: Option<AdmissionStamp>,
+    f: F,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+    A: std::future::Future<Output = Result<P, tokio::sync::AcquireError>> + Send,
+    P: Send + 'static,
+{
     let lane = match kind {
         "write" => quipu::metrics::inflight::Lane::Write,
         "point-read" => quipu::metrics::inflight::Lane::PointRead,
         _ => quipu::metrics::inflight::Lane::Read,
     };
     let work = registry.start(lane, quipu::metrics::inflight::Phase::Waiting);
-    let acquire = admission.acquire();
     let acquired = if matches!(kind, "point-read" | "episode-read" | "heavy-read") {
         if let Some(deadline) = deadline {
             let remaining = deadline.remaining_millis();

@@ -28,6 +28,7 @@ pub struct Ticket {
     store_id: String,
     epoch: String,
     nonce: String,
+    owner_context: Option<String>,
 }
 
 fn refused(why: &str) -> Error {
@@ -125,69 +126,16 @@ impl Store {
         )
     }
 
-    /// Consume a fresh ID durably, before dispatch. Capacity never evicts a
-    /// prior ID. Lazy protected schema is native-only; ordinary RDF cannot
-    /// read or amend it. Admission inside another transaction is refused.
-    pub fn admit_knot_attempt(&mut self, binding: Binding) -> Result<Ticket> {
-        binding.validate()?;
-        self.ensure_ownership_writable()?;
-        if !self.conn.is_autocommit() {
-            return Err(refused("admission requires its own durable boundary"));
-        }
-        self.conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS knot_attempts (\
-             write_id TEXT PRIMARY KEY, owner TEXT NOT NULL, body TEXT NOT NULL, \
-             store_id TEXT NOT NULL, epoch TEXT NOT NULL, nonce TEXT NOT NULL, \
-             phase TEXT NOT NULL CHECK(phase IN ('admitted','committed','finished','stopped','sealed')), \
-             tx INTEGER, result TEXT);",
-        )?;
-        let ticket = Ticket {
-            binding,
-            store_id: self.store_id()?,
-            epoch: self.log_epoch()?,
-            nonce: super::open::new_urn_uuid("knot attempt")?,
-        };
-        self.conn.execute_batch("SAVEPOINT quipu_knot_admit")?;
-        let outcome = (|| {
-            // Reserve the writer before the capacity and duplicate checks.
-            self.conn
-                .execute("UPDATE knot_attempts SET phase=phase WHERE 0", [])?;
-            let count: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM (SELECT 1 FROM knot_attempts LIMIT ?1)",
-                [MAX_ATTEMPTS],
-                |r| r.get(0),
-            )?;
-            if count >= MAX_ATTEMPTS {
-                return Err(refused("admission capacity reached"));
-            }
-            self.conn.execute(
-                "INSERT INTO knot_attempts(write_id,owner,body,store_id,epoch,nonce,phase) \
-                 VALUES(?1,?2,?3,?4,?5,?6,'admitted')",
-                params![
-                    ticket.binding.write_id,
-                    ticket.binding.owner,
-                    ticket.binding.body_sha256,
-                    ticket.store_id,
-                    ticket.epoch,
-                    ticket.nonce
-                ],
-            )?;
-            Ok(())
-        })();
-        match outcome {
-            Ok(()) => super::release::release(&self.conn, "quipu_knot_admit")?,
-            Err(e) => {
-                super::release::rollback_release(&self.conn, "quipu_knot_admit")?;
-                return Err(e);
-            }
-        }
-        Ok(ticket)
-    }
-
     fn check_knot_ticket(&self, ticket: &Ticket) -> Result<()> {
         ticket.binding.validate()?;
         if ticket.store_id != self.store_id()? || ticket.epoch != self.log_epoch()? {
             return Err(refused("store identity or epoch changed"));
+        }
+        if !self.knot_attempt_context_matches(
+            &ticket.binding.write_id,
+            ticket.owner_context.as_deref(),
+        )? {
+            return Err(refused("owner context changed"));
         }
         Ok(())
     }
@@ -311,8 +259,19 @@ impl Store {
     /// this seal against its commit-time ticket check. This is not a status
     /// side effect and does not grant permission to replay the request.
     pub fn seal_knot_binding(&mut self, binding: &Binding) -> Result<Value> {
+        self.seal_knot_binding_context(binding, None)
+    }
+
+    fn seal_knot_binding_context(
+        &mut self,
+        binding: &Binding,
+        context: Option<&str>,
+    ) -> Result<Value> {
         binding.validate()?;
         self.ensure_ownership_writable()?;
+        if !self.knot_attempt_context_matches(&binding.write_id, context)? {
+            return Err(refused("owner context changed"));
+        }
         if !self.conn.is_autocommit() {
             return Err(refused("seal requires its own durable boundary"));
         }
@@ -330,7 +289,7 @@ impl Store {
         if changed != 1 {
             return Err(refused("attempt absent, committed or terminal"));
         }
-        self.knot_attempt_status(binding)
+        self.knot_attempt_status_context(binding, context)
     }
 
     /// Whether a v2 write ID was ever consumed, regardless of its owner.
@@ -351,11 +310,22 @@ impl Store {
     /// Read exact v2 evidence. Missing/foreign bindings are UNKNOWN, never
     /// negative execution proof. Does not create schema, admit, seal or replay.
     pub fn knot_attempt_status(&self, binding: &Binding) -> Result<Value> {
+        self.knot_attempt_status_context(binding, None)
+    }
+
+    fn knot_attempt_status_context(
+        &self,
+        binding: &Binding,
+        context: Option<&str>,
+    ) -> Result<Value> {
         binding.validate()?;
         let unknown = || json!({"contract":"quipu.knot-completion/v2","write_id":binding.write_id,"state":"unknown"});
         let exists: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='knot_attempts')", [], |r| r.get(0))?;
         if !exists {
+            return Ok(unknown());
+        }
+        if !self.knot_attempt_context_matches(&binding.write_id, context)? {
             return Ok(unknown());
         }
         let row: Option<(String, Option<i64>, Option<String>)> = self.conn.query_row(
@@ -382,3 +352,6 @@ impl Store {
 #[cfg(test)]
 #[path = "knot_completion_tests.rs"]
 mod tests;
+
+#[path = "knot_completion_owner.rs"]
+mod owner_context;

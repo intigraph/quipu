@@ -4,6 +4,9 @@ use axum::{Json, http::HeaderMap};
 use quipu::store::knot_completion::Binding;
 use serde_json::Value;
 
+#[path = "owner_knot.rs"]
+pub(crate) mod owner;
+
 pub(crate) const CONTRACT: &str = "quipu.knot-completion/v2";
 const CONTRACT_HEADER: &str = "x-quipu-completion-contract";
 const ID_HEADER: &str = "x-quipu-write-id";
