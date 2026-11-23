@@ -21,12 +21,31 @@ fn heavy_policy_defaults_inert_and_rejects_unusable_reserves() {
     assert!(config.validate_heavy_reads(1).is_err());
     config.read_processes = 0;
     for operations in [
-        vec!["unknown".into()],
+        vec!["Not A Label".into()],
+        vec![String::new()],
         vec!["owner-rows".into(), "owner-rows".into()],
     ] {
         config.heavy_read_operations = operations;
         assert!(config.validate_heavy_reads(4).is_err());
     }
+    // aegis-z29i / aegis-kao: any well-formed label a deployment names is
+    // accepted; Quipu holds no client's operation vocabulary.
+    config.heavy_read_operations = vec!["owner-rows".into(), "bulk-export".into()];
+    assert!(config.validate_heavy_reads(4).is_ok());
+}
+
+#[test]
+fn declared_label_limit_defaults_and_round_trips() {
+    assert_eq!(ServerConfig::default().declared_label_limit, 256);
+    let project = tempfile::tempdir().unwrap();
+    std::fs::create_dir(project.path().join(".bobbin")).unwrap();
+    std::fs::write(
+        project.path().join(".bobbin/config.toml"),
+        "[quipu.server]\ndeclared_label_limit = 32\n",
+    )
+    .unwrap();
+    let config = super::QuipuConfig::load(project.path());
+    assert_eq!(config.server.declared_label_limit, 32);
 }
 
 #[test]

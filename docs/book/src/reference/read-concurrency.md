@@ -25,14 +25,17 @@ queueing. `read_pool_size = 0` makes every read serialise behind the writer
 
 ### Cooperative heavy reads
 
-`heavy_read_operations = ["owner-rows"]` with `heavy_read_permits = K` caps how
-many requests that declare the `owner-rows` operation (`X-Quipu-Operation`) may
-hold an ordinary reader at once, so a burst of expensive plate reads cannot
-take every reader. It is scheduling, not authorization, and it does not
-classify undeclared queries. `K` must be positive and less than the ordinary
-reader count (after `reserve_point_reads`). With `K = 1`, owner-rows requests
-queue behind each other; raising `K` lets more run but leaves fewer readers for
-everything else, so change it as a measured step.
+`heavy_read_operations = ["<label>", ...]` with `heavy_read_permits = K` caps
+how many requests that declare one of those operations (`X-Quipu-Operation`)
+may hold an ordinary reader at once, so a burst of expensive reads cannot take
+every reader. A client names its own operations; the deployment lists the ones
+it schedules as heavy. Quipu attaches no meaning to any particular label. Each
+must be a well-formed declared label (`[a-z][a-z0-9._-]{0,63}`), listed once.
+It is scheduling, not authorization, and it does not classify undeclared
+queries. `K` must be positive and less than the ordinary reader count (after
+`reserve_point_reads`). With `K = 1`, listed requests queue behind each other;
+raising `K` lets more run but leaves fewer readers for everything else, so
+change it as a measured step.
 
 ## Read processes (opt-in isolation)
 

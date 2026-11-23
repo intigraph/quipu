@@ -33,6 +33,11 @@ pub(super) fn request_id() -> Option<u64> {
     REQUEST_ID.try_with(|id| *id).ok()
 }
 
+/// Install the deployment's generic cap on distinct declared labels (aegis-z29i).
+pub(super) fn init_declared_label_cap(config: &quipu::config::ServerConfig) {
+    request_command::init(config);
+}
+
 /// The same finite, duplicate-refusing declaration used by completion logs.
 /// This is cooperative scheduling metadata, never an authorization result.
 pub(super) fn declared_operation(headers: &axum::http::HeaderMap) -> Option<String> {
