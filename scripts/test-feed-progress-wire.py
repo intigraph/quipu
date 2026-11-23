@@ -88,7 +88,11 @@ def main():
                     request = urllib.request.Request(base + '/update', data=query.encode(),
                         headers={'Content-Type': 'application/sparql-update'})
                     with urllib.request.urlopen(request, timeout=5) as response:
-                        assert response.status in (200, 204)
+                        assert response.status == 200
+                        report = json.load(response)
+                        matches = [g['tx'] for g in report['graphs'] if g['graph'] == graph]
+                        assert len(matches) == 1
+                        return matches[0]
 
                 with urllib.request.urlopen(url, timeout=75) as response:
                     event, first = next_frame(response)
@@ -108,9 +112,17 @@ def main():
                     event, unrelated = next_frame(response)
                     assert event == 'quipu.changes.progress', event
                     assert unrelated['next_tx'] > quiet['next_tx']
-                    insert('urn:watched', 'matching')
-                    event, matching = next_frame(response)
+                    matching_tx = insert('urn:watched', 'matching')
+                    # A previously queued proof may precede this write. It is
+                    # valid only below the authoritative graph receipt, never
+                    # across the matching transaction we have not received.
+                    for _ in range(16):
+                        event, matching = next_frame(response)
+                        if event != 'quipu.changes.progress':
+                            break
+                        assert matching['next_tx'] < matching_tx, 'proof skipped matching transaction'
                     assert event == 'quipu.changes', event
+                    assert matching['next_tx'] == matching_tx
                     assert 'urn:matching' in json.dumps(matching)
                     event, checkpoint = next_frame(response)
                     assert event == 'quipu.changes.progress', event
