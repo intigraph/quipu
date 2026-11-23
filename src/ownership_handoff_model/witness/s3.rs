@@ -105,10 +105,33 @@ pub(crate) struct S3Objects {
 impl S3Objects {
     /// `timeout` bounds every request; a slow witness is UNKNOWN.
     pub(crate) fn new(location: Location, credentials: Credentials, timeout: Duration) -> Self {
-        let agent = ureq::AgentBuilder::new()
-            .timeout(timeout)
-            .redirects(0)
-            .build();
+        Self::with_roots(location, credentials, timeout, None)
+    }
+
+    pub(crate) fn trust_root(der: &[u8]) -> Option<ureq::rustls::RootCertStore> {
+        if der.is_empty() || der.len() > 64 * 1024 {
+            return None;
+        }
+        let mut roots = ureq::rustls::RootCertStore::empty();
+        roots.add(der.to_vec().into()).ok()?;
+        Some(roots)
+    }
+
+    pub(crate) fn with_roots(
+        location: Location,
+        credentials: Credentials,
+        timeout: Duration,
+        roots: Option<ureq::rustls::RootCertStore>,
+    ) -> Self {
+        let mut builder = ureq::AgentBuilder::new().timeout(timeout).redirects(0);
+        if let Some(roots) = roots {
+            builder = builder.tls_config(std::sync::Arc::new(
+                ureq::rustls::ClientConfig::builder()
+                    .with_root_certificates(roots)
+                    .with_no_client_auth(),
+            ));
+        }
+        let agent = builder.build();
         Self {
             location,
             credentials,

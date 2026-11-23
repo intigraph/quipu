@@ -221,6 +221,34 @@ remain necessary before a server can advertise this boundary.
 
 ## Composed reads are part of the first slice
 
+### Explicit enrolled factory source checkpoint
+
+The native `IngestPilot::admit_enrolled` factory accepts one explicit
+`EnrolledPilotConfig` and a lazy credential callback from a trusted initializer.
+The disabled pilot does not inspect that configuration or invoke either callback.
+An enabled pilot first verifies the exact single-graph catalog and legacy fence,
+then validates the named HTTPS witness profile and independently supplied served
+policy. Only then can it resolve credentials and call the existing S1 owner
+constructor. It attaches to an existing witness lineage; it cannot seed genesis,
+enroll a file, install a legacy fence or fall back to an ordinary writable open.
+Witness reads are live and bounded per request. The inventory's profile and store
+identity must match the selected source exactly; mismatches remain UNKNOWN.
+
+The configuration includes a precomputed aggregate memory allocation. Passing
+that allocation is not evidence that the initializer counted every connection.
+Credential file protection, secret retrieval, the aggregate reservation and
+installation of the complete served writer configuration remain the trusted
+initializer's responsibilities. The factory does not discover environment
+variables or choose a bucket, principal or inventory implicitly.
+
+This checkpoint adds no TOML switch, HTTP route or production startup caller.
+It must be compiled and qualified with the existing S1 object-store emulator,
+enrollment rejection controls and owner/router suites before use. Refusal before
+credentials, disabled-mode inertness and policy/profile mismatch controls are
+included as source tests; their execution is a separate bounded build gate.
+The subsequent server initializer must retain exactly one shared prepared owner
+and refuse publication until composed-read and mutation-path coverage qualify.
+
 Ingest previously visible in ROOT must remain visible to its existing consumers
 through explicit, reviewed dataset configuration. This is a consumer migration,
 not permission to make every registered graph part of ROOT by default. Unrelated
@@ -351,3 +379,48 @@ writer wait/hold from total service wait and shared CPU/disk contention. Accepta
 requires near-zero main-store ingest writer time, independent-owner progress,
 unchanged qualified query results and a successful scheduled reaction. Source
 merge, process health or a lower global counter alone does not close the pilot.
+
+## TLS and server adapter source checkpoint
+
+The enrolled factory accepts an optional, explicit DER trust anchor (bounded
+at 64 KiB); absence retains ordinary public roots. It never disables certificate
+or endpoint-name verification. A disposable conditional-object emulator behind
+a real TLS bridge qualifies both untrusted-certificate refusal and successful
+S1 admission with the selected anchor, followed by a routed owner write.
+The fixture generates its own short-lived certificate and key with OpenSSL;
+it uses no deployment credentials or witness service.
+
+The server's `PreparedOwner::initialize` converts the admitted factory router
+into one shared owner admission boundary. OFF invokes neither credential nor
+writer-configuration callbacks. Its source HTTP adapter shares that same Arc
+across `/knot`, `/knot/status` and `/knot/seal`, requiring v2 completion plus
+exact catalog revision, owner generation and policy headers. Missing, duplicate
+or stale pins refuse through the owner boundary; errors never select legacy.
+The mounting initializer must retain the ordinary authentication middleware.
+
+This adapter is intentionally not mounted by production main. There is no
+TOML activation switch, listener, enrollment, migration or automatic catalog
+publication in this checkpoint. Composed-read coverage, complete mutation-path
+fencing and a combined factory-to-HTTP startup qualification still gate the
+production mount. The factory TLS and server HTTP fixtures are distinct
+controls; passing them does not claim a live cross-store read contract.
+
+### Combined startup and strict dataset source checkpoint
+
+The source-only `PreparedDataset` initializer consumes the configured legacy
+writer and admits the enrolled pilot through the same verified TLS/S1 factory.
+Disabled startup returns the original writer without resolving credentials or
+configuration. Enabled startup requires an explicit legacy participant in the
+same catalog and a memory allocation covering both writer/fence/read pools.
+Its HTTP adapter retains the same owner Arc used by strict dataset captures.
+
+The internal read callback accepts only explicit ROOT and/or selected-owner
+participants. It uses `Owner::read_strict` to retain both SQLite snapshots,
+identity/epoch pins and transaction coordinates through evaluation. Unknown,
+duplicate, empty, over-bound or expired selections refuse without evaluation;
+there is no partial answer or writer fallback. Callers still own authentication,
+dataset authorization and evaluator budgets. This is not a new HTTP query route
+or a general cross-file SPARQL evaluator. Per-participant SPARQL projections in
+the combined fixture check visibility in the captured stores; arbitrary joins,
+RDFS/temporal/default-dataset parity remain separate publication prerequisites.
+Production main still does not mount the owner adapter or initialize this path.
