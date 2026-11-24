@@ -7,6 +7,32 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-11-24
+
+### Added
+
+- *(graph)* Expose authenticated owner writer-instance read (#1277)([d5d8c2d](https://github.com/scbrown/quipu/commit/d5d8c2df2260a87e6fc7f7834ff6d938b7d34abe))
+- Emit shared quiet progress proofs for changes streams (#1281)([d90e221](https://github.com/scbrown/quipu/commit/d90e221b2d62892526d5f04ea47e44b433bb2eb7))
+- *(store)* Add default-off graph pilot dispatch and qualify lexical fencing (#1282)([d6077b7](https://github.com/scbrown/quipu/commit/d6077b78c736593881872c826f7f0797c30d26af))
+- *(store)* Add bounded owner admission and durable completion (#1284)([840e0d4](https://github.com/scbrown/quipu/commit/840e0d4c0cffcbdc9e659b9a117d02ee8d5fc205))
+- *(server)* Add default-off enrolled startup and strict read composition (#1285)([a2e3694](https://github.com/scbrown/quipu/commit/a2e369473dabc296a6efc7f14ce93a75cf4915ba))
+
+### Documentation
+
+- Add shared workshop hero to README (#1278)([6cdf6e5](https://github.com/scbrown/quipu/commit/6cdf6e54c41a7972ff50df1d0163448d22209a02))
+
+### Fixed
+
+- *(search)* Preserve same-transaction description comments (#1280)([d51b579](https://github.com/scbrown/quipu/commit/d51b579b50a05fd652f6c78edc812c7d26ac2c60))
+- *(server)* Generic client-declared request labels; no client vocabulary in quipu (#1264)([93847e2](https://github.com/scbrown/quipu/commit/93847e2d8ef30a66e0b29e26ea993da9687f6a51))
+- *(server)* Identify slow writer lock acquisition sites (#1283)([f9480a3](https://github.com/scbrown/quipu/commit/f9480a3a9149856f07b71b18d987a2684486ca15))
+
+
+
+### Testing
+
+- *(store)* Qualify enrolled startup composed evaluator (#1286)([3f9468a](https://github.com/scbrown/quipu/commit/3f9468a1ff389ede541dda54c9dbc60cb3dc8b1c))
+
 ## [0.19.1] - 2026-11-22
 
 ### Added
