@@ -187,6 +187,7 @@ fn entity_context_budgets_distinct_triples_and_filters_before_counting() {
     let e = s.lookup("https://example.org/shared").unwrap().unwrap();
     let p = s.lookup(P).unwrap().unwrap();
     // Reasserting metadata in many transactions does not add RDF triples.
+    s.conn.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO transactions(id,timestamp) SELECT ?1+x,?2 FROM n", rusqlite::params![tx,TS]).unwrap();
     s.conn.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO facts(e,a,v,g,tx,valid_from,op) SELECT e,a,v,g,tx+x,valid_from,op FROM facts,n WHERE e=?1 AND tx=?2", rusqlite::params![e,tx]).unwrap();
     let q = s.intern(Q).unwrap();
     let mut facts = Vec::new();
@@ -216,7 +217,8 @@ fn entity_context_budgets_distinct_triples_and_filters_before_counting() {
         "{refused:?}"
     );
     // Distinct triples really do spend the unchanged context budget.
-    s.conn.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO facts(e,a,v,g,tx,valid_from,op) SELECT e,a+x,v,g,tx,valid_from,op FROM facts,n WHERE e=?1 AND tx=?2", rusqlite::params![e,tx]).unwrap();
+    s.conn.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO terms(iri) SELECT 'https://example.org/context-predicate-' || x FROM n", []).unwrap();
+    s.conn.execute("INSERT INTO facts(e,a,v,g,tx,valid_from,op) SELECT f.e,t.id,f.v,f.g,f.tx,f.valid_from,f.op FROM facts f JOIN terms t ON t.iri LIKE 'https://example.org/context-predicate-%' WHERE f.e=?1 AND f.tx=?2", rusqlite::params![e,tx]).unwrap();
     let mut context = Vec::new();
     assert!(matches!(
         s.append_bounded_entity(&mut context, e, 0, None),
