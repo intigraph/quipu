@@ -53,3 +53,6 @@ docs/demos/expected-results/output.log -text whitespace=cr-at-eol
 # Preserve the release-byte witness demonstration recording.
 docs/demos/release-source-witness/output.log whitespace=cr-at-eol
 docs/probes/pr-demos/namespace-removal/output.log -text whitespace=cr-at-eol
+
+# Preserve the distinct-context terminal recording byte-for-byte.
+docs/demos/distinct-validation-context/output.log -text whitespace=cr-at-eol

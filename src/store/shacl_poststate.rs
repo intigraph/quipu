@@ -341,7 +341,8 @@ impl Store {
              WHERE e=?1 AND g=?2 AND op=1 AND valid_to IS NULL \
              AND (?3 IS NULL OR a=?3) GROUP BY a,v LIMIT ?4",
         )?;
-        let mut rows = stmt.query(rusqlite::params![entity, graph, attribute, remaining + 1])?;
+        let limit = CONTEXT_FACT_BUDGET - facts.len() as u32 + 1;
+        let mut rows = stmt.query(rusqlite::params![entity, graph, attribute, limit])?;
         let mut selected = Vec::new();
         while let Some(row) = rows.next()? {
             if selected.len() >= remaining {
