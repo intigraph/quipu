@@ -7,6 +7,14 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.19.4] - 2026-11-24
+
+### Fixed
+
+- *(shacl)* Budget distinct triples in entity contexts (#1291)([9cbea8e](https://github.com/scbrown/quipu/commit/9cbea8e5512ba644b114f31fd74b369a9f33fb32))
+- Keep diagnostic bounds out of receiver admission (#1292)([886a4ea](https://github.com/scbrown/quipu/commit/886a4ea114ea54ae38cd933647b90bff410b0ee3))
+- Bound fluent value reads by value and graph (#1293)([8c51939](https://github.com/scbrown/quipu/commit/8c519398878c67c366fb1ac101cf2a7cd9e8ece5))
+
 ## [0.19.3] - 2026-11-24
 
 ### Fixed
