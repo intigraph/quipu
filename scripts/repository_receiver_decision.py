@@ -1,5 +1,7 @@
 """Private receiver decisions and bounded, fixed-field admission diagnostics."""
 
+import base64
+import gzip
 import hashlib
 import json
 import os
@@ -8,8 +10,9 @@ import stat
 import sys
 import tempfile
 
-MAX_RESPONSE = 1024 * 1024
-MAX_RECEIPT = 2 * MAX_RESPONSE
+MAX_FULL_DECISION = 1024 * 1024
+MAX_COMPRESSED_RESPONSE = 1024 * 1024
+MAX_RECEIPT = 2 * MAX_FULL_DECISION
 BLOCKERS = {"shacl_nonconforming", "off_vocabulary", "query_off_vocabulary"}
 
 
@@ -65,16 +68,13 @@ def decision(raw, receipt, revision):
     encoded = raw.encode()
     reasons = []
     value = None
-    if len(encoded) > MAX_RESPONSE:
-        reasons.append("import_json_oversized")
-    else:
-        try:
-            value = json.loads(raw, object_pairs_hook=_unique)
-            if not isinstance(value, dict):
-                raise ValueError("not an object")
-        except (ValueError, TypeError, RecursionError):
-            reasons.append("import_json_invalid")
-            value = None
+    try:
+        value = json.loads(raw, object_pairs_hook=_unique)
+        if not isinstance(value, dict):
+            raise ValueError("not an object")
+    except (ValueError, TypeError, RecursionError):
+        reasons.append("import_json_invalid")
+        value = None
     promotion = value.get("promotion", {}) if value else {}
     triples = value.get("triples", {}) if value else {}
     validation = value.get("validation", {}) if value else {}
@@ -91,11 +91,6 @@ def decision(raw, receipt, revision):
             reasons.append("accepted_not_integer")
         elif accepted <= 3:
             reasons.append("accepted_too_small")
-    retained = dict(schema="quipu.receiver-import-decision/v1", step="receiver-import",
-                    source_revision=revision, response_bytes=len(encoded),
-                    response_sha256=hashlib.sha256(encoded).hexdigest(),
-                    reasons=reasons, decision=value)
-    retain(receipt, retained)
     blockers = promotion.get("blockers", [])
     blockers = blockers if isinstance(blockers, list) else []
     off_vocab = validation.get("off_vocabulary")
@@ -108,6 +103,25 @@ def decision(raw, receipt, revision):
         blocking=validation.get("blocking") if type(validation.get("blocking")) is bool else None,
         conforms=validation.get("conforms") if type(validation.get("conforms")) is bool else None,
         off_vocabulary_count=len(off_vocab) if isinstance(off_vocab, list) else None)
+    details, evidence = value, {}
+    if len(encoded) > MAX_FULL_DECISION:
+        # Retention bounds must not become an extra admission predicate. The
+        # trusted child already returned the complete response; evaluate it all.
+        details = dict(outcome=summary["outcome"],
+                       promotion=dict(eligible=summary["eligible"], blockers=summary["blockers"]),
+                       triples=dict(accepted=summary["accepted"], quarantined=summary["quarantined"]),
+                       validation={key: summary[key] for key in
+                                   ("blocking", "conforms", "off_vocabulary_count")}) if value else None
+        compressed = gzip.compress(encoded, mtime=0)
+        complete = len(compressed) <= MAX_COMPRESSED_RESPONSE
+        evidence = dict(decision_compacted=True, response_retained_complete=complete)
+        if complete:
+            evidence["response_gzip_base64"] = base64.b64encode(compressed).decode("ascii")
+    retained = dict(schema="quipu.receiver-import-decision/v1", step="receiver-import",
+                    source_revision=revision, response_bytes=len(encoded),
+                    response_sha256=hashlib.sha256(encoded).hexdigest(),
+                    reasons=reasons, decision=details, **evidence)
+    retain(receipt, retained)
     print("receiver import decision " + json.dumps(summary, sort_keys=True), file=sys.stderr)
     if reasons:
         raise ValueError("repository receiver admission refused: " + ",".join(reasons))

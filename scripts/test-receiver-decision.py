@@ -4,6 +4,10 @@
 from contextlib import redirect_stderr
 import importlib.util
 import io
+import base64
+import gzip
+import hashlib
+import random
 import json
 import os
 from pathlib import Path
@@ -83,15 +87,62 @@ print(Path(sys.argv[1]).read_text() if "promote" not in sys.argv[3:] else "{}")
         self.assertIn('"off_vocabulary_count": 1', output.getvalue())
         self.assertLess(len(output.getvalue().encode()), 2048)
 
-    def test_malformed_duplicate_and_oversized_are_bounded_refusals(self):
+    def test_malformed_and_duplicate_responses_remain_bounded_refusals(self):
         for raw, reason in [("not-json", "import_json_invalid"),
                             ('{"outcome":"staged","outcome":"other"}', "import_json_invalid"),
-                            ("x" * (M.MAX_RESPONSE + 1), "import_json_oversized")]:
+                            ("x" * (M.MAX_FULL_DECISION + 1), "import_json_invalid")]:
             with self.subTest(reason=reason), redirect_stderr(io.StringIO()):
                 self.log.unlink(missing_ok=True)
                 with self.assertRaisesRegex(ValueError, reason): self.import_one(raw)
                 self.assertLess(self.receipt.stat().st_size, M.MAX_RECEIPT)
                 self.assertEqual(len(self.log.read_text().splitlines()), 1)
+
+    def test_large_valid_response_promotes_once_and_retains_complete_compressed_evidence(self):
+        value = dict(self.good, detail="x" * 4_050_729)
+        raw = json.dumps(value)
+        output = io.StringIO()
+        with redirect_stderr(output):
+            self.assertEqual(self.import_one(raw), value)
+        receipt = json.loads(self.receipt.read_text())
+        self.assertTrue(receipt["decision_compacted"])
+        self.assertTrue(receipt["response_retained_complete"])
+        restored = gzip.decompress(base64.b64decode(receipt["response_gzip_base64"]))
+        self.assertEqual(restored, (raw + "\n").encode())
+        self.assertEqual(receipt["response_sha256"], hashlib.sha256(restored).hexdigest())
+        self.assertLess(self.receipt.stat().st_size, M.MAX_RECEIPT)
+        self.assertLess(len(output.getvalue().encode()), 2048)
+        commands = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertEqual([row[:2] for row in commands], [["import", "stage"], ["import", "promote"]])
+
+    def test_incompressible_valid_response_does_not_change_admission(self):
+        noise = random.Random(0).randbytes(2 * M.MAX_COMPRESSED_RESPONSE)
+        value = dict(self.good, detail=base64.b64encode(noise).decode("ascii"))
+        raw = json.dumps(value)
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(self.import_one(raw), value)
+        receipt = json.loads(self.receipt.read_text())
+        self.assertTrue(receipt["decision_compacted"])
+        self.assertFalse(receipt["response_retained_complete"])
+        self.assertNotIn("response_gzip_base64", receipt)
+        self.assertEqual(receipt["response_bytes"], len((raw + "\n").encode()))
+        self.assertEqual(receipt["response_sha256"], hashlib.sha256((raw + "\n").encode()).hexdigest())
+        self.assertEqual(receipt["decision"]["triples"]["accepted"], 4)
+        self.assertLess(self.receipt.stat().st_size, M.MAX_RECEIPT)
+        self.assertEqual(len(self.log.read_text().splitlines()), 2)
+
+    def test_large_rejections_keep_original_reasons_and_never_promote(self):
+        for change, reason in [(dict(outcome="quarantined"), "outcome_not_staged"),
+                               (dict(promotion=dict(eligible=False)), "promotion_ineligible"),
+                               (dict(triples=dict(accepted=3)), "accepted_too_small")]:
+            self.log.unlink(missing_ok=True)
+            value = dict(self.good, detail="x" * 4_050_729, **change)
+            with redirect_stderr(io.StringIO()), self.assertRaisesRegex(ValueError, reason):
+                self.import_one(json.dumps(value))
+            receipt = json.loads(self.receipt.read_text())
+            self.assertIn(reason, receipt["reasons"])
+            self.assertTrue(receipt["response_retained_complete"])
+            self.assertEqual(len(self.log.read_text().splitlines()), 1)
+            self.assertLess(self.receipt.stat().st_size, M.MAX_RECEIPT)
 
     def test_receipt_survives_build_cleanup_and_refuses_foreign_custody(self):
         with tempfile.TemporaryDirectory(dir=self.root) as build:

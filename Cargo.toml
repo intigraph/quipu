@@ -30,7 +30,11 @@ exclude = [
     "GEMINI.md",
     "CHANGELOG.md",
     "release-plz.toml",
-    "scripts/",
+    "scripts/*",
+    # These entrypoints ship at the release tag and must trigger release-plz.
+    "!scripts/build-repository-share.py",
+    "!scripts/repository_receiver_decision.py",
+    "!scripts/publish-repository-share.sh",
     "wasm/",
     # MCP Registry packaging: it ships an image, not the crate (aegis-gys8sx).
     "server.json",
