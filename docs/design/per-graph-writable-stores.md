@@ -327,6 +327,23 @@ writers and recover; do not reset ownership, recycle epochs or conceal a split.
 
 ## Phased plan and Seeds acceptance
 
+### Explicit graph-set planning interface
+
+`graph_catalog::GraphSetCatalog` validates a bounded deployment manifest in
+which several exact logical graph IRIs share one physical-owner pin. Its
+`plan_batch` rejects a mixed-file batch before selecting a writer; every member
+must carry the same current catalog, owner generation and policy pins.
+`plan_read` groups an explicitly selected dataset by physical owner so a future
+executor captures one snapshot per file, without adding unselected members.
+Physical connection and mailbox reservations count owners, while logical
+membership has a separate bound. Separate sets cannot alias the same file or
+lineage. Existing single-graph `Catalog` and router admission are unchanged.
+
+This is source planning only. It does not authorize a dataset, execute an atomic
+batch, mount a store, publish an HTTP route or migrate a client. Graph-set owner
+execution and composed-reader integration still need their own qualification;
+the existing application atomicity and production rollout gates remain open.
+
 The first implementation slice is the single-graph ingest pilot. It must pass
 the local-owner and composed-reader gates below, but does not implement or
 pretend to provide participant commit. The Seeds application pilot remains
