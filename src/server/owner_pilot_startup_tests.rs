@@ -399,3 +399,99 @@ fn combined_startup_refuses_untrusted_witness_and_returns_no_http_routes() {
         .is_err()
     );
 }
+
+#[test]
+fn enrolled_startup_composes_authorized_root_owner_join_with_one_memory_budget() {
+    use quipu::read_authorization::{
+        ComposedReadAdmission, ComposedReadReservation, OwnerReadPolicy, ReadGrant, ReadIdentity,
+        ReadOperation,
+    };
+    let (_dir, legacy, catalog, mut config, _emulator, _tls) = fixture();
+    let admission = ComposedReadAdmission::new(
+        catalog.clone(),
+        1024,
+        3,
+        1,
+        ComposedReadReservation {
+            runtime_bytes: 16 << 20,
+            view_bytes: 16 << 20,
+            query_bytes: 16 << 20,
+            max_response_bytes: 1 << 20,
+        },
+    )
+    .unwrap();
+    config.allocation = admission.allocation();
+    let Startup::Enabled(dataset) = PreparedDataset::initialize(
+        &IngestPilot {
+            enabled: true,
+            graph: Some(GRAPH.into()),
+        },
+        catalog,
+        legacy,
+        &config,
+        || {
+            Ok((
+                "AKIAIOSFODNN7EXAMPLE".into(),
+                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
+            ))
+        },
+        |_| Ok(()),
+    )
+    .unwrap() else {
+        panic!("enabled startup disappeared")
+    };
+    let mut policy = OwnerReadPolicy::open(":memory:", "urn:principal:owner").unwrap();
+    let grant = ReadGrant {
+        version: 1,
+        id: "urn:grant:startup".into(),
+        principal: "urn:test:startup".into(),
+        graphs: [quipu::schema::ROOT_GRAPH_IRI.into(), GRAPH.into()].into(),
+        operations: [ReadOperation::Query].into(),
+        valid_from: 1,
+        valid_until: 100,
+        max_offline_seconds: 30,
+        issuer: "urn:principal:owner".into(),
+        revision: 1,
+        revoked: false,
+    };
+    policy
+        .apply(&grant, "private startup composition fixture")
+        .unwrap();
+    let who = ReadIdentity::from_verified_request(&identity("named_bearer"), 100).unwrap();
+    let policy = policy.snapshot().unwrap();
+    // This owner write happens after all read pools were opened. A fresh strict
+    // capture must include it and resolve IRIs through the composed dictionary.
+    let input = json!({"graph":GRAPH,"turtle":"<urn:shared> <urn:owner> \"owner\"@en .", "source":"startup-join"});
+    // Reuse the admitted HTTP write path rather than opening a second writer.
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let response = runtime
+        .block_on(crate::auth::run_identified(
+            Some(identity("named_bearer")),
+            dataset.routes().oneshot(request("/knot", &input)),
+        ))
+        .unwrap();
+    assert!(response.status().is_success());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let permit = admission.try_reserve().unwrap();
+    let output = dataset.read(&[quipu::schema::ROOT_GRAPH_IRI, GRAPH], deadline, |reads| {
+        let view = policy.authorize(&who, ReadOperation::Query, None, 2)?
+            .open_composed_cut(reads, permit, 2, deadline)?;
+        assert!(admission.try_reserve().is_err(), "same scratch reservation must stay held");
+        let query = format!("SELECT ?s ?root ?owner FROM <{}> FROM NAMED <{GRAPH}> WHERE {{ ?s <urn:root> ?root . GRAPH <{GRAPH}> {{ ?s <urn:owner> ?owner }} }}", quipu::schema::ROOT_GRAPH_IRI);
+        let output = view.query(&query, false, 2)?;
+        let value: Value = serde_json::from_slice(output.as_bytes()).unwrap();
+        let rows = value["results"]["bindings"].as_array().unwrap();
+        assert_eq!(rows.len(), 1, "neither participant alone can answer this join");
+        assert_eq!(rows[0]["s"]["value"], "urn:shared");
+        assert_eq!(rows[0]["root"]["value"], "root");
+        assert_eq!(rows[0]["owner"]["value"], "owner");
+        assert_eq!(rows[0]["owner"]["xml:lang"], "en");
+        assert!(view.query("ASK { GRAPH <urn:excluded> { ?s ?p ?o } }", false, 2).is_err());
+        view.recheck(&policy, &who, reads, 2)?;
+        Ok(output)
+    }).unwrap();
+    assert!(!output.as_bytes().is_empty());
+    // Returning the buffered output releases scratch, but retains its own query
+    // lease; the caller must not extract unaccounted owned response copies.
+    assert!(admission.try_reserve().is_ok());
+}
