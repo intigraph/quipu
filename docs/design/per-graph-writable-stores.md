@@ -339,10 +339,26 @@ Physical connection and mailbox reservations count owners, while logical
 membership has a separate bound. Separate sets cannot alias the same file or
 lineage. Existing single-graph `Catalog` and router admission are unchanged.
 
-This is source planning only. It does not authorize a dataset, execute an atomic
-batch, mount a store, publish an HTTP route or migrate a client. Graph-set owner
-execution and composed-reader integration still need their own qualification;
-the existing application atomicity and production rollout gates remain open.
+The native `GraphSetOwner` consumes an already configured/admitted writer and
+executes already-planned file-local deltas through the existing guarded atomic
+batch pipeline. All member pins and the batch's store/epoch must match before
+mailbox admission. One physical ownership permit covers the complete commit;
+local transaction heads return only after its outer savepoint releases. Batch
+order is retained, including application-defined provenance ordering. This
+native boundary provides no durable retry protocol, HTTP route, cross-file
+validation or client migration. Automatic embedding and reactive observers
+refuse rather than execute per-member hooks before outer batch completion.
+Their batch-aware completion protocol still needs qualification.
+
+`GraphSetDataset` captures one strict snapshot per selected physical owner,
+then represents each explicitly selected logical member at that file's captured
+head. Legacy ROOT and any selected reference graphs are explicit members too;
+unselected graphs never enter the view. `ComposedReadAdmission::for_graph_sets`
+binds those logical selections to the same physical pins and aggregate resource
+plan. Normal dataset grants and the existing authorized RDF query view still
+apply; physical membership confers no read authority. Ordinary composed-read
+admission does not accept these additional aliases. HTTP planning, application
+integration and production rollout remain separate.
 
 The first implementation slice is the single-graph ingest pilot. It must pass
 the local-owner and composed-reader gates below, but does not implement or

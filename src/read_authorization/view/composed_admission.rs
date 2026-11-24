@@ -24,6 +24,7 @@ pub struct ComposedReadReservation {
 
 struct Shared {
     catalog: Arc<Catalog>,
+    graph_sets: Option<Arc<crate::graph_catalog::GraphSetCatalog>>,
     allocation: MemoryAllocation,
     limit: usize,
     active: AtomicUsize,
@@ -144,6 +145,7 @@ impl ComposedReadAdmission {
         }
         Ok(Self(Arc::new(Shared {
             catalog,
+            graph_sets: None,
             allocation,
             limit: scratch_limit,
             active: AtomicUsize::new(0),
@@ -151,6 +153,28 @@ impl ComposedReadAdmission {
             heap_capacity,
             heap_reserved: AtomicU64::new(0),
         })))
+    }
+
+    /// Same service-sized reservation for explicit graph-set membership.
+    /// This manifest normalizes physical pins; it is never a dataset grant.
+    pub fn for_graph_sets(
+        catalog: Arc<crate::graph_catalog::GraphSetCatalog>,
+        mib: u64,
+        legacy_connections: u64,
+        scratch_limit: usize,
+        reservation: ComposedReadReservation,
+    ) -> Result<Self> {
+        let mut admission = Self::new(
+            catalog.physical_pin(),
+            mib,
+            legacy_connections,
+            scratch_limit,
+            reservation,
+        )?;
+        Arc::get_mut(&mut admission.0)
+            .ok_or_else(denied)?
+            .graph_sets = Some(catalog);
+        Ok(admission)
     }
 
     /// The SAME allocation applies to each native owner, legacy and scratch
@@ -197,6 +221,10 @@ impl ComposedReadPermit {
     }
 
     pub(super) fn matches(&self, read: &crate::store::graph_owner::CapturedRead<'_>) -> bool {
+        if let Some(graph_sets) = &self.shared.graph_sets {
+            return self.shared.catalog.revision() == read.catalog_revision
+                && graph_sets.logical_route(&read.route.graph).as_ref() == Some(read.route);
+        }
         self.shared.catalog.revision() == read.catalog_revision
             && self
                 .shared
