@@ -7,6 +7,12 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.19.3] - 2026-11-24
+
+### Fixed
+
+- *(server)* Gate Unix pilot transport on Unix (#1289)([6c02349](https://github.com/scbrown/quipu/commit/6c023491d26f5f8d002b324e6108e728f9e7aa0f))
+
 ## [0.19.2] - 2026-11-24
 
 ### Added
