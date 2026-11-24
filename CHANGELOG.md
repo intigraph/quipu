@@ -7,6 +7,10 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+### Added
+
+- Atomic graph-set owners and strict composed reads ([db843e1](https://github.com/intigraph/quipu/commit/db843e1ce3972e4564d595b1137941cac9db5ce6)).
+
 ## [0.19.4] - 2026-11-24
 
 ### Fixed
