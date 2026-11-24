@@ -9,6 +9,12 @@ are generated from the versioned release records.
 
 ## [0.19.4] - 2026-11-24
 
+### Added
+
+- *(catalog)* Plan bounded same-file graph sets (#1296)([0f270f4](https://github.com/scbrown/quipu/commit/0f270f4ccd15b1a9a57facf9353cac4c4ceaf912))
+
+
+
 ### Fixed
 
 - *(shacl)* Budget distinct triples in entity contexts (#1291)([9cbea8e](https://github.com/scbrown/quipu/commit/9cbea8e5512ba644b114f31fd74b369a9f33fb32))
