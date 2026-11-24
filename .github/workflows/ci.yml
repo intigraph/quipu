@@ -1124,6 +1124,7 @@ jobs:
           python3 scripts/test-repository-share-query.py
           python3 scripts/test-repository-knowledge.py
           python3 scripts/test-repository-share-publication.py
+          python3 scripts/test-receiver-decision.py
 
   nightly-wheels:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
