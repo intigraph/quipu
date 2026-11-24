@@ -172,3 +172,64 @@ fn incoming_lookup_bounds_work_for_unrelated_attribute_cohort_and_keeps_cap() {
         .unwrap();
     assert_eq!(almost.len(), 100_000);
 }
+
+#[test]
+fn entity_context_budgets_distinct_triples_and_filters_before_counting() {
+    let mut s = Store::open_in_memory().unwrap();
+    let tx = write(
+        &mut s,
+        "https://example.org/shared",
+        P,
+        Value::Str("metadata".into()),
+        0,
+        Op::Assert,
+    );
+    let e = s.lookup("https://example.org/shared").unwrap().unwrap();
+    let p = s.lookup(P).unwrap().unwrap();
+    // Reasserting metadata in many transactions does not add RDF triples.
+    s.conn.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO transactions(id,timestamp) SELECT ?1+x,?2 FROM n", rusqlite::params![tx,TS]).unwrap();
+    s.conn.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO facts(e,a,v,g,tx,valid_from,op) SELECT e,a,v,g,tx+x,valid_from,op FROM facts,n WHERE e=?1 AND tx=?2", rusqlite::params![e,tx]).unwrap();
+    let q = s.intern(Q).unwrap();
+    let mut facts = Vec::new();
+    s.append_bounded_entity(&mut facts, e, 0, Some(q)).unwrap();
+    assert!(facts.is_empty(), "unselected rows do not spend the budget");
+    s.append_bounded_entity(&mut facts, e, 0, Some(p)).unwrap();
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].tx, tx, "retain one real assertion's provenance");
+    // Exercise the real write lane: repeated rows must not brick an update,
+    // while two distinct property values must still fail maxCount.
+    s.load_shapes("duplicate-context", &format!("@prefix sh: <http://www.w3.org/ns/shacl#> . <https://example.org/Shape> a sh:NodeShape ; sh:targetNode <https://example.org/shared> ; sh:property [ sh:path <{P}> ; sh:maxCount 1 ] ."), TS).unwrap();
+    let update = |s: &mut Store, turtle: String| {
+        crate::tool_knot(s, &serde_json::json!({"turtle":turtle,"timestamp":TS}))
+    };
+    update(
+        &mut s,
+        format!("<https://example.org/shared> <{Q}> \"new\" ."),
+    )
+    .expect("a tiny update survives duplicate assertion history");
+    let refused = update(
+        &mut s,
+        format!("<https://example.org/shared> <{P}> \"different\" ."),
+    );
+    assert!(
+        matches!(refused, Err(Error::ValidationFailed { .. }))
+            || refused.as_ref().is_ok_and(|v| v["conforms"] == false),
+        "{refused:?}"
+    );
+    // Distinct triples really do spend the unchanged context budget.
+    s.conn.execute("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO terms(iri) SELECT 'https://example.org/context-predicate-' || x FROM n", []).unwrap();
+    s.conn.execute("INSERT INTO facts(e,a,v,g,tx,valid_from,op) SELECT f.e,t.id,f.v,f.g,f.tx,f.valid_from,f.op FROM facts f JOIN terms t ON t.iri LIKE 'https://example.org/context-predicate-%' WHERE f.e=?1 AND f.tx=?2", rusqlite::params![e,tx]).unwrap();
+    let mut context = Vec::new();
+    assert!(matches!(
+        s.append_bounded_entity(&mut context, e, 0, None),
+        Err(Error::CannotVerify(_))
+    ));
+    assert!(
+        context.is_empty(),
+        "a refused read does not leave partial context"
+    );
+    // Predicate filtering still permits a small relevant context in that entity.
+    s.append_bounded_entity(&mut context, e, 0, Some(p))
+        .unwrap();
+    assert_eq!(context.len(), 1);
+}

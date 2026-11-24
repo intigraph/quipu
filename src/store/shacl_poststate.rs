@@ -327,25 +327,40 @@ impl Store {
         graph: i64,
         attribute: Option<i64>,
     ) -> Result<()> {
-        // Bound the indexed per-entity read BEFORE materializing facts.
-        let count: u32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM (SELECT 1 FROM facts WHERE e=?1 AND g=?2 \
-             AND op=1 AND valid_to IS NULL LIMIT ?3)",
-            rusqlite::params![entity, graph, CONTEXT_FACT_BUDGET + 1],
-            |row| row.get(0),
-        )?;
-        if count > CONTEXT_FACT_BUDGET
-            || facts.len() + count as usize > CONTEXT_FACT_BUDGET as usize
-        {
+        // Validation consumes RDF triples, not repeated assertion rows. Bound
+        // the selected predicate and DISTINCT triples before materializing them.
+        // SQLite's single MIN aggregate selects the matching row's provenance.
+        if facts.len() > CONTEXT_FACT_BUDGET as usize {
             return Err(Error::CannotVerify(
                 "post-state SHACL context exceeds 100000 facts".into(),
             ));
         }
-        facts.extend(
-            self.entity_facts_in_graph(entity, graph)?
-                .into_iter()
-                .filter(|fact| attribute.is_none_or(|attribute| fact.attribute == attribute)),
-        );
+        let remaining = CONTEXT_FACT_BUDGET as usize - facts.len();
+        let mut stmt = self.conn.prepare(
+            "SELECT e,a,v,MIN(tx),valid_from,valid_to FROM facts \
+             WHERE e=?1 AND g=?2 AND op=1 AND valid_to IS NULL \
+             AND (?3 IS NULL OR a=?3) GROUP BY a,v LIMIT ?4",
+        )?;
+        let limit = CONTEXT_FACT_BUDGET - facts.len() as u32 + 1;
+        let mut rows = stmt.query(rusqlite::params![entity, graph, attribute, limit])?;
+        let mut selected = Vec::new();
+        while let Some(row) = rows.next()? {
+            if selected.len() >= remaining {
+                return Err(Error::CannotVerify(
+                    "post-state SHACL context exceeds 100000 facts".into(),
+                ));
+            }
+            selected.push(crate::Fact {
+                entity: row.get(0)?,
+                attribute: row.get(1)?,
+                value: crate::Value::from_bytes(&row.get::<_, Vec<u8>>(2)?)?,
+                tx: row.get(3)?,
+                valid_from: row.get(4)?,
+                valid_to: row.get(5)?,
+                op: crate::Op::Assert,
+            });
+        }
+        facts.extend(selected);
         Ok(())
     }
 }

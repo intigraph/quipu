@@ -1,0 +1,6 @@
+Script started on 2026-11-24 09:00:17-05:00 [COMMAND="python3 docs/demos/distinct-validation-context/run.py" <not executed on terminal>]
+duplicate assertion fixture: old capped row count 100001 candidate distinct triples 1 predicate-only absent context 0
+distinct oversized fixture: candidate returns cap+1 sentinel 100001; predicate-filtered metadata context remains 1
+PASS: actual source SQL fixture; this demonstration does not execute the Rust write lane
+
+Script done on 2026-11-24 09:00:17-05:00 [COMMAND_EXIT_CODE="0"]
