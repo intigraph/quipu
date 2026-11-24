@@ -9,11 +9,25 @@ are generated from the versioned release records.
 
 ## [0.19.4] - 2026-11-24
 
+### Added
+
+- *(catalog)* Plan bounded same-file graph sets (#1296)([0f270f4](https://github.com/scbrown/quipu/commit/0f270f4ccd15b1a9a57facf9353cac4c4ceaf912))
+
+
+
 ### Fixed
 
 - *(shacl)* Budget distinct triples in entity contexts (#1291)([9cbea8e](https://github.com/scbrown/quipu/commit/9cbea8e5512ba644b114f31fd74b369a9f33fb32))
 - Keep diagnostic bounds out of receiver admission (#1292)([886a4ea](https://github.com/scbrown/quipu/commit/886a4ea114ea54ae38cd933647b90bff410b0ee3))
 - Bound fluent value reads by value and graph (#1293)([8c51939](https://github.com/scbrown/quipu/commit/8c519398878c67c366fb1ac101cf2a7cd9e8ece5))
+
+### Miscellaneous
+
+- Release v0.19.4 (#1294)([86584fb](https://github.com/scbrown/quipu/commit/86584fbd6898de04f5d6ac6d2143e8e42d9b46e7))
+
+### Testing
+
+- *(store)* Exercise enrolled query parity in ownership CI (#1295)([f09092d](https://github.com/scbrown/quipu/commit/f09092d57ecf073c0933b34d4b263465053e3dd2))
 
 ## [0.19.3] - 2026-11-24
 
