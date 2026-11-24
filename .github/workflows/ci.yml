@@ -142,6 +142,20 @@ jobs:
           key: writer-ownership
       - name: SQLite transactions, process contention, alias and lifetime controls
         run: cargo test --locked --no-default-features --test writer_lock
+      - name: Prepare pinned runtime for enrolled owner controls
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/pinned-ci-onnx
+        with:
+          mirror-base: ${{ vars.CI_ARTIFACT_MIRROR_URL }}
+      - name: Enrolled TLS startup, HTTP and composed query acceptance
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --bin quipu-server knot_durable::owner -- --test-threads=2 --color never | tee "$RUNNER_TEMP/enrolled-owner-tests.txt"
+          grep -Fx 'test knot_durable::owner::dataset::tests::query_acceptance::enrolled_query_bags_paths_and_rdf_terms_match_single_file_baseline ... ok' "$RUNNER_TEMP/enrolled-owner-tests.txt"
       - name: Compile the server on Windows without Unix pilot modules
         if: runner.os == 'Windows'
         run: cargo check --locked --no-default-features --features shacl,onnx,server --bin quipu-server
