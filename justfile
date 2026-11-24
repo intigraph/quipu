@@ -394,6 +394,7 @@ contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":
     set -euo pipefail
     case "{{cmd}}" in
         test) scripts/check-contributor-knowledge.sh ;;
+        receiver-test) python3 scripts/test-receiver-decision.py; python3 scripts/test-repository-share-publication.py ;;
         generate) node scripts/build-contributor-knowledge.mjs . "{{output}}" ;;
         verify) node scripts/verify-contributor-knowledge.mjs "${QUIPU_BIN:?}" "{{output}}" ;;
         pack) scripts/build-repository-share.sh "${QUIPU_BIN:?}" "$(command -v bobbin)" "$PWD" "{{output}}" "$(git rev-parse HEAD)" ;;

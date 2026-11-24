@@ -1,5 +1,16 @@
 # Repository pendant source
 
+Receiver import decisions are retained privately before admission is evaluated.
+The builder emits fixed refusal reasons and an allowlisted field summary;
+arbitrary validation messages and entity strings stay out of the journal.
+`QUIPU_SHARE_IMPORT_RECEIPT` selects a private receipt outside disposable build
+directories. Managed producers must point it at persistent private state.
+Without that override, publishers retain a sibling of the requested output,
+never a release asset. Valid decisions are bounded to 1 MiB; malformed or
+oversized responses retain only bounded identity/reason metadata. Admission
+still requires `staged`, eligible true and an integer accepted count above three.
+Use `just contributor receiver-test` for isolated child-process controls.
+
 The repository-owned release job exports code and document **pointers**, plus
 reviewed summaries of ideas, interfaces, decisions, freshness and starting points.
 It does not export source chunk text or line spans. Source witnesses bind each

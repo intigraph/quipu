@@ -21,6 +21,8 @@ test -z "$(git -C "$SOURCE" status --porcelain --untracked-files=no)"
 
 PRIVATE=$(mktemp -d "$(dirname "$OUTPUT")/.quipu-publisher.XXXXXX")
 trap 'rm -rf "$PRIVATE"' EXIT
+# Keep private decision evidence outside the temporary packaging subtree.
+export QUIPU_SHARE_IMPORT_RECEIPT=${QUIPU_SHARE_IMPORT_RECEIPT:-"${OUTPUT}.receiver-import-decision.json"}
 # Keep the deployed --prepare interface, but use the qualified builder and
 # flat, allowlisted package contract rather than the pre-recipe shell builder.
 python3 "$SOURCE/scripts/build-repository-share.py" \

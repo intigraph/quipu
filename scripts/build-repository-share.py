@@ -720,15 +720,20 @@ def build(revision, source, tooling, binary, bobbin, output):
             receiver,
         ]
     )
-    imported = json.loads(run([binary, "import", stage, "--db", receiver]))
-    if (
-        imported.get("outcome") != "staged"
-        or imported.get("promotion", {}).get("eligible") is not True
-        or type(imported.get("triples", {}).get("accepted")) is not int
-        or imported["triples"]["accepted"] <= 3
-    ):
-        raise ValueError("repository receiver did not admit a non-stub corpus")
-    run([binary, "import", "promote", imported["share_id"], "--db", receiver])
+    decision_spec = importlib.util.spec_from_file_location(
+        "repository_receiver_decision", source / "scripts/repository_receiver_decision.py"
+    )
+    decision_module = importlib.util.module_from_spec(decision_spec)
+    previous_bytecode = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        decision_spec.loader.exec_module(decision_module)
+    finally:
+        sys.dont_write_bytecode = previous_bytecode
+    receipt = Path(os.environ.get(
+        "QUIPU_SHARE_IMPORT_RECEIPT", str(output.with_name(output.name + ".receiver-import-decision.json"))
+    ))
+    imported = decision_module.import_receiver(run, binary, stage, receiver, receipt, revision)
     verify_agent_references(binary, receiver, (control, *references))
     run(
         [
