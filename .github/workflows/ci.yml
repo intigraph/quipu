@@ -142,6 +142,9 @@ jobs:
           key: writer-ownership
       - name: SQLite transactions, process contention, alias and lifetime controls
         run: cargo test --locked --no-default-features --test writer_lock
+      - name: Compile the server on Windows without Unix pilot modules
+        if: runner.os == 'Windows'
+        run: cargo check --locked --no-default-features --features shacl,onnx,server --bin quipu-server
 
   bundled-runtime:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
