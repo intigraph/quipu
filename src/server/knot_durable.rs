@@ -4,6 +4,8 @@ use axum::{Json, http::HeaderMap};
 use quipu::store::knot_completion::Binding;
 use serde_json::Value;
 
+// The pilot router uses Unix owner leases, matching store::graph_router.
+#[cfg(unix)]
 #[path = "owner_knot.rs"]
 pub(crate) mod owner;
 
