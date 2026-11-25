@@ -66,9 +66,10 @@ fn enrolled_query_bags_paths_and_rdf_terms_match_single_file_baseline() {
         .unwrap()
         .block_on(crate::auth::run_identified(
             Some(identity("named_bearer")),
-            dataset
-                .routes()
-                .oneshot(request("/knot", &json!({"graph":GRAPH, "turtle":OWNER}))),
+            dataset.routes().oneshot(request(
+                "/owner/knot",
+                &json!({"graph":GRAPH, "turtle":OWNER}),
+            )),
         ))
         .unwrap();
     assert!(response.status().is_success());

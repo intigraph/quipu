@@ -236,14 +236,16 @@ async fn http_adapter_routes_owner_receipts_and_refuses_missing_pins() {
     };
     let response = crate::auth::run_identified(
         Some(identity("named_bearer")),
-        app.clone().oneshot(request("/knot", input.clone(), false)),
+        app.clone()
+            .oneshot(request("/owner/knot", input.clone(), false)),
     )
     .await
     .unwrap();
     assert!(!response.status().is_success());
     let response = crate::auth::run_identified(
         Some(identity("named_bearer")),
-        app.clone().oneshot(request("/knot", input.clone(), true)),
+        app.clone()
+            .oneshot(request("/owner/knot", input.clone(), true)),
     )
     .await
     .unwrap();
@@ -251,7 +253,7 @@ async fn http_adapter_routes_owner_receipts_and_refuses_missing_pins() {
     let response = crate::auth::run_identified(
         Some(identity("named_bearer")),
         app.oneshot(request(
-            "/knot/status",
+            "/owner/knot/status",
             json!({"write_id":ID,"request":input}),
             true,
         )),

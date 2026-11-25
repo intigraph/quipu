@@ -529,8 +529,9 @@ impl AppError {
     }
 
     /// The underlying error's message, for a response that must report a
-    /// failure AFTER an earlier step committed (aegis-fej9 deferred load).
-    #[cfg(feature = "owl")]
+    /// failure AFTER an earlier step committed (aegis-fej9 deferred load), or
+    /// for a startup refusal printed before exit (aegis-4qv ingest pilot).
+    #[cfg(any(feature = "owl", feature = "ownership-witness-s3"))]
     pub(crate) fn message(&self) -> String {
         self.0.to_string()
     }

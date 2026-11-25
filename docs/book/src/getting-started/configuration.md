@@ -121,6 +121,7 @@ stops being read.
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |
+| `ingest_pilot` | unset | One enrolled per-graph owner served at `/owner/knot` (`[quipu.ingest_pilot]`); unset is ordinary startup. Requires an `ownership-witness-s3` build; see below |
 
 ## Zero-downtime bearer rotation
 
@@ -186,6 +187,61 @@ quipu db attach --list --db my.db
 ```
 
 `quipu-server` prints the same list to stderr at startup.
+
+## Ingest pilot (per-graph owner)
+
+`[quipu.ingest_pilot]` starts one already-enrolled per-graph owner beside the
+ordinary writer. Leave it unset and startup is unchanged: no file is read and
+no credential is resolved. It needs a server built with the
+`ownership-witness-s3` feature; any other build prints a warning when the table
+is enabled, and does not start the pilot.
+
+```toml
+[quipu.ingest_pilot]
+enabled = true
+graph = "https://example.org/graph/code"   # the catalog's only route
+root = "/var/lib/quipu/owners"             # directory holding the owner files
+inventory = "/var/lib/quipu/owners/inventory"
+profile = "pilot"
+endpoint = "https://witness.example.org"
+bucket = "witness"
+region = "us-east-1"
+prefix = "lineage"
+timeout_secs = 5                           # 1..=30
+# witness_ca_file = "/etc/quipu/witness-ca.der"   # optional DER trust anchor
+installed_policy = "policy-v1"             # must equal the route's policy
+credentials_file = "/etc/quipu/witness.json"      # owner-only (0600)
+catalog_file = "/etc/quipu/catalog.json"
+memory_mib = 512
+```
+
+Every key except `witness_ca_file` is required, and an unknown key refuses the
+config, so a typo cannot drop a pin. Secrets are never TOML values:
+`credentials_file` is a JSON object `{"access_key_id": ..., "secret_access_key": ...}`
+that must not be readable by group or other.
+
+`catalog_file` is JSON that no group or other user can write:
+
+```json
+{"version": 1, "revision": 7, "legacy_store_id": "<legacy store id>",
+ "budget": {"max_owners": 1, "queued_per_owner": 1, "readers_per_owner": 1,
+            "max_queued": 1, "max_connections": 3},
+ "routes": [{"graph": "https://example.org/graph/code", "file_id": "ingest",
+             "store_id": "<owner store id>", "log_epoch": "<epoch>",
+             "generation": 4, "policy": "policy-v1"}],
+ "legacy_participant": {"graph": "urn:quipu:graph:root", "file_id": "legacy",
+                        "store_id": "<legacy store id>", "log_epoch": "<epoch>",
+                        "generation": 1, "policy": "legacy-policy"}}
+```
+
+With `enabled = true` the server validates the catalog, then verifies the
+legacy writer's routed-graph fence, then reads the credentials and runs startup
+admission against the live witness. **Any refusal exits the server.** It never
+falls back to serving that graph through the ordinary writer. Once admitted, the
+owner serves `POST /owner/knot`, `/owner/knot/status` and `/owner/knot/seal`
+behind the ordinary authentication. Each request carries the v2 completion
+contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
+`x-quipu-owner-policy` pins. Legacy `/knot` is unchanged.
 
 ## Choosing a vector backend
 

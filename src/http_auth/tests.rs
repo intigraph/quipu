@@ -367,6 +367,11 @@ fn routes_in_server_source() -> Vec<String> {
             "server/knot_durable.rs",
             include_str!("../server/knot_durable.rs"),
         ),
+        // aegis-4qv: the ingest pilot's owner routes, merged by knot_durable.
+        (
+            "server/owner_pilot_http.rs",
+            include_str!("../server/owner_pilot_http.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
         (
             "server/writer_instance.rs",

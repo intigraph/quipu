@@ -1,4 +1,4 @@
-//! Source-only startup composition. Main never mounts these routes.
+//! Startup composition; main mounts `routes()` only via the default-OFF pilot.
 use super::{PreparedOwner, refuse};
 use crate::base::AppError;
 #[cfg(test)]
@@ -121,7 +121,7 @@ impl PreparedDataset {
     }
 
     /// Uses the same owner Arc as strict reads; normal auth middleware remains
-    /// the mounting caller's responsibility. Production does not call this.
+    /// the mounting caller's responsibility (`startup::mount`, before auth).
     pub(crate) fn routes(&self) -> axum::Router {
         super::http::routes(self.owner.clone())
     }

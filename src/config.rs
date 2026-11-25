@@ -12,6 +12,8 @@ use serde::Deserialize;
 
 mod attachments;
 mod federation;
+pub(crate) mod ingest_pilot;
+pub use ingest_pilot::IngestPilotConfig;
 mod query_capture;
 mod vector_backend;
 pub use attachments::{
@@ -637,6 +639,10 @@ pub struct QuipuConfig {
     /// to any query's result.
     pub attachments: Vec<AttachmentConfig>,
 
+    /// `[quipu.ingest_pilot]` (aegis-4qv): one enrolled per-graph owner.
+    /// None (default) is byte-identical startup; see [`IngestPilotConfig`].
+    pub ingest_pilot: Option<IngestPilotConfig>,
+
     /// Write-maintained current-state projections (aegis-tg5 F2), declared as
     /// `[[quipu.projections]]`. Empty by default: no projection table, no
     /// trigger, no change to any write.
@@ -700,6 +706,7 @@ impl Default for QuipuConfig {
             events: EventsConfig::default(),
             import_policy: ImportPolicyConfig::default(),
             attachments: Vec::new(),
+            ingest_pilot: None,
             current_projections: Vec::new(),
         }
     }
@@ -989,7 +996,18 @@ impl QuipuConfig {
         // without it. The mechanism stays because the NEXT settable-but-inert
         // knob should have somewhere to be loud, and because deleting it would
         // take the guard test's subject with it.
-        Vec::new()
+        let mut warnings = Vec::new();
+        // aegis-4qv: the pilot consumer exists only in witness-enabled Unix builds.
+        if cfg!(not(all(unix, feature = "ownership-witness-s3")))
+            && self.ingest_pilot.as_ref().is_some_and(|p| p.enabled)
+        {
+            warnings.push(
+                "ingest_pilot.enabled is set but this build lacks ownership-witness-s3; \
+                 the pilot is NOT started"
+                    .to_owned(),
+            );
+        }
+        warnings
     }
 }
 

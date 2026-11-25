@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{Error, Result};
 
+mod catalog_file;
 mod graph_sets;
 pub use graph_sets::{GraphSet, GraphSetCatalog, OwnerSelection};
 

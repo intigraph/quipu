@@ -95,6 +95,8 @@ impl WriteKind {
             "/fluent/observations" => Self::Fluent,
             "/episode" | "/episodes/complete" | "/episode/retract" => Self::Episode,
             "/knot" | "/knot/stage" => Self::Knot,
+            // aegis-4qv: the ingest pilot owner's knot and its completion seal.
+            "/owner/knot" | "/owner/knot/seal" => Self::Knot,
             "/knot/promote" | "/knot/cancel" | "/import/promote" => Self::Promote,
             "/import" | "/merge/apply" => Self::Import,
             "/update" | "/patch" => Self::Update,

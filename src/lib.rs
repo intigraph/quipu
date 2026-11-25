@@ -274,9 +274,10 @@ pub const GIT_SHA: &str = env!("QUIPU_GIT_SHA");
 pub use rdf_export::{export_rdf_construct, export_rdf_group};
 
 pub use config::{
-    AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, ProjectionColumnConfig,
-    ProjectionConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, SearchConfig, ServerConfig,
-    ShaclConfig, VectorBackend, VectorConfig, open_with_configured_attachments,
+    AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, IngestPilotConfig,
+    ProjectionColumnConfig, ProjectionConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig,
+    SearchConfig, ServerConfig, ShaclConfig, VectorBackend, VectorConfig,
+    open_with_configured_attachments,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,

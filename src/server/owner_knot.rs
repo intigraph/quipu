@@ -1,5 +1,5 @@
-//! Inert server boundary for one already admitted pilot. No startup, HTTP
-//! advertisement, file discovery or legacy fallback is installed here.
+//! Server boundary for one already admitted pilot. Startup lives in `startup`
+//! (default OFF); no HTTP advertisement, file discovery or legacy fallback.
 #![cfg_attr(not(test), allow(dead_code))]
 use crate::{
     admission::owner::{OwnerWriteAdmission, read_now},
@@ -16,6 +16,10 @@ pub(crate) mod http;
 #[cfg(feature = "ownership-witness-s3")]
 #[path = "owner_pilot_dataset.rs"]
 pub(crate) mod dataset;
+
+#[cfg(feature = "ownership-witness-s3")]
+#[path = "owner_pilot_startup.rs"]
+pub(crate) mod startup;
 
 /// Trusted request pins, not authentication or writer authority.
 #[derive(Clone)]
