@@ -121,3 +121,25 @@ CASES = [
           [{"role": "receive", "close": [{"value": "a", "at": TD}], "assert": []}],
           {"kind": "one-side", "held": 0}),
 ]
+
+
+# Operator INPUTS per case, transcribed from the case tables in
+# docs/design/merge-behaviour.md (the decision the use case makes, and the value
+# it decides). They describe what is asked of the system under test, never what
+# it should produce; adapters build recipes from these and from base/ours/theirs
+# only, and must not read any expected_* field. `None`: no decision is made.
+INPUTS = {
+    "C1a": {"decision": None}, "C1b": {"decision": None}, "C1c": {"decision": None},
+    "C2a": {"decision": "continue"}, "C2b": {"decision": "continue"},
+    "C2c": {"decision": "value", "values": ["d"]},
+    "C3a": {"decision": None}, "C3b": {"decision": None},
+    "C3c": {"decision": None}, "C3d": {"decision": None},
+    "C4-ours": {"decision": "ours"}, "C4-theirs": {"decision": "theirs"},
+    "C4-base": {"decision": "base"}, "C4-value": {"decision": "value", "values": ["d"]},
+    "C4-both-refused": {"decision": "both"}, "C4-defer-atomic": {"decision": "defer"},
+    "C5a-ours": {"decision": "ours"}, "C5a-theirs": {"decision": "theirs"},
+    "C5a-base": {"decision": "base"},
+    "C5b-ours": {"decision": "ours"}, "C5b-theirs": {"decision": "theirs"},
+    "C5c": {"decision": None}, "C7": {"decision": None},
+}
+assert set(INPUTS) == {c["case"] for c in CASES}

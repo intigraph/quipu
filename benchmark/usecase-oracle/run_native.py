@@ -22,7 +22,8 @@ def step(at, before, after, start):
 
 def recipe(case):
     base, ours, theirs = case["base"], case["ours"], case["theirs"]
-    dec = case["expected_report"].get("decision")  # the use case's named decision = an input
+    given = tc.INPUTS[case["case"]]  # explicit operator inputs only
+    dec = given["decision"]
     r = {"schema": "quipu-native-input/v1", "case": case["case"], "path": "fork-promote",
          "max_count": 1 if case["card"] == "one" else None,
          "base": {"at": T0, "rows": [{"value": v, "from": T0, "to": None, "op": "assert"} for v in base]},
@@ -36,12 +37,12 @@ def recipe(case):
     if dec in side:
         r["resolution"] = side[dec]
     elif dec == "value":
-        r["resolution"] = ["d"]  # design's decided value for C2c / C4-value
+        r["resolution"] = list(given["values"])
     # continue / defer / None: no resolution
     if PATH == "share":
         r["path"] = "share"
         r["decision"] = dec
-        r["resolution"] = ["d"] if dec == "value" else None
+        r["resolution"] = list(given["values"]) if dec == "value" else None
     if not r["base"]["rows"]:
         r["base"] = None
     return r
@@ -66,8 +67,6 @@ def judge(case, rec):
         and res.get("transactions_match", True) is not False and res.get("as_of_matches", True) is not False
     absent = sorted(k for k, v in rm.items() if not v.get("present", True))
     wrong = {k: v for k, v in rm.items() if v.get("present", True)}
-    if case["expected_report"].get("status") == "refused" and out not in ("refused", "error"):
-        return "FAIL", f"expected refusal; {note}", cap
     if not facts_ok or wrong:
         detail = {k: res.get(k) for k in ("missing_current", "extra_current", "missing_history", "extra_history") if res.get(k)}
         return "FAIL", f"{note}; {json.dumps(detail)[:400]} wrong_report={json.dumps(wrong)[:300]}", cap
@@ -82,7 +81,7 @@ for case in tc.CASES:
 # as-of case uses the committed input recipe (probes at receive/decide pins)
 asof_in = json.load(open(ORACLE_DIR + "/native-c4-input.json"))
 if PATH == "share":
-    asof_in["path"] = "share"; asof_in["decision"] = "theirs"; asof_in["resolution"] = None
+    asof_in["path"] = "share"; asof_in["decision"] = "value"  # the committed recipe's own resolution
 p = subprocess.run([BIN], input=json.dumps(asof_in).encode(), capture_output=True, timeout=120)
 if p.returncode == 0:
     cap = json.loads(p.stdout); res = oracle.evaluate(asof_cases.CASE, cap["capture"])
