@@ -133,6 +133,8 @@ fn run(
         base_dir.to_str().unwrap(),
         &ShareOptions {
             shapes: vec!["replay".into()],
+            // Run-scoped scratch bundle; never leaves this process (karb.4 rerun).
+            destination: quipu::share_scrub::ShareDestination::Internal,
             ..Default::default()
         },
     )
@@ -154,6 +156,8 @@ fn run(
         incoming_dir.to_str().unwrap(),
         &ShareOptions {
             shapes: vec!["replay".into()],
+            // Run-scoped scratch bundle; never leaves this process (karb.4 rerun).
+            destination: quipu::share_scrub::ShareDestination::Internal,
             parent_share: Some(base_manifest.share_id.clone()),
             ..Default::default()
         },
