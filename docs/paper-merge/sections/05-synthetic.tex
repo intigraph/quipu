@@ -205,9 +205,10 @@ violations of the intended cardinality into the merged graph, while precision
 stays at $1.000$: the operator looks perfect on what it flags and is silent on
 what it was never told. A bound that is too tight or should not exist costs
 precision, as extra questions, and corrupts nothing. The shipped planner
-degrades far less under such bounds than the reference arm, $14$ false
-positives against $278$, because it raises a conflict only when both sides
-changed the slot. \ctx reads no shapes and is unchanged in every row, at $812$
+raises far fewer under such bounds than the reference arm, $14$ false
+positives against $278$. We do not credit it for that: it considers a slot only
+when both sides changed it, which is the same classification that misses the
+one-sided overflow above. \ctx reads no shapes and is unchanged in every row, at $812$
 false positives. Shape quality therefore transfers directly into merge quality,
 and asymmetrically.
 
