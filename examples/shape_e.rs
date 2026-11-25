@@ -49,9 +49,9 @@ fn render(g: &Graph) -> String {
 
 fn store(data: &str, shapes: &str) -> Store {
     let mut store = Store::open_in_memory().expect("isolated store");
-    store
-        .load_shapes("experiment", shapes, "2026-10-13")
-        .expect("shapes");
+    // karb.4 rerun: the fixture is ingested BEFORE the shapes are registered.
+    // Current main gates writes on loaded shapes; this experiment measures merge
+    // behaviour over data that deliberately violates the evolved schema.
     ingest_rdf(
         &mut store,
         data.as_bytes(),
@@ -62,6 +62,9 @@ fn store(data: &str, shapes: &str) -> Store {
         Some("synthetic-fixture"),
     )
     .expect("fixture graph");
+    store
+        .load_shapes("experiment", shapes, "2026-10-13")
+        .expect("shapes");
     store
 }
 
