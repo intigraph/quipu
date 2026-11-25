@@ -1,0 +1,45 @@
+
+== operator shapes: declared   (independent truth == generator truth on all seeds: True; truth sizes [14, 10, 12, 8, 10])
+  shape-aware    pooled TP  33 FP    0 FN  21  P 1.000  R 0.611  intended-cardinality violations in merged graph 0
+  unified-core   pooled TP  32 FP    0 FN  22  P 1.000  R 0.593  intended-cardinality violations in merged graph 1
+  context-merge  pooled TP  33 FP  812 FN  21  P 0.039  R 0.611  intended-cardinality violations in merged graph 0
+  triple-3way    pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 23
+  union          pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 297
+  lww-theirs     pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 1
+  git-canonical  pooled TP  24 FP  582 FN  30  P 0.040  R 0.444  intended-cardinality violations in merged graph 9
+
+== operator shapes: label=none,status=none   (independent truth == generator truth on all seeds: True; truth sizes [14, 10, 12, 8, 10])
+  shape-aware    pooled TP  21 FP    0 FN  33  P 1.000  R 0.389  intended-cardinality violations in merged graph 8
+  unified-core   pooled TP  20 FP    0 FN  34  P 1.000  R 0.370  intended-cardinality violations in merged graph 9
+  context-merge  pooled TP  33 FP  812 FN  21  P 0.039  R 0.611  intended-cardinality violations in merged graph 0
+  triple-3way    pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 23
+  union          pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 297
+  lww-theirs     pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 1
+  git-canonical  pooled TP  24 FP  582 FN  30  P 0.040  R 0.444  intended-cardinality violations in merged graph 9
+
+== operator shapes: note=1   (independent truth == generator truth on all seeds: True; truth sizes [14, 10, 12, 8, 10])
+  shape-aware    pooled TP  33 FP  137 FN  21  P 0.194  R 0.611  intended-cardinality violations in merged graph 0
+  unified-core   pooled TP  32 FP    6 FN  22  P 0.842  R 0.593  intended-cardinality violations in merged graph 1
+  context-merge  pooled TP  33 FP  812 FN  21  P 0.039  R 0.611  intended-cardinality violations in merged graph 0
+  triple-3way    pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 23
+  union          pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 297
+  lww-theirs     pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 1
+  git-canonical  pooled TP  24 FP  582 FN  30  P 0.040  R 0.444  intended-cardinality violations in merged graph 9
+
+== operator shapes: tag=2   (independent truth == generator truth on all seeds: True; truth sizes [14, 10, 12, 8, 10])
+  shape-aware    pooled TP  33 FP  278 FN  21  P 0.106  R 0.611  intended-cardinality violations in merged graph 0
+  unified-core   pooled TP  32 FP   14 FN  22  P 0.696  R 0.593  intended-cardinality violations in merged graph 1
+  context-merge  pooled TP  33 FP  812 FN  21  P 0.039  R 0.611  intended-cardinality violations in merged graph 0
+  triple-3way    pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 23
+  union          pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 297
+  lww-theirs     pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 1
+  git-canonical  pooled TP  24 FP  582 FN  30  P 0.040  R 0.444  intended-cardinality violations in merged graph 9
+
+== operator shapes: tag=none   (independent truth == generator truth on all seeds: True; truth sizes [14, 10, 12, 8, 10])
+  shape-aware    pooled TP  23 FP    0 FN  31  P 1.000  R 0.426  intended-cardinality violations in merged graph 10
+  unified-core   pooled TP  23 FP    0 FN  31  P 1.000  R 0.426  intended-cardinality violations in merged graph 10
+  context-merge  pooled TP  33 FP  812 FN  21  P 0.039  R 0.611  intended-cardinality violations in merged graph 0
+  triple-3way    pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 23
+  union          pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 297
+  lww-theirs     pooled TP   0 FP    0 FN  54  P nan  R 0.000  intended-cardinality violations in merged graph 1
+  git-canonical  pooled TP  24 FP  582 FN  30  P 0.040  R 0.444  intended-cardinality violations in merged graph 9

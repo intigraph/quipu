@@ -1,0 +1,402 @@
+[
+ {
+  "seed": 1,
+  "operator_shapes": "tag=none",
+  "truth": 14,
+  "truth_equals_generator": true,
+  "arms": {
+   "context-merge": {
+    "tp": 7,
+    "fp": 152,
+    "fn": 7,
+    "precision": 0.044,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "git-canonical": {
+    "tp": 5,
+    "fp": 114,
+    "fn": 9,
+    "precision": 0.042,
+    "recall": 0.357,
+    "intended_cardinality_violations": 2
+   },
+   "git-turtle-reserialized": {
+    "tp": 5,
+    "fp": 676,
+    "fn": 9,
+    "precision": 0.007,
+    "recall": 0.357,
+    "intended_cardinality_violations": 1
+   },
+   "git-turtle-stable": {
+    "tp": 5,
+    "fp": 37,
+    "fn": 9,
+    "precision": 0.119,
+    "recall": 0.357,
+    "intended_cardinality_violations": 1
+   },
+   "lww-theirs": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 14,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 1
+   },
+   "shape-aware": {
+    "tp": 5,
+    "fp": 0,
+    "fn": 9,
+    "precision": 1.0,
+    "recall": 0.357,
+    "intended_cardinality_violations": 2
+   },
+   "triple-3way": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 14,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 5
+   },
+   "unified-core": {
+    "tp": 5,
+    "fp": 0,
+    "fn": 9,
+    "precision": 1.0,
+    "recall": 0.357,
+    "intended_cardinality_violations": 2
+   },
+   "union": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 14,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 72
+   }
+  }
+ },
+ {
+  "seed": 2026,
+  "operator_shapes": "tag=none",
+  "truth": 10,
+  "truth_equals_generator": true,
+  "arms": {
+   "context-merge": {
+    "tp": 8,
+    "fp": 174,
+    "fn": 2,
+    "precision": 0.044,
+    "recall": 0.8,
+    "intended_cardinality_violations": 0
+   },
+   "git-canonical": {
+    "tp": 7,
+    "fp": 116,
+    "fn": 3,
+    "precision": 0.057,
+    "recall": 0.7,
+    "intended_cardinality_violations": 1
+   },
+   "git-turtle-reserialized": {
+    "tp": 8,
+    "fp": 752,
+    "fn": 2,
+    "precision": 0.011,
+    "recall": 0.8,
+    "intended_cardinality_violations": 0
+   },
+   "git-turtle-stable": {
+    "tp": 7,
+    "fp": 52,
+    "fn": 3,
+    "precision": 0.119,
+    "recall": 0.7,
+    "intended_cardinality_violations": 1
+   },
+   "lww-theirs": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 10,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 0
+   },
+   "shape-aware": {
+    "tp": 7,
+    "fp": 0,
+    "fn": 3,
+    "precision": 1.0,
+    "recall": 0.7,
+    "intended_cardinality_violations": 1
+   },
+   "triple-3way": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 10,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 5
+   },
+   "unified-core": {
+    "tp": 7,
+    "fp": 0,
+    "fn": 3,
+    "precision": 1.0,
+    "recall": 0.7,
+    "intended_cardinality_violations": 1
+   },
+   "union": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 10,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 54
+   }
+  }
+ },
+ {
+  "seed": 42,
+  "operator_shapes": "tag=none",
+  "truth": 12,
+  "truth_equals_generator": true,
+  "arms": {
+   "context-merge": {
+    "tp": 8,
+    "fp": 165,
+    "fn": 4,
+    "precision": 0.046,
+    "recall": 0.667,
+    "intended_cardinality_violations": 0
+   },
+   "git-canonical": {
+    "tp": 5,
+    "fp": 109,
+    "fn": 7,
+    "precision": 0.044,
+    "recall": 0.417,
+    "intended_cardinality_violations": 3
+   },
+   "git-turtle-reserialized": {
+    "tp": 8,
+    "fp": 786,
+    "fn": 4,
+    "precision": 0.01,
+    "recall": 0.667,
+    "intended_cardinality_violations": 0
+   },
+   "git-turtle-stable": {
+    "tp": 5,
+    "fp": 54,
+    "fn": 7,
+    "precision": 0.085,
+    "recall": 0.417,
+    "intended_cardinality_violations": 1
+   },
+   "lww-theirs": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 12,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 0
+   },
+   "shape-aware": {
+    "tp": 5,
+    "fp": 0,
+    "fn": 7,
+    "precision": 1.0,
+    "recall": 0.417,
+    "intended_cardinality_violations": 3
+   },
+   "triple-3way": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 12,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 6
+   },
+   "unified-core": {
+    "tp": 5,
+    "fp": 0,
+    "fn": 7,
+    "precision": 1.0,
+    "recall": 0.417,
+    "intended_cardinality_violations": 3
+   },
+   "union": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 12,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 61
+   }
+  }
+ },
+ {
+  "seed": 7,
+  "operator_shapes": "tag=none",
+  "truth": 8,
+  "truth_equals_generator": true,
+  "arms": {
+   "context-merge": {
+    "tp": 4,
+    "fp": 159,
+    "fn": 4,
+    "precision": 0.025,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "git-canonical": {
+    "tp": 4,
+    "fp": 140,
+    "fn": 4,
+    "precision": 0.028,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "git-turtle-reserialized": {
+    "tp": 4,
+    "fp": 690,
+    "fn": 4,
+    "precision": 0.006,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "git-turtle-stable": {
+    "tp": 4,
+    "fp": 38,
+    "fn": 4,
+    "precision": 0.095,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "lww-theirs": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 8,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 0
+   },
+   "shape-aware": {
+    "tp": 4,
+    "fp": 0,
+    "fn": 4,
+    "precision": 1.0,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "triple-3way": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 8,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 3
+   },
+   "unified-core": {
+    "tp": 4,
+    "fp": 0,
+    "fn": 4,
+    "precision": 1.0,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "union": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 8,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 57
+   }
+  }
+ },
+ {
+  "seed": 99,
+  "operator_shapes": "tag=none",
+  "truth": 10,
+  "truth_equals_generator": true,
+  "arms": {
+   "context-merge": {
+    "tp": 6,
+    "fp": 162,
+    "fn": 4,
+    "precision": 0.036,
+    "recall": 0.6,
+    "intended_cardinality_violations": 0
+   },
+   "git-canonical": {
+    "tp": 3,
+    "fp": 103,
+    "fn": 7,
+    "precision": 0.028,
+    "recall": 0.3,
+    "intended_cardinality_violations": 3
+   },
+   "git-turtle-reserialized": {
+    "tp": 5,
+    "fp": 722,
+    "fn": 5,
+    "precision": 0.007,
+    "recall": 0.5,
+    "intended_cardinality_violations": 0
+   },
+   "git-turtle-stable": {
+    "tp": 2,
+    "fp": 39,
+    "fn": 8,
+    "precision": 0.049,
+    "recall": 0.2,
+    "intended_cardinality_violations": 3
+   },
+   "lww-theirs": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 10,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 0
+   },
+   "shape-aware": {
+    "tp": 2,
+    "fp": 0,
+    "fn": 8,
+    "precision": 1.0,
+    "recall": 0.2,
+    "intended_cardinality_violations": 4
+   },
+   "triple-3way": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 10,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 4
+   },
+   "unified-core": {
+    "tp": 2,
+    "fp": 0,
+    "fn": 8,
+    "precision": 1.0,
+    "recall": 0.2,
+    "intended_cardinality_violations": 4
+   },
+   "union": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 10,
+    "precision": null,
+    "recall": 0.0,
+    "intended_cardinality_violations": 53
+   }
+  }
+ }
+]

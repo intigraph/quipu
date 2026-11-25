@@ -91,6 +91,37 @@ pub fn max_count(predicate_iri: &str) -> Option<usize> {
         .and_then(|p| p.max_count)
 }
 
+/// The bound the MERGE OPERATORS see (aegis-karb.4).
+///
+/// Identical to [`max_count`] unless `MERGEBENCH_OPERATOR_SHAPES` is set, as
+/// `name=n|none` pairs separated by commas (for example `tag=none,label=2`).
+/// The generator, its ground truth and the SHACL validator keep the declared
+/// table, so an override perturbs only what the operator is told. That is what
+/// lets an independent judge measure the shapes as a predictor.
+#[must_use]
+pub fn operator_max_count(predicate_iri: &str) -> Option<usize> {
+    let declared = max_count(predicate_iri);
+    let Some(spec) = std::env::var_os("MERGEBENCH_OPERATOR_SHAPES") else {
+        return declared;
+    };
+    let local = predicate_iri.strip_prefix(NS)?;
+    for pair in spec.to_string_lossy().split(',') {
+        let Some((name, bound)) = pair.split_once('=') else {
+            panic!("MERGEBENCH_OPERATOR_SHAPES: expected name=n|none, got {pair:?}");
+        };
+        if name.trim() == local {
+            return match bound.trim() {
+                "none" => None,
+                n => Some(
+                    n.parse()
+                        .expect("MERGEBENCH_OPERATOR_SHAPES: bound must be an integer or none"),
+                ),
+            };
+        }
+    }
+    declared
+}
+
 /// The shapes graph in Turtle, generated from the tables above so the
 /// constraint contract cannot drift from the operator's view of it.
 #[must_use]
