@@ -1,0 +1,14 @@
+{
+  "schema": "mergebench-intent/v1",
+  "source": "aegis-karb.4: the use case each benchmark predicate models, declared independently of examples/mergebench/shapes.rs",
+  "namespace": "http://example.org/bench#",
+  "predicates": {
+    "label":     {"intended": 1,    "why": "an entity has one display name"},
+    "status":    {"intended": 1,    "why": "an entity is in one lifecycle state at a time"},
+    "owner":     {"intended": 1,    "why": "one accountable owner"},
+    "version":   {"intended": 1,    "why": "one current version"},
+    "tag":       {"intended": 4,    "why": "a bounded tag set (the UI shows at most four)"},
+    "note":      {"intended": null, "why": "free-form notes accumulate"},
+    "relatedTo": {"intended": null, "why": "an open set of links"}
+  }
+}

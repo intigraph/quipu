@@ -221,7 +221,7 @@ fn shape_aware(base: &Graph, ours: &Graph, theirs: &Graph) -> Outcome {
         let tv = t.get(&slot).unwrap_or(&empty);
         let merged = set_three_way(bv, ov, tv);
 
-        if let Some(bound) = shapes::max_count(&slot.1)
+        if let Some(bound) = shapes::operator_max_count(&slot.1)
             && ov != tv
         {
             if merged.len() > bound {
@@ -253,7 +253,7 @@ fn unified_core(base: &Graph, ours: &Graph, theirs: &Graph) -> Outcome {
             b.get(&slot).unwrap_or(&empty),
             o.get(&slot).unwrap_or(&empty),
             t.get(&slot).unwrap_or(&empty),
-            shapes::max_count(&slot.1),
+            shapes::operator_max_count(&slot.1),
         )
         .expect("unified planner refused benchmark input; no metrics may be published");
         if projection.held {
