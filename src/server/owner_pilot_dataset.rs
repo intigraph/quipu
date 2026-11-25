@@ -9,6 +9,10 @@ use quipu::{
 };
 use std::{sync::Arc, time::Instant};
 
+#[path = "owner_pilot_read.rs"]
+mod read;
+pub(crate) use read::ReadConfig;
+
 /// Disabled startup returns the original configured writer untouched.
 pub(crate) enum Startup {
     Disabled(Box<Store>),
@@ -21,6 +25,7 @@ pub(crate) enum Startup {
 pub(crate) struct PreparedDataset {
     pub owner: Arc<PreparedOwner>,
     legacy: Owner,
+    native_files: [std::path::PathBuf; 2],
 }
 
 impl PreparedDataset {
@@ -45,6 +50,17 @@ impl PreparedDataset {
             return Err(refuse("combined startup memory reservation incomplete"));
         }
         let legacy_policy = pin.policy.clone();
+        let native_files = [
+            config.root.join(format!("{}.db", pin.file_id)),
+            config.root.join(format!(
+                "{}.db",
+                catalog
+                    .routes()
+                    .next()
+                    .ok_or_else(|| refuse("pilot owner missing"))?
+                    .file_id
+            )),
+        ];
         let owner = PreparedOwner::initialize(
             pilot,
             catalog.clone(),
@@ -62,7 +78,11 @@ impl PreparedDataset {
             &legacy_policy,
             config.allocation,
         )?;
-        Ok(Startup::Enabled(Box::new(Self { owner, legacy })))
+        Ok(Startup::Enabled(Box::new(Self {
+            owner,
+            legacy,
+            native_files,
+        })))
     }
 
     /// Capture one strict cut; graph selection is explicit and never a grant.
@@ -99,6 +119,17 @@ impl PreparedDataset {
     /// the mounting caller's responsibility. Production does not call this.
     pub(crate) fn routes(&self) -> axum::Router {
         super::http::routes(self.owner.clone())
+    }
+
+    /// Explicit authenticated read transport over this same admitted dataset.
+    /// The caller retains ordinary outer authentication and request logging.
+    /// No profile, registry, grant or participant is discovered from a request.
+    pub(crate) fn routes_with_reads(
+        self: &Arc<Self>,
+        config: ReadConfig,
+        admission: quipu::read_authorization::ComposedReadAdmission,
+    ) -> Result<axum::Router, AppError> {
+        read::routes(self.clone(), config, admission)
     }
 }
 
