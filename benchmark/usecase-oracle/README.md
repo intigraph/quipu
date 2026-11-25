@@ -2,11 +2,33 @@
 
 ## Native temporal adapter (source, awaiting qualification)
 
-`examples/merge_native_oracle` accepts the separate `native-c4-input.json`
-recipe on stdin and runs the actual fork-promote path in a private temporary
-store. Input is bounded to 64 KiB and rejects unknown fields, including oracle
-answers and external database paths. Share and pendant paths are not accepted
-by this first slice. No live database or endpoint is used.
+`examples/merge_native_oracle` accepts a recipe on stdin and runs the actual
+fork-promote path (`"path": "fork-promote"`) or the share-reconnect path
+(`"path": "share"`: `share_merge_decisions::emit`, then `share_merge::merge` or
+`apply`) in private temporary stores. Input is bounded to 64 KiB and rejects
+unknown fields, including oracle answers and external database paths. A share
+recipe names the operator's decision (`continue`, `ours`, `theirs`, `base`,
+`both`, `value` with `resolution`, or `defer`); a fork recipe refuses that field.
+The pendant path is not accepted yet. No live database or endpoint is used.
+
+`run_native.py` builds one recipe per temporal case from the case's inputs only
+(base/ours/theirs value sets, cardinality and the named decision; never the
+expected current state, history or transactions), runs the binary, and scores
+each capture with `oracle.evaluate`. It reports facts/history/trace and report
+fields separately, because the adapters do not project clean-slot
+classification:
+
+```sh
+cargo build --locked --release --example merge_native_oracle --features shacl,merge-benchmark
+B=target/release/examples/merge_native_oracle
+python3 benchmark/usecase-oracle/run_native.py benchmark/usecase-oracle "$B" fork.json fork-promote
+python3 benchmark/usecase-oracle/run_native.py benchmark/usecase-oracle "$B" share.json share
+```
+
+Results on main 57a28398 (aegis-karb.4): fork-promote 22 facts PASS / 0 FAIL /
+2 unreachable; share 19 facts PASS / 4 FAIL / 1 unreachable. The four share
+failures are one empty no-op receipt transaction where the fixture expects none;
+current facts and history match.
 
 ```sh
 cargo run --locked --example merge_native_oracle --features shacl \
