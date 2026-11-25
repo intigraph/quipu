@@ -79,6 +79,7 @@ def main():
                 "intended_cardinality_violations": intended_violations(a["merged"], intent, ns)}
         report.append(row)
     json.dump(report, sys.stdout, indent=1)
+    sys.stdout.write("\n")
 
 if __name__ == "__main__":
     main()
