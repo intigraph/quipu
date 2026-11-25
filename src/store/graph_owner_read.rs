@@ -72,7 +72,7 @@ impl Owner {
             writers.push(
                 owner
                     .writer
-                    .try_lock()
+                    .fence()
                     .ok_or_else(|| refused("strict participant commit fence occupied"))?,
             );
             owner.placement.verify()?;

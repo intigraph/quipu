@@ -23,7 +23,7 @@ use std::{
     },
 };
 
-use parking_lot::FairMutex;
+use parking_lot::{FairMutex, FairMutexGuard};
 use serde_json::Value;
 
 use super::Store;
@@ -32,11 +32,74 @@ use crate::{
     graph_catalog::{Catalog, Route, WriteRequest, WriteTarget},
 };
 
+/// The server's configured legacy writer, BORROWED by a pilot dataset.
+///
+/// A borrowed participant never writes through this handle and never claims
+/// the legacy file's writer lease: the server keeps its writer and its write
+/// path unchanged. `try_writer` is used only as the strict cut's commit fence
+/// (the same non-blocking barrier an owned participant's writer provides);
+/// `writer` is taken once at preparation to read identity and configuration.
+pub trait LegacyWriterFence: Send + Sync {
+    /// Non-blocking commit fence; `None` when the writer is busy.
+    fn try_writer(&self) -> Option<FairMutexGuard<'_, Store>>;
+    /// Blocking access for read-only preparation checks.
+    fn writer(&self) -> FairMutexGuard<'_, Store>;
+}
+
+impl LegacyWriterFence for FairMutex<Store> {
+    fn try_writer(&self) -> Option<FairMutexGuard<'_, Store>> {
+        self.try_lock()
+    }
+
+    fn writer(&self) -> FairMutexGuard<'_, Store> {
+        self.lock()
+    }
+}
+
+/// An owner's writer: its own (the pilot file), or the borrowed legacy fence.
+enum Writer {
+    // Boxed: a Store is large and the borrowed variant is one pointer.
+    Owned(Box<FairMutex<Store>>),
+    Borrowed(Arc<dyn LegacyWriterFence>),
+}
+
+impl Writer {
+    /// Strict-cut commit fence for either kind; never used to write.
+    fn fence(&self) -> Option<FairMutexGuard<'_, Store>> {
+        match self {
+            Self::Owned(writer) => writer.try_lock(),
+            Self::Borrowed(fence) => fence.try_writer(),
+        }
+    }
+
+    /// The only write access. A borrowed legacy participant refuses, so no
+    /// owner operation can write the legacy file through the pilot.
+    fn owned(&self) -> Result<FairMutexGuard<'_, Store>> {
+        match self {
+            Self::Owned(writer) => Ok(writer.lock()),
+            Self::Borrowed(_) => Err(refused("legacy read participant is read-only")),
+        }
+    }
+
+    #[cfg(test)]
+    fn lock(&self) -> FairMutexGuard<'_, Store> {
+        match self {
+            Self::Owned(writer) => writer.lock(),
+            Self::Borrowed(fence) => fence.writer(),
+        }
+    }
+
+    #[cfg(test)]
+    fn try_lock(&self) -> Option<FairMutexGuard<'_, Store>> {
+        self.fence()
+    }
+}
+
 /// One prepared native writer and its dedicated, bounded read pool.
 pub struct Owner {
     catalog: Arc<Catalog>,
     route: Route,
-    writer: FairMutex<Store>,
+    writer: Writer,
     readers: Vec<FairMutex<Store>>,
     next_reader: AtomicUsize,
     admitted: AtomicUsize,
@@ -47,11 +110,17 @@ pub struct Owner {
 
 struct Placement {
     path: PathBuf,
+    device: u64,
+    inode: u64,
+    /// `None` for a borrowed legacy participant: the legacy writer keeps its
+    /// own lease and the participant claims none.
+    lease: Option<HeldLease>,
+}
+
+struct HeldLease {
     lease: Arc<super::writer_lease::Lease>,
     device: u64,
     inode: u64,
-    lease_device: u64,
-    lease_inode: u64,
 }
 
 fn refused(message: impl std::fmt::Display) -> Error {
@@ -59,7 +128,7 @@ fn refused(message: impl std::fmt::Display) -> Error {
 }
 
 impl Placement {
-    fn claim(store: &Store) -> Result<Self> {
+    fn canonical_path(store: &Store) -> Result<PathBuf> {
         let path = store
             .conn
             .path()
@@ -69,26 +138,52 @@ impl Placement {
         if !path.is_absolute() || path.canonicalize().map_err(refused)? != path {
             return Err(refused("canonical path without symlinks required"));
         }
+        Ok(path)
+    }
+
+    /// Identify the database by path metadata (a stat, no descriptor).
+    fn file_identity(path: &Path) -> Result<(u64, u64)> {
+        let metadata = std::fs::symlink_metadata(path).map_err(refused)?;
+        if !metadata.is_file() {
+            return Err(refused("store is not a regular file"));
+        }
+        Ok((metadata.dev(), metadata.ino()))
+    }
+
+    fn claim(store: &Store) -> Result<Self> {
+        let path = Self::canonical_path(store)?;
         let lease = store
             .writer_lease
             .as_ref()
             .ok_or_else(|| refused("writable Store admission required"))?
             .clone();
         lease.claim_exclusive()?;
-        // Identify the database by path metadata (a stat, no descriptor): the
-        // lease is held on a sibling file, never on the database itself.
-        let metadata = std::fs::symlink_metadata(&path).map_err(refused)?;
-        if !metadata.is_file() {
-            return Err(refused("store is not a regular file"));
-        }
+        // The lease is held on a sibling file, never on the database itself.
+        let (device, inode) = Self::file_identity(&path)?;
         let held = lease.file.metadata().map_err(refused)?;
         let placement = Self {
             path,
-            lease,
-            device: metadata.dev(),
-            inode: metadata.ino(),
-            lease_device: held.dev(),
-            lease_inode: held.ino(),
+            device,
+            inode,
+            lease: Some(HeldLease {
+                lease,
+                device: held.dev(),
+                inode: held.ino(),
+            }),
+        };
+        placement.verify()?;
+        Ok(placement)
+    }
+
+    /// Observe a borrowed writer's file without claiming its lease.
+    fn observe(store: &Store) -> Result<Self> {
+        let path = Self::canonical_path(store)?;
+        let (device, inode) = Self::file_identity(&path)?;
+        let placement = Self {
+            path,
+            device,
+            inode,
+            lease: None,
         };
         placement.verify()?;
         Ok(placement)
@@ -96,19 +191,24 @@ impl Placement {
 
     fn verify(&self) -> Result<()> {
         let metadata = std::fs::symlink_metadata(&self.path).map_err(refused)?;
-        let lease_path = super::ownership_latch::sibling(&self.path, ".writer-lease")?;
-        let lease = std::fs::symlink_metadata(&lease_path).map_err(refused)?;
-        let held = self.lease.file.metadata().map_err(refused)?;
         if !metadata.is_file()
             || metadata.dev() != self.device
             || metadata.ino() != self.inode
-            || lease.dev() != self.lease_device
-            || lease.ino() != self.lease_inode
-            || held.dev() != self.lease_device
-            || held.ino() != self.lease_inode
             || self.path.canonicalize().map_err(refused)? != self.path
         {
             return Err(refused("native file placement changed"));
+        }
+        if let Some(held) = &self.lease {
+            let lease_path = super::ownership_latch::sibling(&self.path, ".writer-lease")?;
+            let lease = std::fs::symlink_metadata(&lease_path).map_err(refused)?;
+            let file = held.lease.file.metadata().map_err(refused)?;
+            if lease.dev() != held.device
+                || lease.ino() != held.inode
+                || file.dev() != held.device
+                || file.ino() != held.inode
+            {
+                return Err(refused("native file placement changed"));
+            }
         }
         Ok(())
     }
@@ -271,13 +371,97 @@ impl Owner {
         Ok(Self {
             catalog,
             route,
-            writer: FairMutex::new(store),
+            writer: Writer::Owned(Box::new(FairMutex::new(store))),
             readers,
             next_reader: AtomicUsize::new(0),
             admitted: AtomicUsize::new(0),
             capacity,
             placement,
         })
+    }
+
+    /// Prepare the catalog's legacy participant as a READ-ONLY borrower of
+    /// the server's configured legacy writer.
+    ///
+    /// The server keeps that writer and its write path: this claims no lease,
+    /// applies no memory ceiling or embed deferral to the writer, and every
+    /// owner write operation refuses. Only the dedicated read pool (opened
+    /// read-only on the same file, sharing the writer's admission and read
+    /// configuration) receives `allocation`. Strict cuts fence legacy commits
+    /// through `LegacyWriterFence::try_writer`, never waiting on it.
+    pub fn borrow_legacy(
+        catalog: Arc<Catalog>,
+        root: &Path,
+        fence: Arc<dyn LegacyWriterFence>,
+        installed_policy: &str,
+        allocation: Option<crate::memory_budget::MemoryAllocation>,
+    ) -> Result<Self> {
+        let route = catalog
+            .legacy_participant()
+            .cloned()
+            .ok_or_else(|| refused("explicit legacy read participant required"))?;
+        if route.graph != crate::schema::ROOT_GRAPH_IRI {
+            return Err(refused("legacy read participant must be ROOT"));
+        }
+        if installed_policy != route.policy {
+            return Err(refused("installed policy differs from catalog"));
+        }
+        let (placement, readers) = {
+            let writer = fence.writer();
+            writer.require_ownership()?;
+            let placement = Placement::observe(&writer)?;
+            if !root.is_absolute()
+                || root.canonicalize().map_err(refused)? != root
+                || placement.path != root.join(format!("{}.db", route.file_id))
+            {
+                return Err(refused("owner file does not match catalog placement"));
+            }
+            Self::check_identity(&route, &writer)?;
+            if writer.graph_class(0)?.as_deref() != Some("committed") {
+                return Err(refused("owner graph must be committed"));
+            }
+            let path = placement
+                .path
+                .to_str()
+                .ok_or_else(|| refused("native store path must be UTF-8"))?;
+            let budget = catalog.budget();
+            let mut readers = Vec::with_capacity(budget.readers_per_owner);
+            for _ in 0..budget.readers_per_owner {
+                let mut reader = Store::open_read_only(path)?;
+                writer.share_admission_with(&mut reader)?;
+                reader.adopt_read_config_from(&writer);
+                if let Some(allocation) = allocation {
+                    reader.apply_memory_allocation(allocation)?;
+                }
+                Self::check_identity(&route, &reader)?;
+                readers.push(FairMutex::new(reader));
+            }
+            (placement, readers)
+        };
+        if readers.is_empty() {
+            return Err(refused("legacy read participant needs a read pool"));
+        }
+        placement.verify()?;
+        let capacity = catalog
+            .budget()
+            .queued_per_owner
+            .checked_add(1)
+            .ok_or_else(|| refused("mailbox bound overflow"))?;
+        Ok(Self {
+            catalog,
+            route,
+            writer: Writer::Borrowed(fence),
+            readers,
+            next_reader: AtomicUsize::new(0),
+            admitted: AtomicUsize::new(0),
+            capacity,
+            placement,
+        })
+    }
+
+    /// True for a borrowed legacy participant, which never writes.
+    pub fn is_read_only(&self) -> bool {
+        matches!(self.writer, Writer::Borrowed(_))
     }
 
     /// The immutable catalog route this owner serves.
@@ -349,7 +533,7 @@ impl Owner {
         ticket: Option<&super::knot_completion::Ticket>,
     ) -> Result<Value> {
         let (result, work, provider, batch_size) = {
-            let mut store = self.writer.lock();
+            let mut store = self.writer.owned()?;
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
             let targets = std::collections::BTreeSet::from([self.route.graph.clone()]);
@@ -388,7 +572,7 @@ impl Owner {
                 // Owner admission remains reserved; inference holds no writer.
                 embeddings.extend(provider.embed_batch(chunk)?);
             }
-            let mut store = self.writer.lock();
+            let mut store = self.writer.owned()?;
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
             store.ownership_operation(|store| store.apply_deferred_embed(&work, &embeddings))?;
@@ -406,7 +590,7 @@ impl Owner {
         timestamp: &str,
     ) -> Result<Option<i64>> {
         let _admission = self.admit()?;
-        let mut store = self.writer.lock();
+        let mut store = self.writer.owned()?;
         self.placement.verify()?;
         Self::check_identity(&self.route, &store)?;
         let graph = self.route.graph.clone();

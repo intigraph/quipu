@@ -48,7 +48,7 @@ fn enrolled_query_bags_paths_and_rdf_terms_match_single_file_baseline() {
             graph: Some(GRAPH.into()),
         },
         catalog,
-        legacy,
+        Arc::new(parking_lot::FairMutex::new(legacy)),
         &config,
         || {
             Ok((
