@@ -26,7 +26,7 @@ pub struct OwnerSelection<'a> {
 /// Ordinary Router/Owner admission still accepts only its existing single
 /// graph contract. Consumers must qualify graph-set execution separately.
 pub struct GraphSetCatalog {
-    physical: Catalog,
+    physical: std::sync::Arc<Catalog>,
     members: BTreeMap<String, String>,
     max_graphs: usize,
 }
@@ -66,7 +66,8 @@ impl GraphSetCatalog {
             }
             routes.push(set.owner);
         }
-        let physical = Catalog::new(revision, legacy_store_id, routes, budget)?;
+        let physical =
+            std::sync::Arc::new(Catalog::new(revision, legacy_store_id, routes, budget)?);
         Ok(Self {
             physical,
             members,
@@ -79,10 +80,66 @@ impl GraphSetCatalog {
         &self.physical
     }
 
+    /// Explicit logical graphs remaining in the legacy file. ROOT must be
+    /// selected by name too; this neither grants reads nor routes legacy writes.
+    pub fn with_legacy_graphs(mut self, pin: Route, graphs: Vec<String>) -> Result<Self> {
+        if !graphs.iter().any(|g| g == crate::schema::ROOT_GRAPH_IRI) {
+            return Err(refuse("legacy graph set must explicitly contain ROOT"));
+        }
+        for graph in graphs {
+            if !nonempty(&graph)
+                || oxrdf::NamedNode::new(graph.as_str()).is_err()
+                || self
+                    .members
+                    .insert(graph, crate::schema::ROOT_GRAPH_IRI.into())
+                    .is_some()
+            {
+                return Err(refuse("invalid or duplicate legacy graph-set member"));
+            }
+            if self.members.len() > self.max_graphs {
+                return Err(refuse("graph-set membership bound exceeded"));
+            }
+        }
+        let physical = std::sync::Arc::try_unwrap(self.physical)
+            .map_err(|_| refuse("legacy membership must be fixed before owner preparation"))?;
+        self.physical = std::sync::Arc::new(physical.with_legacy_participant(pin)?);
+        Ok(self)
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn logical_route(&self, graph: &str) -> Option<Route> {
+        self.owner(graph).map(|owner| Route {
+            graph: graph.into(),
+            ..owner.clone()
+        })
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn physical_pin(&self) -> std::sync::Arc<Catalog> {
+        self.physical.clone()
+    }
+
+    /// Complete configured membership of a physical owner, never a read grant.
+    pub fn owner_graphs(&self, graph: &str) -> Result<Vec<&str>> {
+        let owner = self
+            .owner(graph)
+            .ok_or_else(|| refuse("unregistered graph-set owner"))?;
+        Ok(self
+            .members
+            .iter()
+            .filter(|(_, key)| **key == owner.graph)
+            .map(|(member, _)| member.as_str())
+            .collect())
+    }
+
     fn owner(&self, graph: &str) -> Option<&Route> {
-        self.members
-            .get(graph)
-            .and_then(|key| self.physical.routes.get(key))
+        self.members.get(graph).and_then(|key| {
+            self.physical.routes.get(key).or_else(|| {
+                self.physical
+                    .legacy_participant()
+                    .filter(|route| &route.graph == key)
+            })
+        })
     }
 
     /// Resolve a complete routed batch to ONE physical owner. Unknown members,
@@ -101,6 +158,9 @@ impl GraphSetCatalog {
             let route = self
                 .owner(graph)
                 .ok_or_else(|| refuse("unregistered graph-set target"))?;
+            if route.graph == crate::schema::ROOT_GRAPH_IRI {
+                return Err(refuse("legacy writes retain their ordinary writer path"));
+            }
             // Validate the same physical pins through the established contract;
             // the supplied logical graph is never reinterpreted as a path.
             self.physical.write_target(&WriteRequest {
@@ -146,7 +206,7 @@ impl GraphSetCatalog {
         Ok(grouped
             .into_iter()
             .map(|(key, graphs)| OwnerSelection {
-                owner: &self.physical.routes[key],
+                owner: self.owner(key).unwrap(),
                 graphs: graphs.into_iter().collect(),
             })
             .collect())

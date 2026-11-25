@@ -443,6 +443,10 @@ pub use strict_read::CapturedRead;
 #[path = "graph_owner_durable.rs"]
 mod durable;
 
+#[path = "graph_owner_set.rs"]
+mod graph_set;
+pub use graph_set::{GraphSetBatch, GraphSetDataset, GraphSetOwner};
+
 #[cfg(test)]
 #[path = "graph_owner_tests.rs"]
 mod tests;
