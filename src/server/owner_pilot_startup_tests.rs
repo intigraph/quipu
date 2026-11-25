@@ -36,6 +36,9 @@ const GRAPH: &str = "https://example.test/graphs/startup";
 #[path = "owner_pilot_query_acceptance_tests.rs"]
 mod query_acceptance;
 
+#[path = "owner_pilot_read_tests.rs"]
+mod read_http;
+
 fn protected(path: &Path, body: &[u8]) {
     let mut bytes = body.to_vec();
     bytes.extend_from_slice(format!("\nsha256:{}\n", hex::encode(Sha256::digest(body))).as_bytes());

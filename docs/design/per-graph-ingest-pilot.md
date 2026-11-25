@@ -425,6 +425,32 @@ the combined fixture check visibility in the captured stores; arbitrary joins,
 RDFS/temporal/default-dataset parity remain separate publication prerequisites.
 Production main still does not mount the owner adapter or initialize this path.
 
+### Authorized composed HTTP read transport
+
+`PreparedDataset::routes_with_reads` adds a bounded JSON `/query` handler to the
+same admitted owner routes. The trusted initializer supplies an existing read
+policy, named-credential verifier registry, deadline and the same aggregate
+composed-read admission used to prepare the stores. Requests select one or two
+explicit participants; selection is not a grant. Empty, duplicate, excluded and
+unavailable participants never select a legacy query fallback.
+
+The handler verifies the presented named credential against both current
+registry evidence and the identity established by outer authentication. It
+authorizes the complete dataset, captures the strict cut, evaluates through the
+existing composed evaluator and rechecks fresh policy and credential evidence
+before returning buffered output. The HTTP body owns the original output memory
+lease through its last consumer; constructing a response does not release that
+reservation or copy the response into an unaccounted buffer. Exhaustion and
+unverifiable captures return an unavailable response, never a partial result.
+
+The enrolled TLS/S1 HTTP control proves a positive ROOT/owner join, missing and
+revoked credential refusal, grant revocation and excluded-scope refusal. It also
+holds the response body across a second request to prove that resource admission
+stays bounded until the consumer drops the body. CI requires this named test to
+execute. This transport does not initialize grants, configure production startup,
+enroll or move files, or enable the pilot. Main wiring, full mutation/consumer
+qualification and the scheduled physical cutover remain separate acceptance.
+
 ### Enrolled evaluator qualification control
 
 The source control joins ROOT and the owner graph through the actual
