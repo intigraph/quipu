@@ -554,3 +554,74 @@ fn enrolled_startup_composes_authorized_root_owner_join_with_one_memory_budget()
     // lease; the caller must not extract unaccounted owned response copies.
     assert!(admission.try_reserve().is_ok());
 }
+
+/// aegis-4qv: production borrows the serving `StoreHandle`, so its writer,
+/// read pool and commit path remain the server's after enabled startup.
+#[test]
+fn enabled_startup_borrows_the_serving_store_handle() {
+    let (_dir, legacy, catalog, config, _emulator, _tls) = fixture();
+    let path = config.root.join("legacy.db");
+    let path = path.to_str().unwrap();
+    let readers = crate::handle::ReadPool::open(path, &legacy, 1);
+    let handle = Arc::new(crate::handle::StoreHandle::serving(
+        legacy,
+        readers,
+        path,
+        Default::default(),
+    ));
+    let Startup::Enabled(dataset) = PreparedDataset::initialize(
+        &IngestPilot {
+            enabled: true,
+            graph: Some(GRAPH.into()),
+        },
+        catalog,
+        handle.clone(),
+        &config,
+        || {
+            Ok((
+                "AKIAIOSFODNN7EXAMPLE".into(),
+                "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".into(),
+            ))
+        },
+        |_| Ok(()),
+    )
+    .unwrap() else {
+        panic!("enabled startup disappeared")
+    };
+    assert!(dataset.legacy.is_read_only());
+    quipu::tool_knot(
+        &mut handle.writer.lock(),
+        &json!({"turtle":"<urn:shared> <urn:served> \"handle\" .", "source":"served-legacy"}),
+    )
+    .unwrap();
+    let committed = handle.writer.lock().latest_tx_id().unwrap();
+    {
+        let _held = handle.writer.lock();
+        assert!(
+            dataset
+                .read(
+                    &[quipu::schema::ROOT_GRAPH_IRI],
+                    Instant::now() + Duration::from_secs(5),
+                    |_| -> quipu::Result<()> { panic!("unfenced handle cut evaluated") }
+                )
+                .is_err()
+        );
+    }
+    let seen = dataset
+        .read(
+            &[quipu::schema::ROOT_GRAPH_IRI],
+            Instant::now() + Duration::from_secs(5),
+            |reads| {
+                assert_eq!(reads[0].local_tx, committed);
+                Ok(
+                    quipu::sparql::query(reads[0].store, "SELECT ?s WHERE { ?s <urn:served> ?v }")?
+                        .rows()
+                        .len(),
+                )
+            },
+        )
+        .unwrap();
+    assert_eq!(seen, 1);
+    drop(dataset);
+    assert_eq!(Arc::strong_count(&handle), 1, "dataset retained no borrow");
+}
