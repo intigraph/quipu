@@ -1,0 +1,66 @@
+\section{Arm F: an oracle that does not read the shapes}
+\label{sec:oracle}
+
+Every positive result so far is scored against the shapes that also define the
+conflict. This arm removes that dependence for a small set of cases. Each case
+is a fixture that states, for one slot, the base, ours and theirs value sets,
+the slot's intended cardinality, the decision a person takes, and the expected
+outcome: the current facts, the history records with their valid intervals, and
+the ordered transaction trace. The judge compares those expectations with what
+the store holds after the merge. It reads no shapes graph and imports no merge
+code; the expectations were written from the design document before the adapter
+existed. A driver builds each run from the case inputs alone and never reads
+the expected outcome.
+
+There are $24$ cases: clean one-sided and two-sided changes, convergent
+changes, deletions, each decision on a contended slot (ours, theirs, base, a new
+value, a refused attempt to keep both, and a deferred decision), and three
+transaction-time and valid-time reads of a decided merge. We ran them against
+two shipped paths in private scratch stores: \texttt{share\_merge}, the operator
+of \S\ref{sec:replay}, and the fork-promote path that shares its slot planner.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+ & share merge & fork promote \\
+\midrule
+facts, history and trace agree            & 19 & 22 \\
+facts and history agree, trace differs    &  4 &  0 \\
+facts or history disagree                 &  0 &  0 \\
+case not reachable through the path       &  1 &  2 \\
+\midrule
+conflict report agrees (of cases with one) & 10/10 & 10/10 \\
+\bottomrule
+\end{tabular}
+\caption{Arm F: $24$ single-slot cases judged by an oracle that reads no
+shapes. Regenerate with \texttt{benchmark/usecase-oracle/run\_native.py}; its
+README gives the two invocations.}
+\label{tab:oracle}
+\end{table}
+
+On every case either path can reach, the facts and the history agree with the
+oracle (Table~\ref{tab:oracle}). The four trace differences on the share path
+have one cause. When a merge has nothing to apply, the operator still records
+one empty receipt transaction, and the fixtures expect no transaction. The
+design document states both, in different places; we report the disagreement
+as measured and did not change the fixtures to match the code. The case
+neither path reaches needs an empty base, which the adapter cannot write. The
+second unreachable case on fork-promote is a real difference between the paths:
+when both sides converge on a value, fork-promote records no conflict, so a
+person cannot then choose a different value, and the share path can.
+
+As a control, four captures were scored against a different case's
+expectations, and all four failed, so agreement is not an artifact of a judge
+that accepts anything.
+
+\paragraph{What this arm does and does not establish.} It is the first evidence
+in this paper that does not pass through the shapes: the shipped operator
+produces the facts and history that an independently stated expectation asks
+for. It is small. The cases are single-slot and synthetic, written by the
+project that wrote the operator. List-valued slots and repeated merges are
+specified as fixtures but have no adapter yet, and the conflict report is
+checked only on contended slots. No case has one side alone exceed a bound, so
+this arm does not exercise the planner difference of \S\ref{sec:synthetic}. It does not re-judge the $33$ decisions of
+\S\ref{sec:synthetic}.

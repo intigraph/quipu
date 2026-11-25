@@ -60,6 +60,11 @@ is deliberate.
         before the data, which handles the tested cardinality changes and
         shows that a datatype change escapes the conflict detector and is
         caught only by post-merge validation (\S\ref{sec:schema}).
+  \item Two checks that do not read the shapes: a use-case oracle run against
+        the shipped operator, and a re-judging of the benchmark under
+        deliberately wrong shapes, which shows that a missing bound loses
+        data silently while a spurious one only costs questions
+        (\S\ref{sec:oracle}, \S\ref{sec:synthetic}).
   \item A stated limit --- alias divergence is invisible to triple-level merge
         --- reported as a measured false-negative column rather than excluded
         from the benchmark, with a separate entity-resolution stage tested
