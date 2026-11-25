@@ -1173,7 +1173,12 @@ jobs:
 
   nightly-publish:
     name: Publish experimental nightly
-    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    # Explicit status function (aegis-2krz, #1242): without one the implicit
+    # success() also requires every transitive need to have succeeded, and the
+    # gate's chain includes the PR-only pr-paths job, which is always skipped on
+    # schedule. That skipped publish on every night since #1217, even when the
+    # gate itself passed. Publish exactly when the gate succeeded.
+    if: ${{ !cancelled() && needs.nightly-gate.result == 'success' && github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}
     needs: nightly-gate
     runs-on: ubuntu-latest
     concurrency:
