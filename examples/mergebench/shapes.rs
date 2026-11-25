@@ -109,6 +109,11 @@ pub fn operator_max_count(predicate_iri: &str) -> Option<usize> {
         let Some((name, bound)) = pair.split_once('=') else {
             panic!("MERGEBENCH_OPERATOR_SHAPES: expected name=n|none, got {pair:?}");
         };
+        // A misspelt predicate would silently perturb nothing.
+        assert!(
+            all().iter().any(|p| p.name == name.trim()),
+            "MERGEBENCH_OPERATOR_SHAPES: unknown predicate {name:?}"
+        );
         if name.trim() == local {
             return match bound.trim() {
                 "none" => None,

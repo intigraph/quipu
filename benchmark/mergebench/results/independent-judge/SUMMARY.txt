@@ -1,3 +1,7 @@
+Independent judge, main 57a28398, seeds 1,7,42,99,2026 (aegis-karb.4).
+The single unified-core intended-cardinality violation under declared shapes is
+the seed-1 one-side overflow slot (e38 tag, theirs alone exceeds maxCount 4),
+tracked as aegis-mxd.
 
 == operator shapes: declared   (independent truth == generator truth on all seeds: True; truth sizes [14, 10, 12, 8, 10])
   shape-aware    pooled TP  33 FP    0 FN  21  P 1.000  R 0.611  intended-cardinality violations in merged graph 0
