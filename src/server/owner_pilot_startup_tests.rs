@@ -236,6 +236,7 @@ fn request(path: &str, input: &Value) -> Request<Body> {
 #[tokio::test]
 async fn combined_factory_http_and_composed_snapshot_keep_both_graphs() {
     let (_dir, legacy, catalog, config, _emulator, _tls) = fixture();
+    let legacy = Arc::new(parking_lot::FairMutex::new(legacy));
     let pilot = IngestPilot {
         enabled: true,
         graph: Some(GRAPH.into()),
@@ -243,7 +244,7 @@ async fn combined_factory_http_and_composed_snapshot_keep_both_graphs() {
     let Startup::Enabled(dataset) = PreparedDataset::initialize(
         &pilot,
         catalog,
-        legacy,
+        legacy.clone(),
         &config,
         || {
             Ok((
@@ -324,6 +325,51 @@ async fn combined_factory_http_and_composed_snapshot_keep_both_graphs() {
         )
         .unwrap();
     assert_eq!(captured, 2);
+    // 4qv option A: the server KEEPS its legacy writer. It still commits
+    // through the ordinary write path, still refuses the fenced pilot graph,
+    // fences the strict cut while busy, and the next cut observes its commit.
+    assert!(dataset.legacy.is_read_only());
+    quipu::tool_knot(
+        &mut legacy.lock(),
+        &json!({"turtle":"<urn:shared> <urn:after> \"later\" .", "source":"legacy-after"}),
+    )
+    .unwrap();
+    assert!(
+        quipu::tool_knot(
+            &mut legacy.lock(),
+            &json!({"graph":GRAPH,"turtle":"<urn:x> <urn:y> <urn:z> .", "source":"bypass"}),
+        )
+        .is_err(),
+        "legacy writer must keep refusing the pilot graph"
+    );
+    let committed = legacy.lock().latest_tx_id().unwrap();
+    {
+        let _held = legacy.lock();
+        assert!(
+            dataset
+                .read(
+                    &[quipu::schema::ROOT_GRAPH_IRI],
+                    Instant::now() + Duration::from_secs(5),
+                    |_| -> quipu::Result<()> { panic!("unfenced legacy cut evaluated") }
+                )
+                .is_err()
+        );
+    }
+    let seen = dataset
+        .read(
+            &[quipu::schema::ROOT_GRAPH_IRI],
+            Instant::now() + Duration::from_secs(5),
+            |reads| {
+                assert_eq!(reads[0].local_tx, committed);
+                Ok(
+                    quipu::sparql::query(reads[0].store, "SELECT ?s WHERE { ?s <urn:after> ?v }")?
+                        .rows()
+                        .len(),
+                )
+            },
+        )
+        .unwrap();
+    assert_eq!(seen, 1);
     for graphs in [vec![GRAPH, GRAPH], vec!["urn:unknown"], vec![]] {
         assert!(
             dataset
@@ -345,14 +391,15 @@ async fn combined_factory_http_and_composed_snapshot_keep_both_graphs() {
 }
 
 #[test]
-fn disabled_combined_startup_returns_same_legacy_without_callbacks() {
+fn disabled_combined_startup_never_touches_the_borrowed_legacy_writer() {
     let (_dir, legacy, catalog, mut config, _emulator, _tls) = fixture();
-    let id = legacy.store_id().unwrap();
+    let before = (legacy.store_id().unwrap(), legacy.latest_tx_id().unwrap());
+    let legacy = Arc::new(parking_lot::FairMutex::new(legacy));
     config.endpoint.clear();
-    let Startup::Disabled(legacy) = PreparedDataset::initialize(
+    let Startup::Disabled = PreparedDataset::initialize(
         &IngestPilot::default(),
         catalog,
-        legacy,
+        legacy.clone(),
         &config,
         || panic!("OFF credentials"),
         |_| panic!("OFF configure"),
@@ -360,7 +407,13 @@ fn disabled_combined_startup_returns_same_legacy_without_callbacks() {
     .unwrap() else {
         panic!("OFF admitted")
     };
-    assert_eq!(legacy.store_id().unwrap(), id);
+    // OFF retains no borrow and leaves the same writer byte-identical.
+    assert_eq!(Arc::strong_count(&legacy), 1);
+    let legacy = legacy.lock();
+    assert_eq!(
+        (legacy.store_id().unwrap(), legacy.latest_tx_id().unwrap(),),
+        before
+    );
 }
 
 #[test]
@@ -374,7 +427,7 @@ fn combined_startup_refuses_incomplete_memory_before_credentials() {
                 graph: Some(GRAPH.into())
             },
             catalog,
-            legacy,
+            Arc::new(parking_lot::FairMutex::new(legacy)),
             &config,
             || panic!("incomplete memory resolved credentials"),
             |_| panic!("incomplete memory configured owner")
@@ -394,7 +447,7 @@ fn combined_startup_refuses_untrusted_witness_and_returns_no_http_routes() {
                 graph: Some(GRAPH.into())
             },
             catalog,
-            legacy,
+            Arc::new(parking_lot::FairMutex::new(legacy)),
             &config,
             || Ok((
                 "AKIAIOSFODNN7EXAMPLE".into(),
@@ -433,7 +486,7 @@ fn enrolled_startup_composes_authorized_root_owner_join_with_one_memory_budget()
             graph: Some(GRAPH.into()),
         },
         catalog,
-        legacy,
+        Arc::new(parking_lot::FairMutex::new(legacy)),
         &config,
         || {
             Ok((

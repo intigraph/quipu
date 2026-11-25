@@ -108,7 +108,7 @@ impl GraphSetOwner {
             ));
         }
         let _admission = self.owner.admit()?;
-        let mut store = self.owner.writer.lock();
+        let mut store = self.owner.writer.owned()?;
         self.owner.placement.verify()?;
         Owner::check_identity(self.owner.catalog_route(), &store)?;
         Self::check_hooks(&store)?;

@@ -46,13 +46,13 @@ impl Owner {
         let context = self.completion_context();
         let _admission = self.admit()?;
         let ticket = {
-            let mut store = self.writer.lock();
+            let mut store = self.writer.owned()?;
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
             store.ownership_operation(|store| store.admit_owner_knot_attempt(binding, &context))?
         };
         let outcome = self.execute_knot(input, Some(&ticket));
-        let mut store = self.writer.lock();
+        let mut store = self.writer.owned()?;
         self.placement.verify()?;
         Self::check_identity(&self.route, &store)?;
         store.ownership_operation(|store| {
@@ -88,7 +88,7 @@ impl Owner {
         let binding = Binding::for_request(write_id.to_owned(), input)?;
         let context = self.completion_context();
         let _admission = self.admit()?;
-        let mut store = self.writer.lock();
+        let mut store = self.writer.owned()?;
         self.placement.verify()?;
         Self::check_identity(&self.route, &store)?;
         store.ownership_operation(|store| store.seal_owner_knot_binding(&binding, &context))

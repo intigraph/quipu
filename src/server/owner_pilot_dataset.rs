@@ -1,25 +1,26 @@
 //! Source-only startup composition. Main never mounts these routes.
 use super::{PreparedOwner, refuse};
 use crate::base::AppError;
+#[cfg(test)]
+use quipu::Store;
 #[cfg(feature = "ownership-witness-s3")]
 use quipu::graph_catalog::Catalog;
-use quipu::{
-    Store,
-    store::graph_owner::{CapturedRead, Owner},
-};
+use quipu::store::graph_owner::{CapturedRead, LegacyWriterFence, Owner};
 use std::{sync::Arc, time::Instant};
 
 #[path = "owner_pilot_read.rs"]
 mod read;
 pub(crate) use read::ReadConfig;
 
-/// Disabled startup returns the original configured writer untouched.
+/// Disabled startup never touches the borrowed legacy writer.
 pub(crate) enum Startup {
-    Disabled(Box<Store>),
+    Disabled,
     Enabled(Box<PreparedDataset>),
 }
 
-/// One catalog and the sole configured writer for each participant.
+/// One catalog; the pilot owner owns only its file. The legacy participant
+/// BORROWS the server's configured writer read-only: the server keeps that
+/// writer and its write path, and the participant claims no lease.
 /// Read callbacks are internal, already-authorized dataset evaluations, not an
 /// HTTP query language. No implicit union or cross-file write is introduced.
 pub(crate) struct PreparedDataset {
@@ -33,13 +34,13 @@ impl PreparedDataset {
     pub(crate) fn initialize(
         pilot: &quipu::store::graph_router::IngestPilot,
         catalog: Arc<Catalog>,
-        legacy: Store,
+        legacy: Arc<dyn LegacyWriterFence>,
         config: &quipu::store::graph_router::EnrolledPilotConfig,
         credentials: impl FnOnce() -> quipu::Result<(String, String)>,
-        configure: impl FnOnce(&mut Store) -> quipu::Result<()>,
+        configure: impl FnOnce(&mut quipu::Store) -> quipu::Result<()>,
     ) -> Result<Startup, AppError> {
         if !pilot.enabled {
-            return Ok(Startup::Disabled(Box::new(legacy)));
+            return Ok(Startup::Disabled);
         }
         let pin = catalog
             .legacy_participant()
@@ -61,22 +62,26 @@ impl PreparedDataset {
                     .file_id
             )),
         ];
-        let owner = PreparedOwner::initialize(
-            pilot,
-            catalog.clone(),
-            &legacy,
-            config,
-            credentials,
-            configure,
-        )?
+        // The legacy writer is held only for S1 admission's fence checks and
+        // released before the read participant is prepared.
+        let owner = {
+            let writer = legacy.writer();
+            PreparedOwner::initialize(
+                pilot,
+                catalog.clone(),
+                &writer,
+                config,
+                credentials,
+                configure,
+            )?
+        }
         .ok_or_else(|| refuse("enabled startup returned no owner"))?;
-        let legacy = Owner::prepare_with_memory(
+        let legacy = Owner::borrow_legacy(
             catalog,
             &config.root,
-            quipu::schema::ROOT_GRAPH_IRI,
             legacy,
             &legacy_policy,
-            config.allocation,
+            Some(config.allocation),
         )?;
         Ok(Startup::Enabled(Box::new(Self {
             owner,

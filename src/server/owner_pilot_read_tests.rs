@@ -37,7 +37,7 @@ async fn enrolled_http_query_rechecks_credentials_grants_and_retains_response_bu
             graph: Some(GRAPH.into()),
         },
         catalog,
-        legacy,
+        Arc::new(parking_lot::FairMutex::new(legacy)),
         &config,
         || {
             Ok((

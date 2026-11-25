@@ -230,3 +230,161 @@ fn legacy_pin_refuses_foreign_identity_duplicate_file_and_route_promotion() {
     assert!(c.with_legacy_participant(pin).is_err());
     drop(store);
 }
+
+fn legacy_settings(store: &Store) -> (i64, i64, bool, i64) {
+    (
+        store
+            .conn
+            .query_row("PRAGMA cache_size", [], |r| r.get(0))
+            .unwrap(),
+        store
+            .conn
+            .query_row("PRAGMA mmap_size", [], |r| r.get(0))
+            .unwrap(),
+        store.defer_auto_embed,
+        store.latest_tx_id().unwrap(),
+    )
+}
+
+fn ingest_root(store: &mut Store, turtle: &str) {
+    crate::rdf::ingest_assigned_rdf(
+        store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "1970-01-01T00:00:00Z",
+        None,
+        None,
+        0,
+    )
+    .unwrap();
+}
+
+/// 4qv option A: the legacy participant BORROWS the server's writer.
+#[test]
+fn borrowed_legacy_is_read_only_and_server_writer_keeps_its_write_path() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let (legacy, mut pin) = fixture(root, "legacy");
+    let (store, route) = fixture(root, "routed");
+    pin.graph = ROOT_GRAPH_IRI.into();
+    let catalog = Arc::new(
+        Catalog::new(
+            7,
+            &pin.store_id,
+            vec![route.clone()],
+            Budget {
+                max_owners: 1,
+                queued_per_owner: 1,
+                readers_per_owner: 1,
+                max_queued: 1,
+                max_connections: 3,
+            },
+        )
+        .unwrap()
+        .with_legacy_participant(pin)
+        .unwrap(),
+    );
+    let server = Arc::new(FairMutex::new(legacy));
+    let before = legacy_settings(&server.lock());
+    let borrowed = Owner::borrow_legacy(
+        catalog.clone(),
+        root,
+        server.clone(),
+        "policy-v1",
+        Some(crate::memory_budget::MemoryAllocation::for_connections(512, 7).unwrap()),
+    )
+    .unwrap();
+    assert!(borrowed.is_read_only());
+    assert!(
+        borrowed.placement.lease.is_none(),
+        "borrower claims no lease"
+    );
+    // Preparation leaves the server writer's configuration untouched: no
+    // memory ceiling, no embed deferral, no commit.
+    assert_eq!(legacy_settings(&server.lock()), before);
+    let routed = Owner::prepare(catalog.clone(), root, &route.graph, store, "policy-v1").unwrap();
+    assert!(!routed.is_read_only());
+
+    // Every owner write operation refuses on the borrower, before any write.
+    let refused = borrowed
+        .import_slice(&[], "snapshot:legacy", "1970-01-01T00:00:00Z")
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("read-only"), "{refused}");
+    assert!(
+        borrowed
+            .knot(
+                &request(&borrowed),
+                &json!({"graph": ROOT_GRAPH_IRI, "turtle": "<urn:x> <urn:y> <urn:z> ."}),
+            )
+            .is_err()
+    );
+    assert_eq!(legacy_settings(&server.lock()), before);
+
+    // The server writer still commits through its own unchanged path, and a
+    // strict cut over both participants observes that commit.
+    ingest_root(&mut server.lock(), "<urn:after> <urn:link> <urn:shared> .");
+    let committed = server.lock().latest_tx_id().unwrap();
+    assert!(committed > before.3);
+    let rows = Owner::read_strict(&[&routed, &borrowed], strict_deadline(), |reads| {
+        let legacy = reads
+            .iter()
+            .find(|read| read.route.graph == ROOT_GRAPH_IRI)
+            .unwrap();
+        assert_eq!(legacy.local_tx, committed);
+        Ok(crate::sparql::query(
+            legacy.store,
+            "SELECT ?s WHERE { ?s <urn:link> <urn:shared> }",
+        )?
+        .rows()
+        .len())
+    })
+    .unwrap();
+    assert_eq!(rows, 1);
+
+    // A busy server writer is a commit fence: the cut refuses, never waits.
+    {
+        let _held = server.lock();
+        assert!(Owner::read_strict(&[&routed, &borrowed], strict_deadline(), |_| Ok(())).is_err());
+    }
+    assert!(routed.writer.try_lock().is_some());
+
+    // Dropping the dataset leaves the writer usable; nothing was retained.
+    drop(borrowed);
+    assert_eq!(Arc::strong_count(&server), 1);
+    ingest_root(&mut server.lock(), "<urn:later> <urn:link> <urn:shared> .");
+}
+
+#[test]
+fn borrowed_legacy_refuses_mismatched_policy_placement_or_missing_pin() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let (legacy, mut pin) = fixture(root, "legacy");
+    let (_store, route) = fixture(root, "routed");
+    pin.graph = ROOT_GRAPH_IRI.into();
+    let budget = Budget {
+        max_owners: 1,
+        queued_per_owner: 1,
+        readers_per_owner: 1,
+        max_queued: 1,
+        max_connections: 3,
+    };
+    let server = Arc::new(FairMutex::new(legacy));
+    let without = Arc::new(Catalog::new(7, &pin.store_id, vec![route.clone()], budget).unwrap());
+    assert!(Owner::borrow_legacy(without, root, server.clone(), "policy-v1", None).is_err());
+    let catalog = Arc::new(
+        Catalog::new(7, &pin.store_id, vec![route], budget)
+            .unwrap()
+            .with_legacy_participant(pin)
+            .unwrap(),
+    );
+    assert!(
+        Owner::borrow_legacy(catalog.clone(), root, server.clone(), "policy-v2", None).is_err()
+    );
+    let elsewhere = tempfile::tempdir().unwrap();
+    assert!(
+        Owner::borrow_legacy(catalog, elsewhere.path(), server.clone(), "policy-v1", None).is_err()
+    );
+    assert_eq!(Arc::strong_count(&server), 1);
+}
