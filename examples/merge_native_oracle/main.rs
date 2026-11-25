@@ -1,4 +1,5 @@
-//! Scratch-only fork adapter. Input recipes contain no expected answers.
+//! Scratch-only fork-promote and share-reconnect adapters. Input recipes
+//! contain no expected answers.
 use quipu::store::forks::{ForkPromotion, ForkResolutions};
 use quipu::{Datum, Op, Store, Value};
 use serde::Deserialize;
@@ -7,6 +8,7 @@ use std::collections::BTreeMap;
 use std::io::{self, Read};
 
 mod observe;
+mod share_path;
 type Res<T> = Result<T, Box<dyn std::error::Error>>;
 const SUBJECT: &str = "urn:oracle:item";
 const PREDICATE: &str = "urn:oracle:value";
@@ -52,6 +54,10 @@ struct Request {
     decision_at: String,
     /// Explicit input values, not an expected result.
     resolution: Option<Vec<String>>,
+    /// Share path only: the operator's named decision for the one conflicting
+    /// row (`continue`, `ours`, `theirs`, `base`, `both`, `value`, `defer`).
+    #[serde(default)]
+    decision: Option<String>,
     probes: Vec<Probe>,
 }
 
@@ -84,9 +90,16 @@ fn write(store: &mut Store, step: &Step, graph: i64, e: i64, a: i64) -> Res<()> 
     Ok(())
 }
 
+fn shapes_ttl(max_count: Option<usize>) -> String {
+    let bound = max_count.map_or_else(String::new, |n| format!("; sh:maxCount {n}"));
+    format!(
+        "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:oracle:S> a sh:NodeShape ; sh:targetSubjectsOf <{PREDICATE}> ; sh:property [ sh:path <{PREDICATE}> {bound} ] ."
+    )
+}
+
 fn run(request: &Request) -> Res<serde_json::Value> {
     if request.schema != "quipu-native-input/v1"
-        || request.path != "fork-promote"
+        || !matches!(request.path.as_str(), "fork-promote" | "share")
         || request.case.is_empty()
         || request.case.len() > 128
         || request.ours.len() > 16
@@ -96,16 +109,17 @@ fn run(request: &Request) -> Res<serde_json::Value> {
     {
         return Err("unsupported or oversized native recipe".into());
     }
+    if request.path == "share" {
+        return share_path::run(request);
+    }
+    if request.decision.is_some() {
+        return Err("fork-promote recipe: decision is a share-path field".into());
+    }
     // The caller cannot supply a database path. This store is always private scratch.
     let scratch = tempfile::tempdir()?;
     let db = scratch.path().join("fixture.db");
     let mut store = Store::open(db.to_str().ok_or("scratch path encoding")?)?;
-    let bound = request
-        .max_count
-        .map_or_else(String::new, |n| format!("; sh:maxCount {n}"));
-    let shapes = format!(
-        "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:oracle:S> a sh:NodeShape ; sh:targetSubjectsOf <{PREDICATE}> ; sh:property [ sh:path <{PREDICATE}> {bound} ] ."
-    );
+    let shapes = shapes_ttl(request.max_count);
     store.load_shapes("oracle-input", &shapes, &request.base.at)?;
     let e = store.intern(SUBJECT)?;
     let a = store.intern(PREDICATE)?;
@@ -153,14 +167,38 @@ fn run(request: &Request) -> Res<serde_json::Value> {
         Err(error) => json!({"outcome":"error","error":error.to_string()}),
     };
     let after = store.latest_tx_id()?;
-    let mut observation =
-        observe::capture(&store, &db, e, a, before, after, base_tx, &request.probes)?;
+    let mut observation = observe::capture(
+        &store,
+        &db,
+        e,
+        a,
+        before,
+        after,
+        base_tx,
+        &request.probes,
+        observe::Writer::Fork,
+    )?;
     // Clean-slot classification is not exposed by this path; do not invent it.
-    let mut report = serde_json::Map::new();
+    observation["report"] = report(&conflicts, &native, request.resolution.as_ref());
+    let capture = json!({"schema":"quipu-native-capture/v1","case":request.case,
+        "path":"fork-promote","native":native,"conflicts":conflicts,
+        "before_tx":before,"after_tx":after,"capture":observation});
+    drop(store);
+    scratch.close()?;
+    Ok(capture)
+}
+
+/// Report fields projected from the native conflict record only.
+fn report(
+    conflicts: &[quipu::merge3::DecisionRecord],
+    native: &serde_json::Value,
+    resolution: Option<&Vec<String>>,
+) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
     if conflicts.len() == 1 {
         use quipu::share_merge_decisions_view::{ConflictKind, kind};
         let record = &conflicts[0];
-        report.insert(
+        out.insert(
             "kind".into(),
             json!(match kind(record) {
                 ConflictKind::Convergent => "convergent",
@@ -170,8 +208,8 @@ fn run(request: &Request) -> Res<serde_json::Value> {
             }),
         );
         if native["outcome"] == "promoted" {
-            report.insert("held".into(), json!(0));
-            if let Some(values) = &request.resolution {
+            out.insert("held".into(), json!(0));
+            if let Some(values) = resolution {
                 let chosen: std::collections::BTreeSet<_> = values
                     .iter()
                     .map(|v| oxrdf::Literal::new_simple_literal(v.clone()).to_string())
@@ -191,19 +229,13 @@ fn run(request: &Request) -> Res<serde_json::Value> {
                 } else {
                     "value"
                 };
-                report.insert("decision".into(), json!(decision));
+                out.insert("decision".into(), json!(decision));
             }
         } else if native["outcome"] == "conflicts" {
-            report.insert("held".into(), json!(conflicts.len()));
+            out.insert("held".into(), json!(conflicts.len()));
         }
     }
-    observation["report"] = serde_json::Value::Object(report);
-    let capture = json!({"schema":"quipu-native-capture/v1","case":request.case,
-        "path":"fork-promote","native":native,"conflicts":conflicts,
-        "before_tx":before,"after_tx":after,"capture":observation});
-    drop(store);
-    scratch.close()?;
-    Ok(capture)
+    serde_json::Value::Object(out)
 }
 
 fn main() -> Res<()> {
