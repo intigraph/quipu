@@ -4826,7 +4826,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.19.4"
+version = "0.19.5"
 dependencies = [
  "arrow-array",
  "arrow-schema",

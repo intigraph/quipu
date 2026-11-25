@@ -7,9 +7,21 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.19.5] - 2026-11-25
+
 ### Added
 
-- Atomic graph-set owners and strict composed reads ([db843e1](https://github.com/intigraph/quipu/commit/db843e1ce3972e4564d595b1137941cac9db5ce6)).
+- *(store)* Add atomic graph-set owners and strict composed reads (#1298)([3f63fc9](https://github.com/scbrown/quipu/commit/3f63fc9ce88f5bed699910d7df8a9ff61cb267af))
+- *(server)* Add bounded composed pilot query transport (#1299)([9f09e45](https://github.com/scbrown/quipu/commit/9f09e4542fe277bae2b268f414f2b5dbbf331e29))
+- *(store)* Borrow the legacy writer as a read-only pilot participant (#1300)([2ddd467](https://github.com/scbrown/quipu/commit/2ddd467073168285ec9d2186e0e7e242f3d11143))
+- *(server)* StoreHandle is the pilot's borrowed legacy writer fence (#1301)([614f729](https://github.com/scbrown/quipu/commit/614f729cf9823969a154b45cfcdf66d698329c72))
+- *(server)* Default-OFF [quipu.ingest_pilot] startup mounts the per-graph owner (#1302)([57a2839](https://github.com/scbrown/quipu/commit/57a28398001794fe78d837c96c7ff230f7b4d3c7))
+- *(bench)* Share-path adapter and runner for the use-case oracle (#1305)([c7f4aec](https://github.com/scbrown/quipu/commit/c7f4aec546aea688f74835541742070c035401d5))
+- *(bench)* Judge Arm A against declared intent, not the shapes (#1306)([7ab9aeb](https://github.com/scbrown/quipu/commit/7ab9aebf7e9123cf7f4e373a08ffb13021a5f6f7))
+
+### Fixed
+
+- *(bench)* Let the replay and shape_e harnesses run on current main (#1304)([49d8b1c](https://github.com/scbrown/quipu/commit/49d8b1ce225d971895c34ed1b624911b214f0bf6))
 
 ## [0.19.4] - 2026-11-24
 
