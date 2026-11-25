@@ -76,7 +76,8 @@ pub(crate) type SlotMerge<'a, S, V> = (Slots<S, V>, Vec<SlotConflict<'a, S, V>>)
 
 /// Three-way merge `ours` and `theirs` against `base`, slot by slot.
 /// `bound(slot)` is the `sh:maxCount` that applies to the slot, if any; it is
-/// only consulted for slots both sides changed differently. Returns the merged
+/// consulted for slots both sides changed differently, and for a slot only
+/// `theirs` changed by adding values (R4, aegis-mxd). Returns the merged
 /// slots (conflicting slots held at base) and the conflicts in slot order.
 pub(crate) fn merge_slots<'a, S: Ord + Clone, V: Ord + Clone>(
     base: &'a Slots<S, V>,
@@ -99,8 +100,30 @@ pub(crate) fn merge_slots<'a, S: Ord + Clone, V: Ord + Clone>(
         // Standard three-way rule: an unchanged side defers to the other, and
         // agreeing sides need no merge. A pre-existing value set is never a
         // conflict just because it is over a bound neither side touched.
-        let chosen = if ov == bv || ov == tv {
+        //
+        // R4 (aegis-mxd): an incoming one-side change that ADDS values and
+        // leaves the slot over its bound is a conflict, held at base like any
+        // other. Taking it would write a set the shape refuses (the fork write
+        // gate refused it, and the share merge refused the whole merge). A
+        // change that only removes values cannot make the slot worse, so it
+        // still applies. `ours` is the receiving side (ROOT), which the merge
+        // never writes for an ours-only change, so only `theirs` is checked.
+        let chosen = if ov == tv {
             tv.clone()
+        } else if ov == bv {
+            let bound = if tv.is_subset(bv) { None } else { bound(slot)? };
+            if bound.is_some_and(|n| tv.len() > n) {
+                conflicts.push(SlotConflict {
+                    slot,
+                    max_count: bound.unwrap_or(1),
+                    base: bv,
+                    ours: ov,
+                    theirs: tv,
+                });
+                bv.clone()
+            } else {
+                tv.clone()
+            }
         } else if tv == bv {
             ov.clone()
         } else {

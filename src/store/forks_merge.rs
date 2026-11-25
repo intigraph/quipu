@@ -13,7 +13,8 @@
 //!
 //! The slot semantics are the share merge's, via
 //! [`crate::merge3::merge_slots`]: a slot only one side changed takes that
-//! side, and only a slot both sides changed differently can conflict, on an
+//! side, unless the fork's additions leave it over its bound (R4, aegis-mxd);
+//! otherwise only a slot both sides changed differently can conflict, on an
 //! `sh:maxCount` bound that targets its subject ([`crate::merge3::ShapeBounds`];
 //! emit-mode shapes do not gate). Only the term representation differs
 //! (dictionary ids and `term_key` bytes rather than RDF terms).

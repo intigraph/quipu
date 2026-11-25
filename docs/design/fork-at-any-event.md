@@ -79,9 +79,11 @@ Ours is ROOT now and theirs is the fork now; the slot operator is the share
 merge's (`src/merge3.rs`, described in `docs/paper-merge/`). ROOT writes made
 after the base therefore survive promotion. (Before this, promote applied the
 two-way diff fork-vs-current-ROOT, which silently retracted them; TerminusDB
-gap analysis, gap 1.) A slot only one side changed takes that side; only a slot
-both sides changed differently can conflict, and only on a `sh:maxCount`
-bound that applies to its subject: the bound is scoped to the shape's
+gap analysis, gap 1.) A slot only one side changed takes that side, unless
+the fork added values and the result exceeds the slot's `sh:maxCount` (R4 of
+`merge-behaviour.md`); otherwise only a slot both sides changed differently can
+conflict. Either way a conflict needs a `sh:maxCount` bound that applies to its
+subject: the bound is scoped to the shape's
 targets (`sh:targetClass` with `rdfs:subClassOf`, `sh:targetNode`,
 `sh:targetSubjectsOf`, `sh:targetObjectsOf`, implicit class targets), a
 property shape with no targets anywhere applies to every slot with its path,

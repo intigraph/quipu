@@ -6,7 +6,9 @@ const SHAPES: &str = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 [] sh:path <https://example.org/one> ; sh:maxCount 1 .
 [] sh:path <https://example.org/many> .
+[] sh:path <https://example.org/few> ; sh:maxCount 2 .
 "#;
+const P_FEW: &str = "https://example.org/few";
 
 fn graph(lines: &[(&str, &str)]) -> Graph {
     let text = lines
@@ -170,4 +172,26 @@ fn clean_reconnect_writes_one_tx_with_two_provenance_parents() {
     assert_eq!(repeated.outcome, "already-applied");
     assert_eq!(repeated.tx_id, result.tx_id);
     assert_eq!(local.latest_tx_id().unwrap(), before);
+}
+
+// aegis-mxd (R4): a share that only adds values, leaving a bounded slot over
+// its bound, is a decision record held at base, not a clean merge the SHACL
+// gate later refuses whole.
+#[test]
+fn one_side_addition_over_the_bound_is_a_decision() {
+    let base = graph(&[(P_FEW, "\"a\"")]);
+    let ours = graph(&[(P_FEW, "\"a\"")]);
+    let theirs = graph(&[(P_FEW, "\"a\""), (P_FEW, "\"b\""), (P_FEW, "\"c\"")]);
+    let (merged, conflicts) = merge_graphs(&base, &ours, &theirs, SHAPES).unwrap();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].max_count, 2);
+    assert_eq!(values(&merged, P_FEW), BTreeSet::from(["\"a\"".into()]));
+    // The mirror image (ROOT added them) is ROOT's own state: no conflict.
+    let (_, ours_side) = merge_graphs(&base, &theirs, &ours, SHAPES).unwrap();
+    assert!(ours_side.is_empty());
+    // Within the bound, or unbounded, the one-side addition applies.
+    let two = graph(&[(P_FEW, "\"a\""), (P_FEW, "\"b\"")]);
+    let (merged, conflicts) = merge_graphs(&base, &ours, &two, SHAPES).unwrap();
+    assert!(conflicts.is_empty());
+    assert_eq!(values(&merged, P_FEW).len(), 2);
 }

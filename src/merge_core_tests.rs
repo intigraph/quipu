@@ -392,3 +392,74 @@ fn an_incoming_close_equal_to_root_start_must_preserve_root_history() {
         }
     }
 }
+
+// aegis-mxd (R4): karb.4 Arm A seed 1. Base holds two tags, ROOT left them
+// alone, and the incoming side added three under `sh:maxCount 4`. Before this
+// fix the planner took it as a clean `theirs` change and the write was refused
+// downstream; it is a `maxcount-exceeded` conflict, held until decided.
+#[test]
+fn r4_one_side_addition_over_the_bound_is_held() {
+    let s = slot(
+        &["t3", "t6"],
+        &[("t3", T0), ("t6", T0)],
+        &[
+            ("t3", T0),
+            ("t6", T0),
+            ("ttag152", TT),
+            ("ttag184", TT),
+            ("ttag52", TT),
+        ],
+        Card::Many(Some(4)),
+    );
+    let p = plan(&s, None);
+    assert_eq!(p.change, Change::MaxcountExceeded);
+    assert!(p.held && p.receive.is_empty() && p.decide.is_empty());
+
+    // Choosing theirs would still exceed the bound: refused, nothing planned.
+    assert!(plan_slot(&s, Some(&Decision::Theirs), TD).is_err());
+    // Keeping ours writes no live change; the incoming values are receipts.
+    let ours = plan(&s, Some(Decision::Ours));
+    assert!(ours.decide.is_empty());
+    assert_eq!(ours.receive.len(), 3);
+    // A chosen set within the bound applies at Td.
+    let chosen = plan(&s, Some(Decision::Values(set(&["t3", "t6", "ttag52"]))));
+    assert_eq!(chosen.decide, vec![assert_("ttag52", TD)]);
+}
+
+#[test]
+fn r4_one_side_addition_within_the_bound_stays_clean() {
+    let s = slot(
+        &["t3"],
+        &[("t3", T0)],
+        &[("t3", T0), ("t4", TT)],
+        Card::Many(Some(2)),
+    );
+    let p = plan(&s, None);
+    assert_eq!(p.change, Change::Theirs);
+    assert_eq!(p.receive, vec![assert_("t4", TT)]);
+}
+
+#[test]
+fn r4_one_side_removal_from_an_over_bound_slot_still_applies() {
+    // Base is already over the bound (legacy data). Removing values cannot make
+    // it worse, so the change applies even though the result is still over.
+    let s = slot(
+        &["a", "b", "c", "d"],
+        &[("a", T0), ("b", T0), ("c", T0), ("d", T0)],
+        &[("a", T0), ("b", T0), ("c", T0)],
+        Card::Many(Some(2)),
+    );
+    let p = plan(&s, None);
+    assert_eq!(p.change, Change::Theirs);
+    assert_eq!(p.receive, vec![close("d", TD)]);
+}
+
+#[test]
+fn r4_one_side_replacement_on_a_functional_slot_stays_clean() {
+    // A single replacement is within `card: one`; only an addition that leaves
+    // two values is refused.
+    let p = plan(&slot(&["a"], &[("a", T0)], &[("c", TT)], Card::ONE), None);
+    assert_eq!(p.change, Change::Theirs);
+    let two = slot(&["a"], &[("a", T0)], &[("a", T0), ("c", TT)], Card::ONE);
+    assert_eq!(plan(&two, None).change, Change::MaxcountExceeded);
+}
