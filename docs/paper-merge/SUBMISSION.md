@@ -27,6 +27,8 @@ Revised 2026-11-11 after an independent referee read: section 3 now states the e
 
 Revised 2026-11-11 (second change): the artifact address in the title footnote and in the comments field below is now `github.com/intigraph/quipu`, the repository's current home (the old address redirects). No other text changed; still 17 pages and the abstract is unchanged.
 
+Revised 2026-11-25 after a final read: the three regenerate commands now print their double hyphens (the typewriter font had been joining `--` into a single dash, so a copied command failed), Table 3 and three paragraphs no longer run into the margin, and the bibliography shows the arXiv identifiers of the two preprints, a link for TerminusDB, and the SHACL year once. No number, claim or abstract text changed; still 17 pages.
+
 ---
 
 ## 1. Public-history decision — resolved 2026-09-24

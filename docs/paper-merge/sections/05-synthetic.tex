@@ -43,10 +43,10 @@ or spurious: the change is waiting for a person, not destroyed.
 \paragraph{Results.} Table~\ref{tab:armA} aggregates five seeds
 ($1, 7, 42, 99, 2026$) at $200$ entities, $200$ edits per side ($400$ in total)
 and overlap $0.5$ --- the harness defaults, so the command below reproduces it
-unchanged. Regenerate with \texttt{just bench merge --seed <N>}; the outputs of those five
+unchanged. Regenerate with \texttt{just bench merge -{}-seed <N>}; the outputs of those five
 runs are committed under \texttt{benchmark/mergebench/results/}, and
 Tables~\ref{tab:armAseed} and~\ref{tab:armAclass} are read from them. Instrument controls
-with \texttt{just bench merge --selftest} ($7$ properties, non-zero exit on any
+with \texttt{just bench merge -{}-selftest} ($7$ properties, non-zero exit on any
 failure).
 
 \begin{table}[t]
@@ -98,9 +98,10 @@ alias-mint conflict at every seed.}
 
 \begin{table}[t]
 \centering\small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lrrrr}
 \toprule
-arm & alias-mint & cardinality overflow & delete/modify & functional divergence \\
+arm & alias-mint & card.\ overflow & delete/modify & functional div. \\
 \midrule
 \texttt{git-turtle-reserialized} & 0/21 & 8/10 & 9/10 & 13/13 \\
 \texttt{git-turtle-stable}       & 0/21 & 0/10 & 10/10 & 13/13 \\
