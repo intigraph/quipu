@@ -1,6 +1,7 @@
-//! HTTP adapter for one prepared owner, intentionally not mounted by main.
-//! Production publication still requires composed-read/mutation qualification.
-//! The mounting initializer must retain the ordinary authentication middleware.
+//! HTTP adapter for one prepared owner. Main mounts it only when the default-OFF
+//! `[quipu.ingest_pilot]` startup admits an owner (aegis-4qv), inside the
+//! ordinary authentication middleware. Its paths are distinct from legacy
+//! `/knot`, so a request never selects the other writer by accident.
 use super::{Pin, PreparedOwner, refuse};
 use crate::base::AppError;
 use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
@@ -36,17 +37,17 @@ fn pin(headers: &HeaderMap) -> Result<Pin, AppError> {
     })
 }
 
-/// Source-only adapter: no environment switch, listener or fallback is installed.
+/// No listener or fallback is installed here; the caller mounts this router.
 /// The same Arc serves effect/status/seal; none acquire legacy admission.
 pub(crate) fn routes(owner: Arc<PreparedOwner>) -> Router {
     Router::new()
-        .route("/knot", post(knot))
-        .route("/knot/status", post(status))
-        .route("/knot/seal", post(seal))
+        .route("/owner/knot", post(owner_knot))
+        .route("/owner/knot/status", post(owner_status))
+        .route("/owner/knot/seal", post(owner_seal))
         .with_state(owner)
 }
 
-async fn knot(
+async fn owner_knot(
     State(owner): State<Arc<PreparedOwner>>,
     headers: HeaderMap,
     Json(input): Json<Value>,
@@ -67,7 +68,7 @@ fn binding(input: &Value) -> Result<(Value, String), AppError> {
     Ok((request.clone(), id.to_owned()))
 }
 
-async fn status(
+async fn owner_status(
     State(owner): State<Arc<PreparedOwner>>,
     headers: HeaderMap,
     Json(input): Json<Value>,
@@ -77,7 +78,7 @@ async fn status(
     owner.status(pin, request, id).await.map(Json)
 }
 
-async fn seal(
+async fn owner_seal(
     State(owner): State<Arc<PreparedOwner>>,
     headers: HeaderMap,
     Json(input): Json<Value>,

@@ -54,7 +54,7 @@ async fn enrolled_http_query_rechecks_credentials_grants_and_retains_response_bu
     let response = crate::auth::run_identified(
         Some(identity("named_bearer")),
         dataset.routes().oneshot(request(
-            "/knot",
+            "/owner/knot",
             &json!({
                 "graph": GRAPH, "turtle": "<urn:shared> <urn:owner> \"owner\" ."
             }),

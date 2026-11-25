@@ -9,6 +9,23 @@ use serde_json::Value;
 #[path = "owner_knot.rs"]
 pub(crate) mod owner;
 
+/// aegis-4qv: mount the default-OFF ingest pilot, or exit if it is enabled and
+/// refused. Builds without the witness feature mount nothing; a set pilot is
+/// then reported by `QuipuConfig::unwired_warnings`. Call before auth layering.
+pub(crate) fn mount_pilot(
+    app: axum::Router<SharedStore>,
+    config: &quipu::QuipuConfig,
+    legacy: &SharedStore,
+) -> axum::Router<SharedStore> {
+    #[cfg(all(unix, feature = "ownership-witness-s3"))]
+    return owner::startup::mount(app, config, legacy);
+    #[cfg(not(all(unix, feature = "ownership-witness-s3")))]
+    {
+        let _ = (config.ingest_pilot.as_ref(), legacy);
+        app
+    }
+}
+
 pub(crate) const CONTRACT: &str = "quipu.knot-completion/v2";
 const CONTRACT_HEADER: &str = "x-quipu-completion-contract";
 const ID_HEADER: &str = "x-quipu-write-id";

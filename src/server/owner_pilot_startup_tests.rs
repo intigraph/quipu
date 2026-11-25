@@ -263,7 +263,7 @@ async fn combined_factory_http_and_composed_snapshot_keep_both_graphs() {
     let app = dataset.routes();
     let response = crate::auth::run_identified(
         Some(identity("named_bearer")),
-        app.clone().oneshot(request("/knot", &input)),
+        app.clone().oneshot(request("/owner/knot", &input)),
     )
     .await
     .unwrap();
@@ -271,7 +271,7 @@ async fn combined_factory_http_and_composed_snapshot_keep_both_graphs() {
     let response = crate::auth::run_identified(
         Some(identity("named_bearer")),
         app.oneshot(request(
-            "/knot/status",
+            "/owner/knot/status",
             &json!({"write_id":ID,"request":input}),
         )),
     )
@@ -526,7 +526,7 @@ fn enrolled_startup_composes_authorized_root_owner_join_with_one_memory_budget()
     let response = runtime
         .block_on(crate::auth::run_identified(
             Some(identity("named_bearer")),
-            dataset.routes().oneshot(request("/knot", &input)),
+            dataset.routes().oneshot(request("/owner/knot", &input)),
         ))
         .unwrap();
     assert!(response.status().is_success());

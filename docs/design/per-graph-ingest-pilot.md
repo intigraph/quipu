@@ -466,3 +466,29 @@ composed authorization group passes 14 tests. Full witness-feature Clippy and
 all `just check` gates pass. These are source qualification controls. They do
 not certify general evaluator parity, RSS sizing, production mutation fencing
 or physical cutover. No production query route is added. Startup remains OFF.
+
+### Production startup wiring
+
+`[quipu.ingest_pilot]` is the default-OFF startup switch (see the
+configuration guide). Unset, or `enabled = false`, returns the ordinary router
+without reading a file or resolving a credential. Enabled startup loads the
+operator-written JSON catalog (`Catalog::load_file`: bounded, regular, not
+group/other-writable, unknown fields refused, legacy participant mandatory).
+It then calls `PreparedDataset::initialize` with the served `StoreHandle` as
+the borrowed legacy fence. The owner store gets the same identity, search,
+label, import, SHACL and governance policy as the legacy writer. Any refusal
+exits the process; there is no legacy fallback.
+
+The admitted owner's adapter is merged before the ordinary authentication and
+scoped-read layers. Its paths are now `/owner/knot`, `/owner/knot/status` and
+`/owner/knot/seal`, distinct from legacy `/knot`, so a request cannot reach the
+other writer by path. They are classified in the write/read endpoint lists and
+the scoped route census like every other route. The composed `/query` read
+transport (`routes_with_reads`) is still NOT mounted: it would share legacy
+`/query` and needs its own read-policy configuration. Builds without
+`ownership-witness-s3` mount nothing, and a set pilot is reported by
+`unwired_warnings()`.
+
+This is source wiring only. Enabling it on a deployment still requires an
+enrolled owner file, the legacy routed-graph fence, a feature-enabled build and
+the pilot acceptance checks above.
