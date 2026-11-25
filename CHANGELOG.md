@@ -23,10 +23,6 @@ are generated from the versioned release records.
 
 - *(bench)* Let the replay and shape_e harnesses run on current main (#1304)([49d8b1c](https://github.com/scbrown/quipu/commit/49d8b1ce225d971895c34ed1b624911b214f0bf6))
 
-### Added
-
-- Atomic graph-set owners and strict composed reads ([db843e1](https://github.com/intigraph/quipu/commit/db843e1ce3972e4564d595b1137941cac9db5ce6)).
-
 ## [0.19.4] - 2026-11-24
 
 ### Added
