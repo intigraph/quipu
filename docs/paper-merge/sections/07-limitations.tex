@@ -11,9 +11,10 @@ other SHACL constraints, lists and blank-node structures, or ontologies that
 diverge beyond the Arm E fixtures. Every precision and true-positive figure in
 \S\ref{sec:synthetic} and \S\ref{sec:replay} is relative to the shapes that also
 define the conflicts, so none of them is evidence of shape-independent
-correctness. The follow-up is an oracle defined by use cases: expected graph
-outcomes stated per merge case, with each slot's intended cardinality declared
-by the fixture rather than read from the shapes.
+correctness. The only such evidence is Arm F (\S\ref{sec:oracle}): $24$
+single-slot synthetic cases, written by the same project, with list-valued
+slots and repeated merges not yet covered. It does not re-judge the benchmark
+or the replay.
 
 \paragraph{Alias divergence is invisible, and that is a property of the medium.}
 When two writers mint different names for one entity, the graphs disagree about

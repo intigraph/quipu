@@ -14,7 +14,8 @@ nearest neighbor, schema-derived conflict semantics do not detect more: they
 detect the same $33$ triple-visible conflicts across five seeds while asking
 $33$ questions rather than $845$, with no triples lost, none fabricated and no
 constraint violations admitted against the same shapes. That is less human
-attention for cardinality conflicts, not shape-independent correctness. Replaying scenarios built from $939$ recorded duplicate-value incidents and
+attention for cardinality conflicts, not general merge correctness; an oracle that reads no shapes agrees with
+the shipped operator on the facts and history of every reachable case among $24$ single-slot ones. Replaying scenarios built from $939$ recorded duplicate-value incidents and
 $93$ of $105$ recorded repairs ($12$ chained pairs excluded) against the shipped
 operator reproduces that benefit on incidents nobody generated for the purpose --- and reproduces the blind spot too:
 alias divergence is invisible to triple-level merge, $0$ of $93$, and no schema
@@ -26,8 +27,9 @@ tested fixtures, but datatype incompatibility still needs validation and a
 resolution policy. Schema-first orchestration is therefore not a complete
 conflict-resolution rule on its own.
 
-Three directions follow. An oracle defined by use cases rather than by the
-shapes would judge the operator independently of the definition it implements.
+Three directions follow. The use-case oracle covers single slots; extending it
+to lists, repeated merges and the benchmark's own decisions would judge the
+operator independently of the definition it implements at scale.
 Partial application would let a merge land its
 uncontended slots and hold back only the contended ones, removing the cost
 noted in \S\ref{sec:limits}. And the alias class, which the recorded corpus shows is real

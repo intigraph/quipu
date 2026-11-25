@@ -31,6 +31,8 @@ Revised 2026-11-25 after a final read: the three regenerate commands now print t
 
 ---
 
+Revised 2026-11-25 (second change), after the benchmarks were re-run on main `57a28398`: every published figure in Arms A, B, C and E reproduces (the replay and schema harnesses needed two small adaptations to run on main). Added Arm F, a use-case oracle that reads no shapes, run against the shipped share-merge and fork-promote paths: facts and history agree on every reachable case, with four trace differences reported as measured. Section 5 gains a paragraph on one slot where the shipped planner differs from the reference arm, and a table re-judging Arm A under deliberately wrong shapes. The abstract, limitations and conclusion now state this bounded evidence in place of "follow-up work". The rebuilt PDF is 19 pages; its abstract extracts to 1,905 characters including spaces. The abstract below was updated to match. The scrub gate has not been re-run on this revision.
+
 ## 1. Public-history decision — resolved 2026-09-24
 
 `8b369b2:benchmark/replay/corpus/corpus.json` is on the public GitHub remote and
@@ -81,7 +83,7 @@ about distribution.
 
 **Comments field** — suggested:
 
-    17 pages. Artifact, benchmark and replay corpus at
+    19 pages. Artifact, benchmark and replay corpus at
     https://github.com/intigraph/quipu ; every table names the command that
     regenerates it.
 
@@ -92,7 +94,7 @@ one-way door on arXiv: the license cannot be loosened after announcement.
 **Abstract** (plain text for the web form — no LaTeX, transcribed from the built
 PDF):
 
-Merging RDF serializations creates ordering conflicts and misses semantic ones. We describe and evaluate a three-way merge in which the schema defines a conflict: set algebra combines canonical triples, and a slot is contended only where a SHACL shape bounds its cardinality and both sides’ changes cannot stand within that bound. Unbounded predicates union; contended slots go to a person. The same shapes graph validates the result. We do not claim the first three-way merge for RDF. Our contribution is an implementation in a production multi-agent store and an evaluation against a reimplementation of Quit Store’s Context Merge overlap rule, which it extends rather than replaces, and six other strategies. Across five synthetic seeds, the shape-aware operator raised 33 conflicts, all true positives as judged by the same shapes that define them, with no triples lost or fabricated and no SHACL violations admitted. The context-overlap baseline, counted per slot, detected the same 33 conflicts but asked 845 questions. A replay built from recorded production incidents covers 105 human alias repairs (93 after excluding 12 chained pairs) and 939 duplicate-value incidents. It reproduces a triple-level limit: different names for one entity remain invisible (0 of 93 alias repairs detected, matching 0 of 21 synthetic cases), alongside the benefit on recorded duplicate-value incidents. A further synthetic study tests evolving shape contracts. Merging shape declarations first handles the tested cardinality changes, while datatype evolution exposes a detector blind spot caught by post-merge validation. These results qualify schema-first orchestration rather than establish a universal conflict-resolution rule. The supported claim is fewer human decisions with nothing silently lost, for cardinality conflicts in one deployment; it is not shape-independent merge correctness.
+Merging RDF serializations creates ordering conflicts and misses semantic ones. We describe and evaluate a three-way merge in which the schema defines a conflict: set algebra combines canonical triples, and a slot is contended only where a SHACL shape bounds its cardinality and both sides’ changes cannot stand within that bound. Unbounded predicates union; contended slots go to a person. The same shapes graph validates the result. We do not claim the first three-way merge for RDF. Our contribution is an implementation in a production multi-agent store and an evaluation against a reimplementation of Quit Store’s Context Merge overlap rule, which it extends rather than replaces, and six other strategies. Across five synthetic seeds, the shape-aware operator raised 33 conflicts, all true positives as judged by the same shapes that define them, with no triples lost or fabricated and no SHACL violations admitted. The context-overlap baseline, counted per slot, detected the same 33 conflicts but asked 845 questions. A replay built from recorded production incidents covers 105 human alias repairs (93 after excluding 12 chained pairs) and 939 duplicate-value incidents. It reproduces a triple-level limit: different names for one entity remain invisible (0 of 93 alias repairs detected, matching 0 of 21 synthetic cases). In a study of evolving shape contracts, merging shape declarations first handles the tested cardinality changes, while datatype evolution exposes a detector blind spot caught by post-merge validation. An oracle that reads no shapes agrees with the shipped operator on the facts and history of all 23 reachable single-slot cases. Under wrong shapes, a missing bound loses data silently and a spurious one only adds questions. The supported claim is fewer human decisions with nothing silently lost, for cardinality conflicts in one deployment, not general merge correctness.
 
 ---
 
@@ -121,7 +123,7 @@ the identifier and corpus-reversibility controls.
 | `arxiv-scrub-gate.sh` | **PASS**, exit 0 — whole declared artifact and every positive control |
 | bibliography | All entries cited; 0 unresolved citations |
 | BibTeX warnings | **0** |
-| build | tectonic, 17 pages; abstract checked against source/PDF |
+| build | tectonic, 19 pages; abstract checked against source/PDF |
 | Arm E | Real library/schema fixtures; counts and tables regenerate |
 | bead ids in the artifact | **0** — the one advisory (`examples/replay/main.rs`) is gone |
 | policy projection | the gate was run against the config that the pre-push guard's own selftest **passes**; see the note below |

@@ -172,5 +172,64 @@ visible. We handle it in two ways: by reporting per-class results
 (Table~\ref{tab:armAclass}) so a reader can see which rows are definitional, and
 by confining this arm's contribution to the \emph{cost of the alternatives}. The replay arm (\S\ref{sec:replay}) replaces the generated
 corpus with recorded divergence and the harness with the shipped operator, but
-its positive results are scored against the same shapes. It therefore does not
-supply shape-independent correctness evidence either (\S\ref{sec:limits}).
+its positive results are scored against the same shapes. The evidence that does
+not pass through the shapes is a separate, smaller arm (\S\ref{sec:oracle}).
+
+\paragraph{The shipped planner differs from the reference arm on one slot.}
+\op in this benchmark is a reference implementation. The harness can also call
+the library's own slot planner (\texttt{unified-core}, built with
+\texttt{-{}-features shacl,merge-benchmark}). On four seeds the two are
+identical on every metric. On seed $1$ they differ on one slot, bounded at four
+values, where one side is unchanged and the other alone holds five. The
+reference arm flags a conflict, as the design rule requires. The planner
+classifies the change as one-sided and offers no decision, so in the benchmark,
+which calls the planner without the store's write gate, it scores $6$ true
+positives where the reference scores $7$ and admits one violation. Through the
+shipped paths the five values are never written: a store with the shape loaded
+refuses the write that would create that side, and when we built such a bundle
+by tightening the bound after the write, \texttt{share\_merge} refused the
+whole merge and wrote nothing. The defect is therefore a missing decision, an
+all-or-nothing refusal where the rule calls for a question, and not a silent
+violation. The figures in Tables~\ref{tab:armA} and~\ref{tab:armAclass} are the
+reference arm's.
+
+\paragraph{Wrong shapes: what the circularity hides.} A second judge derives the truth from the three graphs
+and a separate declaration of each predicate's intended cardinality, and never
+reads the shapes. With the shapes as published, its truth equals the
+generator's on every seed and every count in Table~\ref{tab:armA} reproduces.
+That agreement is by construction, because the shapes state the intent, and we
+do not count it as new evidence. The measurement is what happens when the
+operator is told shapes that are wrong while the truth stays fixed
+(Table~\ref{tab:wrongshapes}). A missing bound costs recall and admits
+violations of the intended cardinality into the merged graph, while precision
+stays at $1.000$: the operator looks perfect on what it flags and is silent on
+what it was never told. A bound that is too tight or should not exist costs
+precision, as extra questions, and corrupts nothing. The shipped planner
+degrades far less under such bounds than the reference arm, $14$ false
+positives against $278$, because it raises a conflict only when both sides
+changed the slot. \ctx reads no shapes and is unchanged in every row, at $812$
+false positives. Shape quality therefore transfers directly into merge quality,
+and asymmetrically.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+ & \multicolumn{3}{c}{\op} & \multicolumn{3}{c}{\texttt{unified-core}} \\
+operator's shapes & P & R & viol. & P & R & viol. \\
+\midrule
+as published & 1.000 & 0.611 & 0  & 1.000 & 0.593 & 1 \\
+\texttt{tag} unbounded & 1.000 & 0.426 & 10 & 1.000 & 0.426 & 10 \\
+\texttt{label}, \texttt{status} unbounded & 1.000 & 0.389 & 8 & 1.000 & 0.370 & 9 \\
+\texttt{tag} at most 2 & 0.106 & 0.611 & 0  & 0.696 & 0.593 & 1 \\
+\texttt{note} at most 1 & 0.194 & 0.611 & 0  & 0.842 & 0.593 & 1 \\
+\bottomrule
+\end{tabular}
+\caption{Arm A re-judged without reading the shapes, pooled over five seeds
+($54$ conflicts, $21$ of them alias-mint, which caps recall at $0.611$).
+\emph{viol.} counts intended-cardinality violations left in the merged graph. The judge is
+\texttt{benchmark/mergebench/judge.py}.}
+\label{tab:wrongshapes}
+\end{table}
