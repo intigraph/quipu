@@ -85,6 +85,21 @@ pub(crate) struct StoreHandle {
     pub(crate) process_writer_lock: Option<quipu::writer_lock::WriterLock>,
 }
 
+/// aegis-4qv: the ingest pilot's legacy read participant BORROWS this writer.
+/// It only fences commits for a strict cut (never waiting) and reads identity
+/// once at preparation; it never writes through it and claims no lease. Every
+/// existing call site keeps `lock()` with its exact meaning.
+#[cfg(unix)]
+impl quipu::store::graph_owner::LegacyWriterFence for StoreHandle {
+    fn try_writer(&self) -> Option<parking_lot::FairMutexGuard<'_, quipu::Store>> {
+        self.writer.try_lock()
+    }
+
+    fn writer(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        self.writer.lock()
+    }
+}
+
 /// A fixed set of read-only connections, each owned exclusively while in use.
 ///
 /// `rusqlite::Connection` is `Send` but **not** `Sync`, so this cannot be an
