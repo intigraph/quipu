@@ -50,6 +50,10 @@ pub struct Request {
     pub tx: Option<i64>,
     /// Source lineage the caller expects; a mismatch is a refusal.
     pub expected_store_id: String,
+    /// Where the cut is bound. Absent means outward: carried declarations
+    /// lose `host` and `session`. `internal` has to be asked for by name.
+    #[serde(default)]
+    pub destination: crate::share_scrub::ShareDestination,
 }
 
 fn strict_tx<'de, D: serde::Deserializer<'de>>(
@@ -370,6 +374,17 @@ pub(crate) fn cut_with_control(
         let mut tx_meta = store
             .conn
             .prepare("SELECT timestamp, actor, source FROM main.transactions WHERE id = ?1")?;
+        // Carried declarations (write-provenance-persistence §5.2), read once
+        // per transaction like its metadata and scrubbed for the destination
+        // before they are serialized. A frozen pack holds no declarations, so
+        // its rows carry none: UNKNOWN, not empty.
+        let mut declarations =
+            match has_declarations(store)? {
+                true => Some(store.conn.prepare(
+                    "SELECT declarations FROM main.transaction_declarations WHERE tx = ?1",
+                )?),
+                false => None,
+            };
         let mut graphs = BTreeMap::new();
         let mut total = 0usize;
         // One pass over facts in rowid order for every selected graph. Rowid
@@ -411,6 +426,7 @@ pub(crate) fn cut_with_control(
             // Each table numbers its own transactions: a lookup never
             // outlives its scan.
             let mut meta: Option<(i64, TxMeta)> = None;
+            let mut declared: Option<BTreeMap<String, String>> = None;
             while let Some(row) = rows.next()? {
                 lap(&mut profile.sql_step);
                 let (g, e, a, v, row_tx, valid_from, valid_to): (
@@ -448,6 +464,12 @@ pub(crate) fn cut_with_control(
                             .ok_or_else(|| invalid(format!("transaction {row_tx} is missing")))?,
                     };
                     meta = Some((row_tx, fields));
+                    declared = match (&scan.frozen, declarations.as_mut()) {
+                        (None, Some(stmt)) => {
+                            carried_declarations(stmt, row_tx, &request.destination)?
+                        }
+                        _ => None,
+                    };
                 }
                 // A frozen row carries the main transaction that froze it.
                 let tx = scan.frozen.as_ref().map_or(row_tx, |f| f.freeze_tx);
@@ -465,6 +487,7 @@ pub(crate) fn cut_with_control(
                 let line = serde_json::to_string(&AssertRecord {
                     actor,
                     attribute: &attribute,
+                    declared: declared.as_ref(),
                     entity: &entity,
                     graph: iri,
                     op: "assert",
@@ -589,6 +612,8 @@ pub(crate) fn cut_with_control(
             git_sha: env!("QUIPU_GIT_SHA").into(),
             git_dirty: env!("QUIPU_GIT_DIRTY") == "true",
         },
+        destination: request.destination.clone(),
+        declarations_scrubbed: crate::share_scrub::declarations_scrubbed(&request.destination),
     };
     let manifest_sha256 = crate::share::sha256(&manifest_bytes(&manifest)?);
     let named = spool_dir.join(format!(
@@ -610,6 +635,10 @@ pub(crate) fn cut_with_control(
 mod support;
 pub(crate) use support::{AssertRecord, ReadPhaseGuard, shapes_hash};
 use support::{
-    FrozenPack, GraphDigest, TxMeta, check_ceilings, free_bytes, frozen_member, frozen_pack,
-    scan_plan, spool_usage, wal_len, wal_path,
+    FrozenPack, GraphDigest, TxMeta, carried_declarations, check_ceilings, free_bytes,
+    frozen_member, frozen_pack, has_declarations, scan_plan, spool_usage, wal_len, wal_path,
 };
+
+#[cfg(test)]
+#[path = "asof_share/declarations_tests.rs"]
+mod declarations_tests;

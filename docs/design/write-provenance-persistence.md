@@ -248,8 +248,20 @@ generic and does not hard-code a session-ID shape.
 | P2 | `transaction_auth.attested_session` (nullable), written when `auth_class = 'attested_session'` | A signed write's tx reads back its binding session; a bearer write's is NULL; pre-migration rows NULL |
 | P3 | Read-side `provenance` object (§3) on `/transactions` and `/entity_history`, via `classify` + `with_verified_identity` | A signed write with a forged `X-Quipu-Session` shows the binding session as effective and the header as superseded; read class equals the metric's class |
 | P4 | Grant split (§4): `host`/`session` redacted for anonymous and legacy shared-bearer reads | Anonymous read shows `"redacted"`; named-bearer read shows the value |
-| P5 | Structural outward scrub helper and receiver refusal (§6), plus as-of share carriage of declarations (§5.2) | An outward as-of share contains no `host`/`session` key and its manifest says so; an internal one contains them; an outward artifact carrying `session` is refused on import |
+| P5 (built, aegis-2ndq.2) | Structural outward scrub helper and receiver refusal (§6), plus as-of share carriage of declarations (§5.2) | An outward as-of share contains no `host`/`session` key and its manifest says so; an internal one contains them; an outward artifact carrying `session` is refused on import |
 | P6 | Merge carriage (§5.1) in `merge_core` receive/decide rows and receipt | Fork merge: home tx principal = applier; carried declarations equal the fork tx's; repeating the merge with forged headers changes no carried field (M4) |
 
 Order: P1 and P2 are independent; P3 needs P2; P5 and P6 need P3's shared
 composition helper. None of them changes the stored meaning of an existing row.
+
+**P5 as built (aegis-2ndq.2).** The field rule is
+`share_scrub::scrub_declarations` / `declarations_scrubbed` beside
+`enforce_destination`, and the receiver half is
+`share_scrub::refuse_unscrubbed`, called by the bootstrap applier per record.
+`POST /share/asof` takes an optional `destination` (default `outward`); each
+record carries `declared` per origin tx. Two limits, stated: the as-of cut does
+not run the block-tier regex scrub (it never has; it is a write-class replica
+bootstrap), and a frozen graph's records carry no declarations (the pack holds
+none), which reads as UNKNOWN. An outward manifest now names
+`declarations_scrubbed`, so a follower built before P5, whose typed manifest
+refuses unknown fields, must be upgraded before it bootstraps from a P5 source.

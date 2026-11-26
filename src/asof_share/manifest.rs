@@ -101,4 +101,17 @@ pub struct Manifest {
     pub completeness: Completeness,
     /// Producing build.
     pub producer: Producer,
+    /// Destination the cut was served for. Absent means outward, the default,
+    /// so a cut from before carriage existed reads exactly as it did.
+    #[serde(default, skip_serializing_if = "is_outward")]
+    pub destination: crate::share_scrub::ShareDestination,
+    /// Declaration keys structurally removed from every carried declaration
+    /// (`host`, `session` for any non-internal destination), so a receiver
+    /// can tell a scrubbed declaration from an undeclared one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declarations_scrubbed: Vec<String>,
+}
+
+fn is_outward(destination: &crate::share_scrub::ShareDestination) -> bool {
+    *destination == crate::share_scrub::ShareDestination::Outward
 }

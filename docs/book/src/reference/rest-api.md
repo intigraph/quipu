@@ -2873,6 +2873,12 @@ then tails `/changes?since=<watermark_tx>` (design: `docs/design/as-of-share.md`
 - `tx` is optional; without it the cut is taken at the head read inside the
   cut. `context_graphs` names further graphs the follower needs; their records
   are carried too. Unknown fields are refused.
+- `destination` is optional and defaults to `"outward"`. It governs the
+  declared write provenance each record carries (see below): only
+  `"internal"`, asked for by name, keeps the operational `host` and `session`
+  keys. Any other destination removes them structurally before the record is
+  serialized, and the manifest says `"declarations_scrubbed": ["host",
+  "session"]`. An internal cut's manifest says `"destination": "internal"`.
 - **Authorization:** the route is write-class. It requires an authenticated
   writer and is refused in read-only mode, until per-graph read authorization
   exists.
@@ -2891,7 +2897,13 @@ then tails `/changes?since=<watermark_tx>` (design: `docs/design/as-of-share.md`
   the stage; request a new cut.
 - Each record is `{op: "assert", tx, timestamp, actor, source, graph,
   entity, attribute, value, valid_from, valid_to}`, with values encoded as in
-  `/changes` (bytes as base64).
+  `/changes` (bytes as base64), plus `declared` when its origin transaction
+  has stored declarations (`agent`, `harness`, `model`, and `host` /
+  `session` only on an internal cut). An absent `declared` is unknown, not
+  "declared nothing"; a frozen graph's records carry none. A follower refuses,
+  with nothing written, any cut whose manifest is not internal but whose
+  records carry `host` or `session`. Declarations are data about the origin;
+  they never become the follower's authenticated identity.
 - The manifest's per-graph `digest` is SHA-256 over the graph's records as
   compact JSON with sorted keys, the lines sorted and joined by `\n`; its
   `scope_digest` is SHA-256 over `{"context_graphs": [...], "scope": [...]}`. A fact retracted after `T` reports `valid_to: null`, as its `/changes`

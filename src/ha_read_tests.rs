@@ -67,6 +67,7 @@ fn cut(src: &Store, dir: &std::path::Path) -> Cut {
             context_graphs: vec![],
             tx: None,
             expected_store_id: src.store_id().unwrap(),
+            destination: Default::default(),
         },
         dir,
         &asof_share::Limits {
