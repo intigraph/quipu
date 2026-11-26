@@ -5,11 +5,13 @@
 //! staging an edit.
 //!
 //! Enabled startup validates the catalog and refuses any graph or physical
-//! file also claimed by the `[quipu.ingest_pilot]` catalog, then REFUSES to
-//! serve: production owners open only through enrolled ownership (S1), and
-//! server startup does not yet call the native enrolled graph-set open. A plain
-//! writable open would weaken ownership, so there is no such fallback.
+//! file also claimed by the `[quipu.ingest_pilot]` catalog. A build with
+//! `ownership-witness-s3` then opens every routed owner through enrolled
+//! ownership (S1, [`GraphSetsConfig::admit_enrolled`]); any refusal refuses
+//! the whole startup. Other builds refuse with [`STARTUP_REFUSAL`]. A plain
+//! writable open would weaken ownership, so there is never such a fallback.
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use super::IngestPilotConfig;
@@ -29,10 +31,37 @@ pub struct GraphSetsConfig {
     pub installed_policy: String,
     /// Memory budget (MiB) for the legacy participant plus owner connections.
     pub memory_mib: u64,
+    /// Protected S1 enrollment inventory holding every owner file's record.
+    pub inventory: PathBuf,
+    /// Witness profile name required by every inventory entry.
+    pub profile: String,
+    /// HTTPS witness origin.
+    pub endpoint: String,
+    /// Witness bucket.
+    pub bucket: String,
+    /// Witness signing region.
+    pub region: String,
+    /// Per-request witness timeout, 1..=30 seconds.
+    pub timeout_secs: u64,
+    /// Optional DER trust anchor; absent uses ordinary public roots.
+    pub witness_ca_file: Option<PathBuf>,
+    /// Owner-only JSON file holding the witness access key and secret.
+    pub credentials_file: PathBuf,
+    /// Exactly one existing enrolled lineage prefix per routed owner graph.
+    pub prefixes: BTreeMap<String, String>,
+}
+
+#[cfg(all(unix, feature = "ownership-witness-s3"))]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CredentialsFile {
+    access_key_id: String,
+    secret_access_key: String,
 }
 
 /// The one-line startup refusal for an enabled table whose catalog passed
-/// preflight: the server has no enrolled graph-set owner open to start.
+/// preflight in a build that cannot open enrolled graph-set owners (no Unix
+/// `ownership-witness-s3`).
 pub const STARTUP_REFUSAL: &str =
     "graph_sets enabled but enrolled set-owner open is not available; refusing";
 
@@ -76,6 +105,79 @@ impl GraphSetsConfig {
             catalog.refuse_shared_claims(&self.root, &other, &pilot.root)?;
         }
         Ok(catalog)
+    }
+}
+
+#[cfg(all(unix, feature = "ownership-witness-s3"))]
+impl GraphSetsConfig {
+    /// Open every routed owner of an already preflighted `catalog` through S1
+    /// and admit one router over them. Before any credential is read: the
+    /// prefixes must name exactly the routed owners and the legacy fence must
+    /// name exactly every routed member. Each owner then opens through
+    /// `GraphSetOwner::open_enrolled`; any refusal refuses the whole startup
+    /// and drops every owner already opened. Never a plain-open fallback.
+    pub fn admit_enrolled(
+        &self,
+        catalog: std::sync::Arc<GraphSetCatalog>,
+        legacy: &crate::Store,
+        configure: impl Fn(&mut crate::Store) -> crate::Result<()>,
+    ) -> crate::Result<crate::store::graph_owner::GraphSetRouter> {
+        use crate::store::graph_owner::{GraphSetOwner, GraphSetRouter};
+        use crate::store::graph_router::EnrolledPilotConfig;
+        let owners: Vec<&str> = catalog
+            .physical()
+            .routes()
+            .map(|route| route.graph.as_str())
+            .collect();
+        if self.prefixes.len() != owners.len()
+            || owners
+                .iter()
+                .any(|graph| !self.prefixes.contains_key(*graph))
+        {
+            return Err(refused(
+                "prefixes must name exactly one lineage per routed owner graph",
+            ));
+        }
+        GraphSetRouter::verify_fence(&catalog, legacy)?;
+        let readers = catalog.physical().budget().readers_per_owner as u64;
+        let allocation = catalog
+            .physical()
+            .memory_allocation(self.memory_mib, readers + 2, 0)?;
+        let witness_ca_der = self
+            .witness_ca_file
+            .as_deref()
+            .map(|path| super::ingest_pilot::read_protected(path, 64 * 1024, false))
+            .transpose()?;
+        let credentials = || {
+            let bytes = super::ingest_pilot::read_protected(&self.credentials_file, 4096, true)?;
+            let parsed: CredentialsFile = serde_json::from_slice(&bytes)
+                .map_err(|_| refused("malformed credentials file"))?;
+            Ok((parsed.access_key_id, parsed.secret_access_key))
+        };
+        let mut opened = Vec::with_capacity(owners.len());
+        for graph in owners {
+            let config = EnrolledPilotConfig {
+                root: self.root.clone(),
+                inventory: self.inventory.clone(),
+                profile: self.profile.clone(),
+                endpoint: self.endpoint.clone(),
+                bucket: self.bucket.clone(),
+                region: self.region.clone(),
+                prefix: self.prefixes[graph].clone(),
+                timeout: std::time::Duration::from_secs(self.timeout_secs),
+                witness_ca_der: witness_ca_der.clone(),
+                installed_policy: self.installed_policy.clone(),
+                allocation,
+            };
+            opened.push(GraphSetOwner::open_enrolled(
+                catalog.clone(),
+                graph,
+                &config,
+                credentials,
+                &configure,
+            )?);
+        }
+        GraphSetRouter::admit(catalog, legacy, opened)
     }
 }
 

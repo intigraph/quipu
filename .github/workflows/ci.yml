@@ -171,6 +171,8 @@ jobs:
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set::an_unenrolled_file_or_a_missing_member_refuses_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test config::graph_sets::tests::enabled_startup_refuses_in_one_line_naming_the_reason ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
+          grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::enabled_startup_admits_two_enrolled_set_files_and_each_commits_while_the_other_is_held ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
+          grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::one_unenrolled_set_file_refuses_the_whole_startup_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
       # classifier. Named-test proofs keep this step from passing on zero tests.
       - name: Read-side write provenance equals the metric class
