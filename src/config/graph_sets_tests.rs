@@ -22,9 +22,15 @@ fn parse(toml_str: &str) -> Result<QuipuConfig, toml::de::Error> {
 fn table(root: &Path) -> String {
     format!(
         "[quipu.graph_sets]\nenabled = true\ncatalog_file = \"{}\"\nroot = \"{}\"\n\
-         installed_policy = \"policy-v1\"\nmemory_mib = 512\n",
+         installed_policy = \"policy-v1\"\nmemory_mib = 512\n\
+         inventory = \"{}\"\nprofile = \"sets\"\nendpoint = \"https://witness.example.org\"\n\
+         bucket = \"witness\"\nregion = \"us-east-1\"\ntimeout_secs = 5\n\
+         credentials_file = \"{}\"\n\
+         [quipu.graph_sets.prefixes]\n\"{SET_GRAPH}\" = \"lineage/app\"\n",
         root.join("graph-sets.json").display(),
-        root.display()
+        root.display(),
+        root.join("inventory").display(),
+        root.join("witness.json").display(),
     )
 }
 
@@ -112,10 +118,27 @@ fn full_table_parses_and_incomplete_or_unknown_fields_refuse() {
     assert!(cfg.enabled);
     assert_eq!(cfg.root, root);
     assert_eq!(cfg.memory_mib, 512);
-    let unknown = format!("{}prefix = \"https://example.org/app/\"\n", table(root));
+    assert_eq!(
+        cfg.prefixes.get(SET_GRAPH).map(String::as_str),
+        Some("lineage/app")
+    );
+    assert!(
+        cfg.witness_ca_file.is_none(),
+        "the trust anchor is optional"
+    );
+    let unknown = table(root).replace(
+        "memory_mib = 512\n",
+        "memory_mib = 512\nprefix = \"https://example.org/app/\"\n",
+    );
     assert!(parse(&unknown).is_err(), "no prefix membership knob exists");
     let missing = table(root).replace("memory_mib = 512\n", "");
     assert!(parse(&missing).is_err());
+    let no_prefixes = table(root)
+        .split("[quipu.graph_sets.prefixes]")
+        .next()
+        .unwrap()
+        .to_owned();
+    assert!(parse(&no_prefixes).is_err(), "prefixes are required");
 }
 
 #[test]

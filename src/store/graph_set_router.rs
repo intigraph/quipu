@@ -96,6 +96,12 @@ impl GraphSetRouter {
         Ok(())
     }
 
+    /// Verify the legacy fence for `catalog` before any owner opens or any
+    /// credential is read; admission repeats the same check.
+    pub fn verify_fence(catalog: &GraphSetCatalog, legacy: &Store) -> Result<()> {
+        Self::check_fence(catalog, legacy)
+    }
+
     /// Re-check the legacy fence, e.g. after legacy schema maintenance.
     pub fn recheck(&self, legacy: &Store) -> Result<()> {
         Self::check_fence(&self.catalog, legacy)

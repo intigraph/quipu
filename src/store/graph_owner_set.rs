@@ -81,6 +81,12 @@ impl GraphSetOwner {
         Ok(Self { owner, catalog })
     }
 
+    /// Test latch: hold this owner's writer to prove other owners never wait.
+    #[cfg(all(test, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+    pub(crate) fn hold_writer_for_test(&self) -> parking_lot::FairMutexGuard<'_, Store> {
+        self.owner.writer.lock()
+    }
+
     /// Every configured member must already be a committed graph in the file.
     fn check_members(owner: &Owner, catalog: &GraphSetCatalog, canonical: &str) -> Result<()> {
         owner.read(|store| {
