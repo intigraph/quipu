@@ -130,6 +130,31 @@ row-level diff reports ~98 differences on `shacl-core` on every run, and a byte-
 makes any two ledger-touching PRs conflict unconditionally. Timing is an observation about
 the machine, not about conformance.
 
+## Change Classes: Which CI Jobs a PR Needs
+
+`ci/change-classes.yml` is the one declared map from what a change touches to
+the CI jobs it must pass. Each changed path takes the class of the first rule
+that matches it (`full`, `wasm`, `changelog`, `test`, `docs`); a path no rule
+matches is `full`, and any `full` path makes the whole change `full`. A
+release-plz PR whose manifests change only version strings is `release`.
+
+Every class lists its `required` jobs and an explicit `bypass` list with a
+reason per skipped job. Anything touching `src/`, `crates/`, `Cargo.toml`,
+`Cargo.lock`, `shapes/`, `.github/` or `scripts/ci/` runs the full set. Push
+to `main`, the nightly schedule and manual dispatch always run the full suite.
+
+Classify a change locally:
+
+```bash
+python3 scripts/ci/change-class.py --base "$(git merge-base origin/main HEAD)" \
+  --head "$(git rev-parse HEAD)" --json
+```
+
+Missing evidence (no base or head, a git error, an unreadable map) always
+classifies as `full`. `python3 scripts/ci/test_change_class.py` proves every
+job id in the map exists, every gating job is classified, and each `bypass`
+list is exactly the complement of its `required` list.
+
 ## Adding New Dependencies
 
 Heavy or optional dependencies MUST be feature-gated:
