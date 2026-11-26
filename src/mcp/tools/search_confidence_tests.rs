@@ -418,3 +418,52 @@ fn entity_terms_split_across_label_and_same_transaction_comments_are_admitted() 
         );
     }
 }
+
+/// aegis-k4uz: keyword-only results carry BM25, never cosine. They are admitted
+/// by rank plus subject/identifier/term coverage, return a defined outcome
+/// instead of `similarity_unavailable`, and an unrelated hit stays NO CONTEXT.
+#[test]
+fn keyword_context_uses_rank_and_terms_not_similarity() {
+    let input = json!({"query":"holon definition"});
+    let policy = Policy::parse(&input).unwrap();
+    let row = json!({"entity":"urn:holon","text":"holon definition","score":3.2,"bm25":-3.2,
+        "ranking_reason":"keyword","keyword_rank":1,"source":"knowledge"});
+    let mut body = json!({"count":1,"ranking":"keyword","results":[row]});
+    policy.annotate(&input, &mut body).unwrap();
+    assert_eq!(body["context"]["outcome"], "CONTEXT");
+    assert_eq!(body["context"]["admission"], "keyword-ranked-terms/v1");
+    assert!(valid_admitted_row(&body["context"], &body["results"][0]));
+    assert_eq!(
+        crate::search_outcome::classify(crate::search_outcome::Operation::Search, &body).outcome,
+        crate::search_outcome::Outcome::Hits
+    );
+    for (field, value) in [
+        ("text", json!("unrelated")),
+        ("keyword_rank", json!(21)),
+        ("keyword_rank", Value::Null),
+        ("score", json!(-1.0)),
+        ("ranking_reason", json!("semantic")),
+    ] {
+        let mut bad = body.clone();
+        bad["results"][0][field] = value;
+        if field == "text" {
+            bad["results"][0]["entity"] = json!("urn:unrelated");
+        }
+        policy.annotate(&input, &mut bad).unwrap();
+        assert_eq!(bad["context"]["outcome"], "NO CONTEXT", "{field}");
+        assert_ne!(
+            bad["context"]["reason"], "similarity_unavailable",
+            "{field}"
+        );
+        assert!(
+            !valid_admitted_row(&body["context"], &bad["results"][0]),
+            "{field}"
+        );
+    }
+    // A fused-rule envelope cannot vouch for a keyword row, nor the reverse.
+    let mut forged = body["context"].clone();
+    forged["admission"] = json!("hybrid-ranked-terms/v1");
+    assert!(!valid_admitted_row(&forged, &body["results"][0]));
+    forged["admission"] = json!("keyword-ranked-terms/v2");
+    assert!(!valid_admitted_row(&forged, &body["results"][0]));
+}

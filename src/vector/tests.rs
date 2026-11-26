@@ -248,3 +248,109 @@ fn cosine_with_norms_is_bit_identical_to_cosine_similarity() {
         }
     }
 }
+
+fn plan(store: &Store, sql: &str) -> String {
+    let mut stmt = store
+        .conn
+        .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+        .unwrap();
+    stmt.query_map(params![1_i64, "2026"], |r| r.get::<_, String>(3))
+        .unwrap()
+        .map(|row| row.unwrap())
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// VM steps for one survivor-metadata probe, measured on the production SQL.
+fn probe_steps(store: &Store, sql: &str, entity: i64, valid_at: Option<&str>) -> (String, i32) {
+    let mut stmt = store.conn.prepare(sql).unwrap();
+    let text: String = match valid_at {
+        Some(at) => stmt.query_row(params![entity, at], |r| r.get(0)),
+        None => stmt.query_row(params![entity], |r| r.get(0)),
+    }
+    .unwrap();
+    let steps = stmt.get_status(rusqlite::StatementStatus::VmStep);
+    (text, steps)
+}
+
+/// aegis-k4uz `sqlite_metadata`: a frequently re-embedded entity keeps every
+/// superseded vector row. A survivor's metadata probe must cost the same as
+/// for a never-updated entity, with and without ANALYZE statistics (with
+/// statistics the planner used to pick `idx_vectors_valid` and scan every
+/// current row per probe). Removing `idx_vectors_current` or the as-of DESC
+/// order makes the hot probe scale with its version count and fails here.
+#[test]
+fn survivor_metadata_probe_does_not_walk_superseded_versions_k4uz() {
+    let store = Store::open_in_memory().unwrap();
+    let hot = store.intern("http://example.org/hot").unwrap();
+    let cold = store.intern("http://example.org/cold").unwrap();
+    for other in 0..60 {
+        let id = store
+            .intern(&format!("http://example.org/other{other}"))
+            .unwrap();
+        store
+            .embed_entity(
+                id,
+                "other",
+                &make_embedding(other as f32, 8),
+                "2026-01-01T00:00:00Z",
+            )
+            .unwrap();
+    }
+    store
+        .embed_entity(
+            cold,
+            "cold",
+            &make_embedding(0.5, 8),
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+    for version in 0..60 {
+        let from = format!("2026-01-01T00:{version:02}:00Z");
+        if version > 0 {
+            store.close_embedding(hot, &from).unwrap();
+        }
+        store
+            .embed_entity(hot, &format!("v{version}"), &make_embedding(1.5, 8), &from)
+            .unwrap();
+    }
+    for analyze in [false, true] {
+        if analyze {
+            store.conn.execute_batch("ANALYZE").unwrap();
+        }
+        let (text, hot_steps) = probe_steps(&store, CURRENT_TEXT_SQL, hot, None);
+        assert_eq!(text, "v59");
+        let (_, cold_steps) = probe_steps(&store, CURRENT_TEXT_SQL, cold, None);
+        assert!(
+            hot_steps <= 3 * cold_steps,
+            "current analyze={analyze}: {hot_steps} vs {cold_steps}"
+        );
+        let at = Some("2026-01-01T00:58:30Z");
+        let (text, hot_steps) = probe_steps(&store, AS_OF_TEXT_SQL, hot, at);
+        assert_eq!(
+            text, "v58",
+            "the version valid at ?2, not merely one started before it"
+        );
+        let (_, cold_steps) = probe_steps(&store, AS_OF_TEXT_SQL, cold, at);
+        assert!(
+            hot_steps <= 3 * cold_steps,
+            "as-of analyze={analyze}: {hot_steps} vs {cold_steps}; plan {}",
+            plan(&store, AS_OF_TEXT_SQL)
+        );
+        // Correctness at the boundaries of the history, through the public API.
+        let early = store
+            .vector_search(&make_embedding(1.5, 8), 100, Some("2026-01-01T00:00:30Z"))
+            .unwrap();
+        assert_eq!(
+            early.iter().find(|m| m.entity_id == hot).unwrap().text,
+            "v0"
+        );
+        let current = store
+            .vector_search(&make_embedding(1.5, 8), 100, None)
+            .unwrap();
+        assert_eq!(
+            current.iter().find(|m| m.entity_id == hot).unwrap().text,
+            "v59"
+        );
+    }
+}

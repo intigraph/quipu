@@ -9,6 +9,10 @@ use crate::{Error, Result};
 const DEFAULT_FLOOR: f64 = 0.52;
 const MIN_COVERAGE: f64 = 0.5;
 const HYBRID_RULE: &str = "hybrid-ranked-terms/v1";
+/// Keyword-only results carry BM25, not cosine. They are admitted by the same
+/// rank + subject + identifier + term-coverage rule as fused results, so a
+/// lexical hit is never compared with the cosine floor (aegis-k4uz).
+const KEYWORD_RULE: &str = "keyword-ranked-terms/v1";
 const HYBRID_RANK_LIMIT: u64 = 20;
 /// Long natural-language questions need corroboration, not half the sentence.
 /// Without this cap a nine-term question rejected a 0.745-similarity row that
@@ -58,10 +62,14 @@ impl Policy {
         } else {
             Vec::new()
         };
-        let hybrid = response["ranking"] == "hybrid";
+        let rule = match response["ranking"].as_str() {
+            Some("hybrid") => Some(HYBRID_RULE),
+            Some("keyword") => Some(KEYWORD_RULE),
+            _ => None,
+        };
         let evaluations: Vec<_> = rows
             .iter()
-            .map(|row| self.evaluate(row, &terms, &identifiers, hybrid))
+            .map(|row| self.evaluate(row, &terms, &identifiers, rule))
             .collect();
         // A lower-ranked coincidence cannot overrule an uncorroborated top hit.
         let reason = if query.len() > 4096 {
@@ -104,8 +112,8 @@ impl Policy {
             "candidate_count":rows.len(),
             "admitted_count":accepted.len(),
         });
-        if hybrid {
-            response["context"]["admission"] = json!(HYBRID_RULE);
+        if let Some(rule) = rule {
+            response["context"]["admission"] = json!(rule);
             response["context"]["fusion_rank_limit"] = json!(HYBRID_RANK_LIMIT);
             response["context"]["query_terms"] = json!(terms);
         }
@@ -117,7 +125,7 @@ impl Policy {
         row: &Value,
         terms: &[String],
         identifiers: &[String],
-        hybrid: bool,
+        rule: Option<&str>,
     ) -> Evaluation {
         let similarity = row["similarity"]
             .as_f64()
@@ -135,9 +143,14 @@ impl Policy {
             covered as f64 / terms.len() as f64
         };
         let reason = match similarity {
-            _ if hybrid && !valid_fused_score(row) => "invalid_fused_rank_or_score",
-            None if !hybrid => "similarity_unavailable",
-            Some(s) if !hybrid && s < self.floor => "below_similarity_floor",
+            _ if rule == Some(HYBRID_RULE) && !valid_fused_score(row) => {
+                "invalid_fused_rank_or_score"
+            }
+            _ if rule == Some(KEYWORD_RULE) && !valid_keyword_score(row) => {
+                "invalid_keyword_rank_or_score"
+            }
+            None if rule.is_none() => "similarity_unavailable",
+            Some(s) if rule.is_none() && s < self.floor => "below_similarity_floor",
             _ if !terms.first().is_some_and(|term| words.contains(term)) => "subject_not_covered",
             _ if !identifiers.iter().all(|id| exact_identifier(&text, id)) => {
                 "identifier_not_covered"
@@ -159,11 +172,26 @@ fn valid_fused_score(row: &Value) -> bool {
             .is_some_and(|score| score.is_finite() && score > 0.0 && score <= 1.0)
 }
 
+fn valid_keyword_score(row: &Value) -> bool {
+    row["ranking_reason"] == "keyword"
+        && row["keyword_rank"]
+            .as_u64()
+            .is_some_and(|rank| (1..=HYBRID_RANK_LIMIT).contains(&rank))
+        && row["score"]
+            .as_f64()
+            .is_some_and(|score| score.is_finite() && score >= 0.0)
+}
+
 /// Shared admission validation for projection and logical outcome accounting.
 pub(crate) fn valid_admitted_row(context: &Value, row: &Value) -> bool {
     if context.get("admission").is_some() {
-        if context["admission"] != HYBRID_RULE || context["fusion_rank_limit"] != HYBRID_RANK_LIMIT
-        {
+        let Some(rule) = [HYBRID_RULE, KEYWORD_RULE]
+            .into_iter()
+            .find(|rule| context["admission"] == *rule)
+        else {
+            return false;
+        };
+        if context["fusion_rank_limit"] != HYBRID_RANK_LIMIT {
             return false;
         }
         let strings = |value: &Value| -> Option<Vec<String>> {
@@ -183,7 +211,7 @@ pub(crate) fn valid_admitted_row(context: &Value, row: &Value) -> bool {
             && Policy {
                 floor: DEFAULT_FLOOR,
             }
-            .evaluate(row, &terms, &ids, true)
+            .evaluate(row, &terms, &ids, Some(rule))
             .reason
                 == "sufficient_context";
     }

@@ -13,7 +13,9 @@ use rusqlite::{OptionalExtension, params};
 
 use crate::error::Result;
 use crate::store::Store;
+use probe_sql::{AS_OF_TEXT_SQL, CURRENT_TEXT_SQL};
 
+mod probe_sql;
 mod retention;
 mod scoped;
 mod scoring;
@@ -29,6 +31,14 @@ CREATE TABLE IF NOT EXISTS vectors (
     PRIMARY KEY (entity_id, valid_from)
 );
 CREATE INDEX IF NOT EXISTS idx_vectors_valid ON vectors(valid_to);
+-- Current-row probe. The table is temporal, so a frequently re-embedded entity
+-- holds many superseded rows; without this index `entity_id = ? AND valid_to IS
+-- NULL` walks every version through the primary key and reads each row (its
+-- valid_to sits after the embedding BLOB) to find the one current row. With
+-- ANALYZE statistics the planner can also choose idx_vectors_valid and scan all
+-- current rows per probe. This is the sqlite_metadata phase of a vector search.
+CREATE INDEX IF NOT EXISTS idx_vectors_current ON vectors(entity_id, valid_from)
+    WHERE valid_to IS NULL;
 "#;
 
 /// A vector search result.
@@ -364,11 +374,9 @@ impl Store {
         // Fetch text + validity for the survivors only (same validity filter, so
         // the row scored is the row read back).
         let text_sql = if valid_at.is_some() {
-            "SELECT text, valid_from, valid_to FROM vectors \
-             WHERE entity_id = ?1 AND valid_from <= ?2 AND (valid_to IS NULL OR valid_to > ?2) LIMIT 1"
+            AS_OF_TEXT_SQL
         } else {
-            "SELECT text, valid_from, valid_to FROM vectors \
-             WHERE entity_id = ?1 AND valid_to IS NULL LIMIT 1"
+            CURRENT_TEXT_SQL
         };
         let mut text_stmt = self.conn.prepare(text_sql)?;
         let mut matches = Vec::with_capacity(scored.len());
