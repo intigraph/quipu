@@ -30,6 +30,18 @@ mod records;
 use records::*;
 pub(crate) use records::{check_read_fence, check_write_fence};
 
+#[path = "participant_crash.rs"]
+mod crash_points;
+pub use crash_points::CrashPoint;
+#[cfg(test)]
+pub use crash_points::with_crash;
+use crash_points::{crash, crashed};
+
+#[path = "participant_deps.rs"]
+mod deps;
+pub use deps::{MAX_DEPENDENCY_CHECKS, TypeDependency, Validation};
+
+/// One participant: an owner, its ordinary routed requests and its exact
 /// native delta (term IDs local to that owner's file).
 pub struct Member<'a> {
     pub owner: &'a GraphSetOwner,
@@ -67,64 +79,6 @@ pub enum Recovery {
     Aborted,
     /// The complete new cut is published.
     Published(ReceiptVector),
-}
-
-/// Durable edges where a test injects a crash (an early return that skips all
-/// cleanup). Indexes are canonical participant positions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CrashPoint {
-    AfterJournal,
-    AfterPrepare(usize),
-    AfterDecision,
-    AfterApply(usize),
-    AfterPublish,
-}
-
-#[cfg(test)]
-thread_local! {
-    static CRASH: std::cell::Cell<Option<CrashPoint>> = const { std::cell::Cell::new(None) };
-    static CRASHED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Run `work` with one injected crash point armed (test only).
-#[cfg(test)]
-pub fn with_crash<T>(point: CrashPoint, work: impl FnOnce() -> T) -> T {
-    CRASH.with(|slot| slot.set(Some(point)));
-    CRASHED.with(|slot| slot.set(false));
-    let result = work();
-    CRASH.with(|slot| slot.set(None));
-    result
-}
-
-fn crash(point: CrashPoint) -> Result<()> {
-    // A child test process armed by the parent reports here, then blocks
-    // holding every writer and lease until it is SIGKILLed (test only).
-    #[cfg(test)]
-    if std::env::var(kill_tests::KILL_ENV).ok().as_deref() == Some(&format!("{point:?}")) {
-        use std::io::Write;
-        println!("{}", kill_tests::MARKER);
-        let _ = std::io::stdout().flush();
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
-    }
-    #[cfg(test)]
-    if CRASH.with(std::cell::Cell::get) == Some(point) {
-        CRASHED.with(|slot| slot.set(true));
-        return Err(Error::PolicyDenied(format!(
-            "injected participant crash at {point:?}"
-        )));
-    }
-    let _ = point;
-    Ok(())
-}
-
-/// True only after an injected crash: the simulated process skips cleanup.
-fn crashed() -> bool {
-    #[cfg(test)]
-    return CRASHED.with(std::cell::Cell::get);
-    #[cfg(not(test))]
-    false
 }
 
 fn refuse(message: impl std::fmt::Display) -> Error {
@@ -204,6 +158,16 @@ fn principal() -> Result<crate::transaction_auth::Identity> {
 /// batch digest. The same ID with any different byte, member or principal
 /// refuses. An aborted ID stays consumed. A refused admission consumes nothing.
 pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
+    commit_validated(batch, &[])
+}
+
+/// [`commit`] with bounded cross-graph type dependencies: each validation
+/// participant is admitted and durably fenced with the members and checked
+/// under that fence before any intent; it is never written.
+pub fn commit_validated(
+    batch: &ParticipantBatch<'_>,
+    validations: &[Validation<'_>],
+) -> Result<ReceiptVector> {
     let identity = principal()?;
     if batch.batch_id.is_empty() {
         return Err(refuse("empty batch id"));
@@ -211,18 +175,22 @@ pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
     if batch.members.len() < 2 {
         return Err(refuse("a participant batch spans at least two files"));
     }
-    let owners: Vec<_> = batch.members.iter().map(|m| m.owner).collect();
+    deps::check_bounds(validations)?;
+    let owners: Vec<_> = (batch.members.iter().map(|m| m.owner))
+        .chain(validations.iter().map(|v| v.owner))
+        .collect();
     let order = canonical(&owners)?;
     // Validate every member against its own owner before any fence.
     let mut planned = Vec::with_capacity(order.len());
     for owner in &order {
-        let member = batch
-            .members
-            .iter()
-            .find(|m| std::ptr::eq(m.owner, *owner))
-            .ok_or_else(|| refuse("participant lookup"))?;
-        owner.check_batch(&member.requests, &member.batch)?;
-        planned.push((recorded(owner), encode_payload(&member.batch)));
+        let payload = match batch.members.iter().find(|m| std::ptr::eq(m.owner, *owner)) {
+            Some(member) => {
+                owner.check_batch(&member.requests, &member.batch)?;
+                encode_payload(&member.batch)
+            }
+            None => deps::empty_payload(owner),
+        };
+        planned.push((recorded(owner), payload));
     }
     let digest = sha256(
         serde_json::json!({
@@ -238,6 +206,7 @@ pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
                 "log_epoch": r.log_epoch,
                 "payload": sha256(payload),
             })).collect::<Vec<_>>(),
+            "validations": deps::describe(validations),
         })
         .to_string()
         .as_bytes(),
@@ -261,6 +230,7 @@ pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
             )));
         }
     }
+    deps::check_satisfied(&order, &guards, validations)?;
     let members: Vec<_> = planned.iter().map(|(r, _)| r.clone()).collect();
     let home = members[0].clone();
     let encoded = serde_json::to_string(&members).map_err(refuse)?;
@@ -568,3 +538,7 @@ mod tests;
 #[cfg(test)]
 #[path = "participant_kill_tests.rs"]
 mod kill_tests;
+
+#[cfg(test)]
+#[path = "participant_deps_tests.rs"]
+mod deps_tests;
