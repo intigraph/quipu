@@ -28,6 +28,16 @@ pub(crate) enum Mutant {
     QueryDatasetClause,
     /// `query_response`: `GRAPH <iri>` outside the grant is not refused.
     QueryGraphScope,
+    /// `open_attached_cut`: trust a file's declared term space without
+    /// measuring its real id range (aegis-n0wc.5 R1c).
+    #[cfg_attr(not(test), allow(dead_code))]
+    AttachTrustDeclaredSpace,
+    /// Composition pool: returning a checkout skips DETACH (n0wc.5 P2).
+    #[cfg_attr(not(test), allow(dead_code))]
+    CompositionSkipDetach,
+    /// Composition pool: checkout skips the clean-connection check (n0wc.5 P1).
+    #[cfg_attr(not(test), allow(dead_code))]
+    CompositionSkipCheckoutVerify,
 }
 
 #[cfg(test)]

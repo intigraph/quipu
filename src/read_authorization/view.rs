@@ -369,6 +369,9 @@ mod composed;
 pub use composed::ComposedReadView;
 
 #[cfg(unix)]
+mod attached;
+
+#[cfg(unix)]
 mod composed_admission;
 #[cfg(unix)]
 pub use composed_admission::{
