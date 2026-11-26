@@ -427,6 +427,9 @@ mod base;
 use base::shapes_hash;
 pub use base::{base_digest, member_journal};
 
+#[path = "mini_quipu_local.rs"]
+pub mod local;
+
 #[cfg(test)]
 #[path = "mini_fork_tests.rs"]
 mod tests;
