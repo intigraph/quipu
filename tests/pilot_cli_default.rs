@@ -1,6 +1,6 @@
 //! Without `ownership-witness-s3` the CLI has no `pilot` surface at all: the
 //! help is unchanged and the verb is not dispatched (aegis-4qv.1).
-#![cfg(not(feature = "ownership-witness-s3"))]
+#![cfg(all(feature = "shacl", not(feature = "ownership-witness-s3")))]
 
 use std::process::Command;
 

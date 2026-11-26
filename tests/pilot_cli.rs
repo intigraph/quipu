@@ -1,7 +1,7 @@
 //! `quipu pilot …` exercised through the binary (aegis-4qv.1). Every refusal
 //! must leave its target file byte-identical; the lab sequence must land the
 //! producer's slice in the owner with identical query bindings.
-#![cfg(all(unix, feature = "ownership-witness-s3"))]
+#![cfg(all(unix, feature = "shacl", feature = "ownership-witness-s3"))]
 
 use quipu::Store;
 use serde_json::{Value, json};
