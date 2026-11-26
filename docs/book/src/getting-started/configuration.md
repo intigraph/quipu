@@ -383,9 +383,54 @@ quipu pilot cutover --db legacy.db --tag snapshot:KEY --graph IRI \
   `--secret-access-key` are refused before any file is opened.
 
 `pilot enroll` is described under
-[Enrolling the pilot owner](#enrolling-the-pilot-owner). `pilot reverse` is not
-implemented yet and is refused with "not implemented yet", because reverse
-reconciliation has no library API yet.
+[Enrolling the pilot owner](#enrolling-the-pilot-owner).
+
+### Reverse: routing a graph back to legacy
+
+`pilot reverse` moves a routed graph back to the legacy file after its owner
+has accepted writes, without losing them. It wraps
+`Store::reverse_routed_graph`, and it is offline: stop the owner first.
+
+```bash
+# 1. Publish catalog R+1: the same as R, minus this graph's route.
+quipu pilot catalog --write cat8.json --from cat8-input.json --execute
+# 2. Rehearse, then reverse.
+quipu pilot reverse --db legacy.db --owner-file owner.db --graph IRI \
+    --revision 7 --generation 4 --catalog cat7.json --next-catalog cat8.json [--execute]
+```
+
+`--revision` and `--generation` are `R` and `G`, the catalog revision and
+`Route.generation` that the legacy fence was set to at cutover. They are not
+the owner witness generation. The verb refuses unless:
+
+- catalog `R` routes the graph at generation `G`, and catalog `R+1` differs
+  from it only by dropping that route;
+- the legacy file is fenced for the graph at exactly `(R, G)`, and its copy of
+  the graph holds no current facts;
+- it can take the owner file's write lock without waiting. An owner that is
+  still running holds the file, so the reverse refuses.
+
+With `--execute` it runs these steps. Each step is one SQLite transaction,
+recorded in the legacy table `routed_graph_reconcile`:
+
+1. Export every current fact in the owner's named graph, with its source tag.
+2. Move the legacy fence from `(R, G)` to Reconciling at `(R+1, G+1)`.
+3. Import every owner fact into the same named graph, each under its own source
+   tag, and prove that the whole graph matches the owner. The proof compares
+   graph, subject, predicate, typed object, valid time and source tag. On a
+   mismatch the import rolls back and the fence stays Reconciling.
+4. Re-prove the match, then lift the fence: the graph row and its producer
+   source-tag rows.
+
+An interrupted run resumes from the recorded step. Its receipt is identical to
+an uninterrupted run's, `at` timestamp included. A dry run reports the current
+state (`planned`, `reconciling`, `proven` or `lifted`) and writes nothing. The
+owner file is only ever read, and it is kept.
+
+Every receipt carries `witness_state: active_unretired`. The owner's ownership
+witness is not retired; that is aegis-4qv.4. No catalog route points at the
+owner any more, so a restarted owner gets no writes, but its witness is still
+active.
 
 ## Choosing a vector backend
 

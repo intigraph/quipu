@@ -416,9 +416,11 @@ fn catalog_write_validates_and_refuses_group_writable() {
 }
 
 #[test]
-fn deferred_verbs_refuse_loudly() {
+fn an_unknown_verb_refuses_loudly() {
     let lab = Lab::new();
-    let out = lab.pilot(&["reverse"]);
-    assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("not implemented yet"));
+    // Every pilot verb is implemented (enroll: aegis-4qv.2, reverse: aegis-4qv.3).
+    // An unknown verb still refuses loudly, with the usage text and exit 2.
+    let out = lab.pilot(&["frobnicate"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("usage: quipu pilot"));
 }
