@@ -32,7 +32,45 @@ fn pad_to(store: &Store, target: i64, tag: &str) {
     }
 }
 
+/// How each file's term space is arranged before the composed read
+/// (dearing ruling n0wc.5 c30, option A: read-only ATTACH needs disjoint spaces).
+#[derive(Clone, Copy)]
+enum Spaces {
+    /// Legacy main space 0, routed set file respaced to its own space 3.
+    Disjoint,
+    /// R1a: both files respaced into the SAME space 5.
+    Overlapping,
+    /// R1c: routed file DECLARES space 3 but its ids still lie in space 0.
+    DeclaredOnly,
+    /// R1d: routed file never given a space (space 0, like main).
+    SpaceZero,
+}
+
+/// Rewrite `name.db` in place into `space` (respace writes a fresh file).
+fn respaced(root: &Path, name: &str, store: Store, space: i64) -> Store {
+    drop(store);
+    let path = root.join(format!("{name}.db"));
+    let tmp = root.join(format!("{name}.respaced.db"));
+    crate::store::respace::respace_file(&path, &tmp, space).unwrap();
+    std::fs::rename(&tmp, &path).unwrap();
+    // Same ownership step as `file`: a rewritten file must be adopted again.
+    Store::adopt(path.to_str().unwrap()).unwrap();
+    Store::open(path.to_str().unwrap()).unwrap()
+}
+
+fn file_digest(root: &Path, name: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!(
+        "{:x}",
+        Sha256::digest(std::fs::read(root.join(format!("{name}.db"))).unwrap())
+    )
+}
+
 fn matrix() -> Matrix {
+    matrix_with(Spaces::Disjoint)
+}
+
+fn matrix_with(spaces: Spaces) -> Matrix {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     let mut legacy = file(root, "legacy", &[REFS]);
@@ -84,6 +122,26 @@ fn matrix() -> Matrix {
         legacy.lookup("urn:shared").unwrap(),
         routed.lookup("urn:shared").unwrap()
     );
+    let (legacy, routed) = match spaces {
+        Spaces::Disjoint => {
+            let routed = respaced(root, "application", routed, 3);
+            // ADVERSARY 1 under disjoint spaces: the colliding pair now differs.
+            assert_ne!(routed.lookup("urn:right").unwrap(), Some(left));
+            (legacy, routed)
+        }
+        Spaces::Overlapping => (
+            respaced(root, "legacy", legacy, 5),
+            respaced(root, "application", routed, 5),
+        ),
+        Spaces::DeclaredOnly => {
+            routed
+                .conn
+                .execute("UPDATE term_spaces SET space = 3 WHERE local = 1", [])
+                .unwrap();
+            (legacy, routed)
+        }
+        Spaces::SpaceZero => (legacy, routed),
+    };
     let catalog = Arc::new(
         GraphSetCatalog::new(
             7,
@@ -171,6 +229,59 @@ fn named(graphs: &[&str]) -> String {
 
 const BOTH: [&str; 2] = [REFS, APP];
 
+/// R1a/R1c/R1d: a composed mount whose term spaces cannot be proven disjoint
+/// refuses BEFORE execution, names the reason, and never renumbers on read.
+fn assert_space_refusal(spaces: Spaces, row: &str) {
+    let m = matrix_with(spaces);
+    let root = m._dir.path().to_path_buf();
+    let before = (
+        file_digest(&root, "legacy"),
+        file_digest(&root, "application"),
+    );
+    let result = run(
+        &m,
+        &BOTH,
+        &format!(
+            "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+            named(&BOTH)
+        ),
+    );
+    let error = match result {
+        Ok(answer) => panic!("{row}: composed mount answered instead of refusing: {answer}"),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        error.contains("term space"),
+        "{row}: refusal must name the term-space reason, got: {error}"
+    );
+    assert_eq!(
+        before,
+        (
+            file_digest(&root, "legacy"),
+            file_digest(&root, "application")
+        ),
+        "{row}: a refused read must not renumber or touch either file"
+    );
+}
+
+#[test]
+fn r1a_files_sharing_one_term_space_refuse_before_mount() {
+    assert_space_refusal(Spaces::Overlapping, "R1a");
+}
+
+// Mutant: skipping the measured min/max id check at mount (trusting
+// term_spaces alone) must turn this row red.
+#[test]
+fn r1c_a_declared_space_whose_real_ids_overlap_refuses_at_mount() {
+    assert_space_refusal(Spaces::DeclaredOnly, "R1c");
+}
+
+#[test]
+fn r1d_a_space_zero_set_file_refuses_composed_mount_and_is_never_renumbered() {
+    assert_space_refusal(Spaces::SpaceZero, "R1d");
+}
+
+// R1b: disjoint spaces; the formerly colliding pair (fixture) never joins.
 #[test]
 fn different_iris_with_the_same_numeric_id_never_join_across_files() {
     let m = matrix();
