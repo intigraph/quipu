@@ -62,10 +62,20 @@ pub struct RequestProvenance {
     pub declarations: std::collections::BTreeMap<String, String>,
 }
 
-/// A header value counts as declared when it has a printable character. A
-/// header that is present but blank is the same as no header.
+/// The header contract's longest value, in characters (all ASCII, so bytes).
+pub const MAX_DECLARED_LEN: usize = 128;
+
+/// A header value counts as declared when it meets the header contract:
+/// printable ASCII, at most [`MAX_DECLARED_LEN`] characters, with at least one
+/// non-space character. A blank, oversized or non-ASCII value is the same as
+/// no header: it is neither counted as declared nor stored. Readers still
+/// accept the 1024-byte rows written before this cap (aegis-7tt P1).
 fn declared(value: Option<&str>) -> bool {
-    value.is_some_and(|v| v.chars().any(|c| !c.is_whitespace() && !c.is_control()))
+    value.is_some_and(|v| {
+        v.len() <= MAX_DECLARED_LEN
+            && v.bytes().all(|b| (0x20..=0x7e).contains(&b))
+            && v.bytes().any(|b| b != b' ')
+    })
 }
 
 impl RequestProvenance {
@@ -101,7 +111,7 @@ impl RequestProvenance {
                 .zip(values)
                 .filter_map(|(key, value)| {
                     value
-                        .filter(|v| declared(Some(v)) && v.len() <= 1024)
+                        .filter(|v| declared(Some(v)))
                         .map(|v| (key.to_string(), v.to_string()))
                 })
                 .collect(),

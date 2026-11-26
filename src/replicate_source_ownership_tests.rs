@@ -175,6 +175,7 @@ fn ownership_bootstrap_frame(store: &Store, dir: &std::path::Path) -> String {
             context_graphs: vec![],
             tx: None,
             expected_store_id: store.store_id().unwrap(),
+            destination: Default::default(),
         },
         &dir.join("spool"),
         &crate::asof_share::Limits {

@@ -147,3 +147,45 @@ fn fluent_carrier_inspection_never_hides_a_colliding_artifact() {
     ));
     assert_eq!(files["fluent proof 0 wire"], "FIXTURE_PRIVATE_TOKEN");
 }
+
+#[test]
+fn outward_and_audience_scrub_host_and_session_internal_keeps_them() {
+    let declared: BTreeMap<String, String> = [
+        ("agent", "a"),
+        ("harness", "h"),
+        ("host", "box"),
+        ("session", "s-1"),
+        ("model", "m"),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
+    let mut outward = declared.clone();
+    scrub_declarations(&ShareDestination::Outward, &mut outward);
+    assert_eq!(
+        outward.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["agent", "harness", "model"]
+    );
+    assert_eq!(
+        declarations_scrubbed(&ShareDestination::Outward),
+        ["host", "session"]
+    );
+    let mut internal = declared.clone();
+    scrub_declarations(&ShareDestination::Internal, &mut internal);
+    assert_eq!(internal, declared);
+    assert!(declarations_scrubbed(&ShareDestination::Internal).is_empty());
+}
+
+#[test]
+fn receiver_refuses_operational_keys_only_outside_internal() {
+    let carrying = serde_json::json!({"agent": "a", "session": "s-1"});
+    let clean = serde_json::json!({"agent": "a"});
+    assert!(matches!(
+        refuse_unscrubbed(false, Some(&carrying)),
+        Err(Error::PolicyDenied(_))
+    ));
+    refuse_unscrubbed(false, Some(&clean)).unwrap();
+    refuse_unscrubbed(false, None).unwrap();
+    refuse_unscrubbed(true, Some(&carrying)).unwrap();
+    assert!(refuse_unscrubbed(false, Some(&serde_json::json!("x"))).is_err());
+}

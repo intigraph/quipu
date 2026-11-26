@@ -137,6 +137,9 @@ pub(super) struct ShareStream {
     graphs: BTreeMap<String, (usize, String)>,
     /// Per graph, the records written so far.
     counts: BTreeMap<String, usize>,
+    /// Whether the manifest names the explicitly internal destination; only
+    /// then may a carried declaration hold `host` or `session`.
+    internal: bool,
 }
 
 impl Applier {
@@ -372,6 +375,7 @@ impl Applier {
             watermark,
             graphs,
             counts: BTreeMap::new(),
+            internal: manifest["destination"].as_str() == Some("internal"),
         });
         Ok(None)
     }
@@ -452,6 +456,12 @@ fn write_batch(
             return Ok(Some(
                 "a share carries live facts only; a record is not an assert".into(),
             ));
+        }
+        // Receiver half of the outward scrub (write-provenance-persistence §6).
+        if let Err(refusal) =
+            crate::share_scrub::refuse_unscrubbed(share.internal, record.get("declared"))
+        {
+            return Ok(Some(refusal.to_string()));
         }
         let graph = record["graph"].as_str().unwrap_or("ROOT");
         if !share.graphs.contains_key(graph) {

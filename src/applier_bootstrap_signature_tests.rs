@@ -19,6 +19,7 @@ fn signed_cut() -> (
         context_graphs: vec![],
         tx: None,
         expected_store_id: src.store_id().unwrap(),
+        destination: Default::default(),
     };
     let cut = asof_share::cut(
         &src,
