@@ -7,7 +7,8 @@
 //! `Store::verify_routed_fence`, `export-slice` → `Store::export_routed_slice`, `import-slice` →
 //! `Store::import_routed_slice`,
 //! `cutover` → `Store::cut_over_routed_source`, `catalog` →
-//! `Catalog::from_json` / `Catalog::load_file`. Write verbs default to a dry
+//! `Catalog::from_json` / `Catalog::load_file`, `enroll` →
+//! `quipu::store::enroll_pilot_owner`. Write verbs default to a dry
 //! run that opens the file read-only; `--execute` writes. Every verb prints one
 //! JSON receipt with the target file identity before and after.
 //!
@@ -22,6 +23,8 @@ use std::io::Write;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
+#[path = "cli_pilot_enroll.rs"]
+mod enroll;
 #[path = "cli_pilot_slice.rs"]
 mod slice;
 
@@ -36,9 +39,10 @@ pub fn run(args: &[String]) {
         "import-slice" => slice::import_slice(rest),
         "cutover" => cutover(rest),
         "catalog" => catalog(rest),
-        "enroll" | "reverse" => Err(format!(
-            "`pilot {verb}` is not implemented yet (no library API to wrap); see docs/book/src/getting-started/configuration.md (Pilot operator CLI)"
-        )),
+        "enroll" => enroll::enroll(rest),
+        "reverse" => Err(
+            "`pilot reverse` is not implemented yet (no library API to wrap); see docs/book/src/getting-started/configuration.md (Pilot operator CLI)".into()
+        ),
         _ => {
             eprintln!("{USAGE}");
             std::process::exit(if verb == "--help" || verb == "-h" {
@@ -65,7 +69,8 @@ usage: quipu pilot <verb> [--execute]   (dry run unless --execute)
   pilot import-slice --owner-file OWNER --in FILE [--at RFC3339] [--execute]
   pilot cutover --db LEGACY --tag snapshot:KEY --graph IRI --revision N --generation N [--at RFC3339] [--execute]
   pilot catalog --validate FILE
-  pilot catalog --write FILE --from INPUT [--execute]";
+  pilot catalog --write FILE --from INPUT [--execute]
+  pilot enroll --db DB --journal J --unit full-store --principal P --witness-config F [--execute]";
 
 /// Parse `rest` against an exact allow-list. Values never echo into errors.
 pub(super) struct Flags {

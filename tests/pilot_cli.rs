@@ -418,9 +418,7 @@ fn catalog_write_validates_and_refuses_group_writable() {
 #[test]
 fn deferred_verbs_refuse_loudly() {
     let lab = Lab::new();
-    for verb in ["enroll", "reverse"] {
-        let out = lab.pilot(&[verb]);
-        assert!(!out.status.success());
-        assert!(String::from_utf8_lossy(&out.stderr).contains("not implemented yet"));
-    }
+    let out = lab.pilot(&["reverse"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not implemented yet"));
 }
