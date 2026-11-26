@@ -266,6 +266,17 @@ It is computed on read, never stored:
   before declarations were retained), and `unknown-no-table` on a read-only
   open of a store that predates the table. An unknown state is not an empty
   declaration.
+
+Host and session are disclosed only to an authenticated reader: a named
+bearer or an attested session. Any other reader, including an unauthenticated
+request on a no-auth server, the legacy shared bearer, and an in-process MCP
+call with no request identity, gets the literal string `"redacted"` as the
+`value` of `host` and `session` in `effective` and `superseded` (the `basis`
+is kept), and as their value in the `declared` block. A redacted field is
+never omitted, because an omission would read as "not declared". Agent,
+harness and model are readable under the same graph read authorization as
+the transaction `actor` and `source`. Redaction is applied after
+classification, so `completeness` and `state` are the same for every reader.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
 
