@@ -243,7 +243,7 @@ fn a_transaction_scalar_binds_to_one_file_and_refuses_across_files() {
 // composed store carries its attachments, so the store-level as_of_tx refusal
 // applies to it. valid_at keeps composing (design: valid time is independent).
 #[test]
-fn as_of_tx_on_the_graph_set_composed_store_keeps_refusing() {
+fn as_of_tx_on_the_graph_set_composed_store_keeps_refusing_and_valid_at_composes() {
     let m = matrix();
     let query = format!(
         "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
@@ -290,8 +290,21 @@ fn as_of_tx_on_the_graph_set_composed_store_keeps_refusing() {
                 valid_at: Some("2100-01-01T00:00:00Z".into()),
                 ..Default::default()
             };
-            crate::sparql::query_temporal(&store, &query, &valid)?;
-            crate::sparql::query_temporal(&store, &query, &Default::default())?;
+            // valid_at is NOT a transaction scalar: across the two files it
+            // composes, and it really filters the attached file's facts.
+            let count = |ctx: &crate::sparql::TemporalContext| -> Result<usize> {
+                match crate::sparql::query_temporal(&store, &query, ctx)? {
+                    crate::sparql::QueryResult::Select { rows, .. } => Ok(rows.len()),
+                    other => panic!("not a SELECT result: {other:?}"),
+                }
+            };
+            assert_eq!(count(&Default::default())?, 1, "current read");
+            assert_eq!(count(&valid)?, 1, "valid_at after the write composes");
+            let before = crate::sparql::TemporalContext {
+                valid_at: Some("1970-01-01T00:00:00Z".into()),
+                ..Default::default()
+            };
+            assert_eq!(count(&before)?, 0, "valid_at before the write filters it");
             checkout.restore(store);
             Ok(())
         })
