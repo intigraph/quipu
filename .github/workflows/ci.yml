@@ -188,9 +188,9 @@ jobs:
           grep -Fx 'test store::graph_router::tests::enrolled::tls::enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::enabled_startup_admits_two_enrolled_set_files_and_each_commits_while_the_other_is_held ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::one_unenrolled_set_file_refuses_the_whole_startup_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
-      # aegis-2g7f, aegis-6kf, aegis-abt: mini-Quipu M1 registry entry, M2 materialize and M3 merge back (docs/design/mini-quipu.md).
+      # aegis-2g7f, aegis-6kf, aegis-abt, aegis-7i2m: mini-Quipu M1 registry entry, M2 materialize, M3 merge back and M5 retire (docs/design/mini-quipu.md).
       # Named-test proofs keep this step from passing on zero tests.
-      - name: Mini-Quipu fork registry entry, materialize, merge back and refusals
+      - name: Mini-Quipu fork registry entry, materialize, merge back, retire and refusals
         if: runner.os == 'Linux'
         env:
           CARGO_BUILD_JOBS: 2
@@ -240,6 +240,14 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::carriage::m4_forged_merge_headers_change_no_carried_field ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::carriage::m4_carriage_survives_the_r7_retry_verbatim ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::carriage::m4_a_pre_m4_receipt_loads_with_carriage_unknown ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::a_merge_after_retirement_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::retirement_writes_nothing_to_home_member_graphs ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::final_merge_retirement_with_unmerged_local_writes_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::a_write_to_a_retired_mini_quipu_refuses_on_every_path ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::sabotage_an_unfenced_retirement_fails_the_write_refusal_check ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::home_history_reads_the_same_with_the_mini_quipu_file_deleted ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::a_tampered_receipt_does_not_verify ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::retire::tests::reopening_a_retired_entry_refuses ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
       # classifier. P4: host and session are redacted, never omitted, for a
       # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.

@@ -381,6 +381,11 @@ impl MiniQuipu {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<i64> {
+        if super::retire::fenced(&self.store)?.is_some() {
+            return Err(Error::PolicyDenied(
+                "mini-quipu write refused (retired-writer-fenced): the fork is retired".into(),
+            ));
+        }
         if self.entry.references.iter().any(|r| r.iri == graph) {
             return Err(refused(
                 LocalRefusal::X6ReferenceWrite,
