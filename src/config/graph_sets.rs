@@ -6,9 +6,9 @@
 //!
 //! Enabled startup validates the catalog and refuses any graph or physical
 //! file also claimed by the `[quipu.ingest_pilot]` catalog, then REFUSES to
-//! serve: production owners open only through enrolled ownership (S1), and the
-//! enrolled graph-set owner open is not wired yet. A plain writable open would
-//! weaken ownership, so there is no such fallback.
+//! serve: production owners open only through enrolled ownership (S1), and
+//! server startup does not yet call the native enrolled graph-set open. A plain
+//! writable open would weaken ownership, so there is no such fallback.
 use serde::Deserialize;
 use std::path::PathBuf;
 

@@ -227,8 +227,10 @@ the ordinary writer:
 
 With `enabled = true` the server validates the catalog and refuses any graph,
 owner file or store lineage that `[quipu.ingest_pilot]` also claims. It then
-**exits**: graph-set owners may open only through enrolled ownership, which is
-not wired yet, and the server never falls back to an ordinary writable open.
+**exits**: graph-set owners open only through enrolled ownership, server
+startup does not open them yet, and it never falls back to an ordinary writable
+open. Do not enable this table on a served Quipu until a release says enrolled
+graph-set startup is installed.
 
 ## Ingest pilot (per-graph owner)
 

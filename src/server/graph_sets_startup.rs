@@ -3,9 +3,10 @@
 //! Absent or `enabled = false`: returns at once, reading no file, so startup is
 //! byte-identical. Enabled: the graph-set catalog is loaded and validated and
 //! any claim shared with an enabled `[quipu.ingest_pilot]` refuses; then the
-//! process exits, because graph-set owners may open only through enrolled
-//! ownership and that path is not wired yet. There is no plain-open fallback:
-//! a server asked to run graph-set owners never serves without them.
+//! process exits. Graph-set owners open only through enrolled ownership
+//! (`GraphSetOwner::open_enrolled`, native), and server startup does not call
+//! it yet. There is no plain-open fallback: a server asked to run graph-set
+//! owners never serves without them.
 
 fn fail(why: impl std::fmt::Display) -> ! {
     eprintln!("error: graph-set startup refused: {why}");
@@ -24,5 +25,5 @@ pub(crate) fn check(config: &quipu::QuipuConfig) {
     if let Err(e) = sets.preflight(config.ingest_pilot.as_ref()) {
         fail(e);
     }
-    fail("graph-set owners open only through enrolled ownership, which is not wired yet")
+    fail("server startup does not yet open enrolled graph-set owners (no plain-open fallback)")
 }

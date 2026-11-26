@@ -293,3 +293,6 @@ fn enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls() {
         0
     );
 }
+
+#[path = "graph_set_enrolled_tls_tests.rs"]
+mod graph_set;
