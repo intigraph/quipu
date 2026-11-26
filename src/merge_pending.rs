@@ -44,6 +44,10 @@ pub(crate) struct Receipt {
     pub guards: Vec<Guard>,
     pub store_shapes_hash: String,
     pub reviewed_choices: Vec<crate::merge_session::Choice>,
+    /// The incoming writers' provenance, read from the source (P6). `None` on
+    /// a receipt written before carriage existed: unknown, not empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carried: Option<crate::merge_carriage::Carriage>,
 }
 
 fn invalid(message: &str) -> Error {
@@ -318,7 +322,11 @@ pub(crate) fn execute(
         if !prepared.request.shapes.trim().is_empty() {
             return Err(invalid("shape validation feature required"));
         }
-        let rows = report::rows(&prepared);
+        let mut rows = report::rows(&prepared);
+        let (mut origins, carried) = crate::merge_carriage::carry(store, &prepared)?;
+        for row in &mut rows {
+            row.origin_txs = origins.remove(&row.slot).unwrap_or_default();
+        }
         let mut receipt = Receipt {
             schema: "quipu-partial-merge/v1".into(),
             id: prepared.id.clone(),
@@ -332,6 +340,7 @@ pub(crate) fn execute(
             held_units: prepared.held_units.clone(),
             guards: Vec::new(),
             reviewed_choices: prepared.reviewed_choices,
+            carried: Some(carried),
             store_shapes_hash: crate::share::sha256(
                 store.get_combined_shapes()?.unwrap_or_default().as_bytes(),
             ),
