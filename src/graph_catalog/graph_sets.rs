@@ -213,5 +213,8 @@ impl GraphSetCatalog {
     }
 }
 
+mod file;
+pub use file::GRAPH_SET_FILE_VERSION;
+
 #[cfg(test)]
 mod tests;
