@@ -157,6 +157,18 @@ jobs:
           cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --bin quipu-server knot_durable::owner -- --test-threads=2 --color never | tee "$RUNNER_TEMP/enrolled-owner-tests.txt"
           grep -Fx 'test knot_durable::owner::dataset::tests::query_acceptance::enrolled_query_bags_paths_and_rdf_terms_match_single_file_baseline ... ok' "$RUNNER_TEMP/enrolled-owner-tests.txt"
           grep -Fx 'test knot_durable::owner::dataset::tests::read_http::enrolled_http_query_rechecks_credentials_grants_and_retains_response_budget ... ok' "$RUNNER_TEMP/enrolled-owner-tests.txt"
+      # aegis-4qv.1: the `quipu pilot` operator verbs, driven through the binary.
+      - name: Pilot operator CLI refusals and lab sequence
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --test pilot_cli -- --test-threads=2 --color never | tee "$RUNNER_TEMP/pilot-cli-tests.txt"
+          grep -Fx 'test lab_sequence_export_import_fence_cutover_keeps_bindings ... ok' "$RUNNER_TEMP/pilot-cli-tests.txt"
+          grep -Fx 'test each_guard_refuses_and_leaves_the_target_byte_identical ... ok' "$RUNNER_TEMP/pilot-cli-tests.txt"
+          grep -Fx 'test catalog_write_validates_and_refuses_group_writable ... ok' "$RUNNER_TEMP/pilot-cli-tests.txt"
       # aegis-n0wc.5: the library enrolled controls (shared S1 helper, graph-set
       # owners and the graph_sets startup refusal) are not reached by the binary
       # filter above. Named-test proofs keep this step from passing on zero tests.

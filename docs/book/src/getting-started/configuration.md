@@ -302,6 +302,49 @@ behind the ordinary authentication. Each request carries the v2 completion
 contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
 `x-quipu-owner-policy` pins. Legacy `/knot` is unchanged.
 
+### Pilot operator CLI
+
+A `quipu` binary built with `ownership-witness-s3` adds `quipu pilot`, a set
+of file-level operator verbs for rehearsing and performing the pilot's
+cutover. Each verb wraps an existing library call and adds no semantics. None
+of them contacts a server or reads an environment variable. A default build
+has no `pilot` verb and its help is unchanged.
+
+Every write verb is a **dry run unless `--execute`**. A dry run opens its file
+read-only, prints the plan and writes nothing. Every verb prints one JSON
+receipt. The receipt holds the target's `before` and `after` file identity:
+device, inode, length, mode, sha256 and the WAL sidecar's sha256. A refusal
+exits nonzero and leaves the target byte-identical.
+
+```bash
+quipu pilot catalog --write catalog.json --from input.json [--execute]  # 0600, never overwrites
+quipu pilot catalog --validate catalog.json   # refuses group/other-writable
+quipu pilot export-slice --db legacy.db --tag snapshot:KEY \
+    --graph urn:quipu:graph:root --out slice.json [--execute]
+quipu pilot import-slice --owner-file owner.db --in slice.json [--at TS] [--execute]
+quipu pilot fence --db legacy.db --graph IRI --revision N --generation N [--execute]
+quipu pilot fence --verify --db legacy.db     # read-only
+quipu pilot cutover --db legacy.db --tag snapshot:KEY --graph IRI \
+    --revision N --generation N [--at TS] [--execute]
+```
+
+- `catalog --write` validates its input with the same parser the server uses
+  and reads it back once written.
+- The slice file carries its tag, graph, exactly typed facts and
+  `multiset_sha256`, which is a sha256 over the library's sorted canonical
+  fact forms. `import-slice` recomputes it before it opens the owner file and
+  again after it writes, so a tampered slice is refused. It also refuses a
+  graph the owner has not committed, and a second import of the same tag.
+- `cutover` refuses unless the graph is fenced at exactly `--revision` and
+  `--generation`. A stale generation is refused.
+- Flags are an exact allow-list per verb, and secret-looking flags such as
+  `--secret-access-key` are refused before any file is opened.
+
+`pilot enroll` and `pilot reverse` are not implemented yet. Both are refused
+with "not implemented yet". Owner enrollment has no library API outside test
+fixtures, and reverse reconciliation has none either, so a follow-up has to
+add those APIs before the CLI can wrap them.
+
 ## Choosing a vector backend
 
 `[quipu.vector] backend` selects the store's vector backend at open, for both
