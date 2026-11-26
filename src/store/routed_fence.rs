@@ -6,10 +6,9 @@
 //!
 //! The fence lives in the legacy file: a `routed_graph_fence` table naming the
 //! routed graph IRIs, and BEFORE triggers on every graph-bearing column. The
-//! columns are discovered from the live schema each time, never from a
-//! hand-maintained list. Each discovered column must have a reviewed class
-//! below; an unclassified graph-bearing column refuses installation and
-//! verification, so a new table cannot silently become a bypass.
+//! columns are discovered from the live schema, never a hand-maintained list.
+//! Every discovered column needs a reviewed class. Unknown columns refuse
+//! installation and verification; new tables cannot silently become bypasses.
 //!
 //! The fence is installed only in the legacy file, never in an owner file.
 //! Retained legacy copies stay byte-for-byte readable for reverse
@@ -56,6 +55,7 @@ const CLASSES: &[(&str, &str, FenceClass)] = &[
     ("denial_quarantine", "graph", FenceClass::WritesOnly),
     ("dataset_members", "graph_iri", FenceClass::Reference),
     ("substring_facts", "g", FenceClass::Derived),
+    ("lexical_fts", "graph_id", FenceClass::Derived),
 ];
 
 /// Tables created on demand by a reviewed derivation (projections).

@@ -74,8 +74,14 @@ stops being read.
 | `server.read_only` | `false` | Refuse all write endpoints and suppress event and superseded-vector retention workers. Writable servers retain their configured policy; zero retention disables the corresponding worker |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
-| `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap; initially accepts only `["owner-rows"]`. Does not classify undeclared queries or grant permissions. |
-| `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation; in-process readers required. |
+| `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap for the `X-Quipu-Operation` labels listed here (any well-formed label, each once). Does not classify undeclared queries or grant permissions. |
+| `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation. With read processes, one service-wide heavy-operation executor runs on worker 0. See [Read concurrency](../reference/read-concurrency.md). |
+| `server.read_admission_wait_ms` | `0` | Early read shedding. `0` keeps today's admission (a queued read waits until its request budget ends, then 408). When positive, a read not admitted within this many ms is refused before it runs with 429 + `Retry-After`, and `X-Quipu-Priority: background` reads never queue. See [Read concurrency](../reference/read-concurrency.md#early-read-shedding). |
+| `server.read_background_reserve` | `1` | Read permits a `background` read must leave free for normal reads. Used only when `read_admission_wait_ms > 0`. |
+| `server.declared_label_limit` | `256` | Distinct client-declared `X-Quipu-Source` labels, and separately `X-Quipu-Operation` labels, logged as themselves per process; later new labels log as `_overflow`. Applies to every client alike. |
+| `server.memory_budget_mib` | unset | One aggregate memory budget (MiB) for the primary and every read worker; sizes SQLite caches. Required for `read_processes`. |
+| `server.read_processes` | `0` | Separate read-only worker processes. Off by default: with workers on, every read endpoint is forwarded to them, each worker takes one request at a time, and overflow is an immediate 503 (429 + `Retry-After` when `read_admission_wait_ms` is set). See [Read concurrency](../reference/read-concurrency.md). |
+| `server.read_process_base_port` | `3031` | First loopback port for read workers |
 | `server.update_full_copy_max_facts` | `250000` | Facts an unsliceable `/update` (open subject AND open predicate) may copy before it is refused with advice; 0 = unbounded |
 | `events.retention_days` | `30` | Prune events older than N days, never past any registered consumer's committed offset; `0` keeps every event |
 | `labels.min_freshness` | unset | Graph-label floor: refuse results staler than this |
@@ -117,6 +123,8 @@ stops being read.
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |
+| `ingest_pilot` | unset | One enrolled per-graph owner served at `/owner/knot` (`[quipu.ingest_pilot]`); unset is ordinary startup. Requires an `ownership-witness-s3` build; see below |
+| `graph_sets` | unset | Graph-set owners from a graph-set catalog (`[quipu.graph_sets]`); unset is ordinary startup. Enabled startup currently validates and then refuses; see below |
 
 ## Zero-downtime bearer rotation
 
@@ -182,6 +190,119 @@ quipu db attach --list --db my.db
 ```
 
 `quipu-server` prints the same list to stderr at startup.
+
+## Graph sets (several graphs per owner file)
+
+`[quipu.graph_sets]` names a graph-set catalog: several exact logical graphs
+that must share one owner file because one write spans them atomically. Leave it
+unset and startup is unchanged: no file is read.
+
+```toml
+[quipu.graph_sets]
+enabled = true
+catalog_file = "/etc/quipu/graph-sets.json"
+root = "/var/lib/quipu/owners"             # directory holding the owner files
+installed_policy = "policy-v1"             # must equal every route's policy
+memory_mib = 512
+inventory = "/var/lib/quipu/owners/inventory"   # S1 records for every owner file
+profile = "sets"
+endpoint = "https://witness.example.org"
+bucket = "witness"
+region = "us-east-1"
+timeout_secs = 5                           # 1..=30
+# witness_ca_file = "/etc/quipu/witness-ca.der"   # optional DER trust anchor
+credentials_file = "/etc/quipu/witness.json"      # owner-only (0600)
+
+[quipu.graph_sets.prefixes]                # one existing lineage per routed owner
+"https://example.org/app/data" = "lineage/app"
+```
+
+Every key except `witness_ca_file` is required and an unknown key refuses the
+config. `prefixes` must name exactly the routed owner graphs of the catalog. `catalog_file` is
+JSON that no group or other user can write. Every member is an exact IRI; there
+is no prefix or pattern membership, so an open-ended family of graphs stays on
+the ordinary writer:
+
+```json
+{"version": 1, "revision": 7, "legacy_store_id": "<legacy store id>",
+ "max_graphs": 8,
+ "budget": {"max_owners": 1, "queued_per_owner": 1, "readers_per_owner": 1,
+            "max_queued": 1, "max_connections": 3},
+ "sets": [{"owner": {"graph": "https://example.org/app/data", "file_id": "app",
+                     "store_id": "<owner store id>", "log_epoch": "<epoch>",
+                     "generation": 3, "policy": "policy-v1"},
+           "graphs": ["https://example.org/app/data",
+                      "https://example.org/app/data#provenance"]}],
+ "legacy": {"participant": {"graph": "urn:quipu:graph:root", "file_id": "legacy",
+                            "store_id": "<legacy store id>", "log_epoch": "<epoch>",
+                            "generation": 1, "policy": "legacy-policy"},
+            "graphs": ["urn:quipu:graph:root"]}}
+```
+
+With `enabled = true` the server validates the catalog and refuses any graph,
+owner file or store lineage that `[quipu.ingest_pilot]` also claims. Before any
+credential is read, the prefixes must match the routed owners and the legacy
+writer's fence must name exactly every routed member. Each owner file then
+opens through enrolled ownership (S1) against the live witness. **Any refusal
+exits the server** with one line; it never falls back to an ordinary writable
+open. This release admits the owners but mounts no HTTP route for them. A build
+without `ownership-witness-s3` exits with
+`graph_sets enabled but enrolled set-owner open is not available; refusing`.
+
+## Ingest pilot (per-graph owner)
+
+`[quipu.ingest_pilot]` starts one already-enrolled per-graph owner beside the
+ordinary writer. Leave it unset and startup is unchanged: no file is read and
+no credential is resolved. It needs a server built with the
+`ownership-witness-s3` feature; any other build prints a warning when the table
+is enabled, and does not start the pilot.
+
+```toml
+[quipu.ingest_pilot]
+enabled = true
+graph = "https://example.org/graph/code"   # the catalog's only route
+root = "/var/lib/quipu/owners"             # directory holding the owner files
+inventory = "/var/lib/quipu/owners/inventory"
+profile = "pilot"
+endpoint = "https://witness.example.org"
+bucket = "witness"
+region = "us-east-1"
+prefix = "lineage"
+timeout_secs = 5                           # 1..=30
+# witness_ca_file = "/etc/quipu/witness-ca.der"   # optional DER trust anchor
+installed_policy = "policy-v1"             # must equal the route's policy
+credentials_file = "/etc/quipu/witness.json"      # owner-only (0600)
+catalog_file = "/etc/quipu/catalog.json"
+memory_mib = 512
+```
+
+Every key except `witness_ca_file` is required, and an unknown key refuses the
+config, so a typo cannot drop a pin. Secrets are never TOML values:
+`credentials_file` is a JSON object `{"access_key_id": ..., "secret_access_key": ...}`
+that must not be readable by group or other.
+
+`catalog_file` is JSON that no group or other user can write:
+
+```json
+{"version": 1, "revision": 7, "legacy_store_id": "<legacy store id>",
+ "budget": {"max_owners": 1, "queued_per_owner": 1, "readers_per_owner": 1,
+            "max_queued": 1, "max_connections": 3},
+ "routes": [{"graph": "https://example.org/graph/code", "file_id": "ingest",
+             "store_id": "<owner store id>", "log_epoch": "<epoch>",
+             "generation": 4, "policy": "policy-v1"}],
+ "legacy_participant": {"graph": "urn:quipu:graph:root", "file_id": "legacy",
+                        "store_id": "<legacy store id>", "log_epoch": "<epoch>",
+                        "generation": 1, "policy": "legacy-policy"}}
+```
+
+With `enabled = true` the server validates the catalog, then verifies the
+legacy writer's routed-graph fence, then reads the credentials and runs startup
+admission against the live witness. **Any refusal exits the server.** It never
+falls back to serving that graph through the ordinary writer. Once admitted, the
+owner serves `POST /owner/knot`, `/owner/knot/status` and `/owner/knot/seal`
+behind the ordinary authentication. Each request carries the v2 completion
+contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
+`x-quipu-owner-policy` pins. Legacy `/knot` is unchanged.
 
 ## Choosing a vector backend
 

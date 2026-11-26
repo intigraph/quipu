@@ -1,5 +1,9 @@
 # Cooperative heavy read admission
 
+> 2026-11-20 (aegis-z29i): `heavy_read_operations` now accepts any well-formed
+> declared label a deployment lists. `owner-rows` below is one deployment's
+> example, not a value Quipu knows. Quipu holds no client vocabulary.
+
 The server can cap declared `owner-rows` queries before they take ordinary
 read capacity. The default `heavy_read_operations = []` leaves scheduling
 unchanged. Configuration lives in `[quipu.server]`; enabling it is a separate

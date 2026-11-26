@@ -11,9 +11,10 @@ other SHACL constraints, lists and blank-node structures, or ontologies that
 diverge beyond the Arm E fixtures. Every precision and true-positive figure in
 \S\ref{sec:synthetic} and \S\ref{sec:replay} is relative to the shapes that also
 define the conflicts, so none of them is evidence of shape-independent
-correctness. The follow-up is an oracle defined by use cases: expected graph
-outcomes stated per merge case, with each slot's intended cardinality declared
-by the fixture rather than read from the shapes.
+correctness. The only such evidence is Arm F (\S\ref{sec:oracle}): $24$
+single-slot synthetic cases, written by the same project, with list-valued
+slots and repeated merges not yet covered. It does not re-judge the benchmark
+or the replay.
 
 \paragraph{Alias divergence is invisible, and that is a property of the medium.}
 When two writers mint different names for one entity, the graphs disagree about
@@ -90,6 +91,21 @@ make all data changes under the new contract safe.
 store. Its class distribution --- alias-mint and functional-value doubling
 dominating --- may not generalize, and we make no claim about divergence rates
 in other systems from it.
+
+\paragraph{How often production writes would have needed a merge is only sampled.}
+The deployment writes through one path, so its history contains overwrites and
+no merges. We counted the overwrites that look like concurrent edits in a
+read-only copy of the store: a single-valued slot replaced by a different value
+within $300$ seconds by a different declared writer. The count is a sample, not
+a census. It covers $299{,}026$ of $1{,}443{,}490$ transactions ($20.7\%$): the
+first $99{,}048$ consecutively, then one $2{,}000$-transaction window from each
+of $100$ equal strata. It found $10$ such pairs in the prefix and $1{,}344$ in
+the sample, almost all on work-item status, version and modification-time
+slots. In $1{,}250$ of the sampled pairs both writes carry the same recorded
+principal behind different declared names, and $89$ have different principals.
+These are physical value replacements; the base each writer read is not
+recorded, so none is shown to be a lost update, and uncovered history is
+unknown rather than zero (\texttt{scripts/merge-shadow-census.py}).
 
 \paragraph{Private evidence limits inference reproducibility.}
 Arm D publishes the item labels, frozen free-baseline scores, prompt, numeric

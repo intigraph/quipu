@@ -77,6 +77,10 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/knot/stage",
     "/knot/promote",
     "/knot/cancel",
+    // aegis-4qv: the default-OFF ingest pilot's owner writes and seals. Mounted
+    // only when startup admitted an owner; never a legacy-writer fallback.
+    "/owner/knot",
+    "/owner/knot/seal",
     "/episode",
     "/import",
     "/import/promote",
@@ -166,6 +170,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // aegis-25k: exact attested-write receipt lookup by nonce; no write.
     "/attest/receipt",
     "/knot/status",
+    // aegis-4qv: owner completion proof, bound to the original writer identity.
+    "/owner/knot/status",
     "/rule_query",
     "/watermark",
     // aegis-tnh: follower readiness from its own records; never asks the primary.
@@ -208,6 +214,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/query",
     // Read-only computation, but authorize_http_bearers requires a credential.
     "/render",
+    // Authenticated owner observation; never graph/authority mutation.
+    "/graph/writer-instance",
     "/cord",
     // Render-ready node-link projection for the UI. Reads the fact log only.
     "/graph",
@@ -273,7 +281,7 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    matches!(path, "/identity" | "/knot/status")
+    matches!(path, "/identity" | "/knot/status" | "/owner/knot/status")
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.

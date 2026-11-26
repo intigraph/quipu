@@ -60,6 +60,7 @@ pub(crate) fn open_pool(
         std::process::exit(1);
     }
     super::admission::heavy_reads::init(config);
+    super::request_middleware::init_declared_label_cap(config);
 
     if read_pool.len() > 0 {
         eprintln!("read pool: {} read-only connections", read_pool.len());

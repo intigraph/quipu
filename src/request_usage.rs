@@ -185,6 +185,24 @@ pub fn structured_request_log(
     record.to_string()
 }
 
+/// Longest client-declared request label, in bytes.
+pub const REQUEST_LABEL_MAX: usize = 64;
+
+/// A client-declared request label (`x-quipu-source`, `x-quipu-operation`):
+/// `[a-z][a-z0-9._-]{0,63}`. Syntax only: any client may declare any label,
+/// and Quipu gives no particular value a meaning in source. A deployment may
+/// name labels in its own configuration (for example `heavy_read_operations`).
+/// Never authorization, and never a metric label.
+#[must_use]
+pub fn request_label(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    (1..=REQUEST_LABEL_MAX).contains(&bytes.len())
+        && bytes[0].is_ascii_lowercase()
+        && bytes[1..].iter().all(|b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'_' | b'-')
+        })
+}
+
 /// Add bounded caller-declared host/agent metadata, never authenticated identity.
 /// These values belong in logs, not high-cardinality metric labels.
 #[must_use]

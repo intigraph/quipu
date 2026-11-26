@@ -22,6 +22,12 @@ use crate::{
     graph_catalog::{Catalog, WriteRequest, WriteTarget},
 };
 
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+#[path = "graph_router_enrolled.rs"]
+mod enrolled;
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub use enrolled::EnrolledPilotConfig;
+
 fn refused(message: impl std::fmt::Display) -> Error {
     Error::PolicyDenied(format!("graph router: {message}"))
 }
@@ -30,6 +36,46 @@ fn refused(message: impl std::fmt::Display) -> Error {
 pub struct Router {
     catalog: Arc<Catalog>,
     owners: BTreeMap<String, Owner>,
+}
+
+/// Source-pilot admission only; not a server configuration or cutover command.
+/// Default OFF avoids preparing an owner. The caller must inventory whether
+/// its selected graph is regenerable; a graph never determines a file path.
+#[derive(Debug, Clone, Default)]
+pub struct IngestPilot {
+    /// Explicit opt-in for a disposable, single-graph qualification.
+    pub enabled: bool,
+    /// Exact graph already pinned in the supplied catalog.
+    pub graph: Option<String>,
+}
+
+impl IngestPilot {
+    /// Admit one graph through existing owner/fence checks. Disabled admission
+    /// does not call `prepare`, open a file or install a fence. Preparation
+    /// supplies an already configured owner, never weaker writer defaults.
+    pub fn admit(
+        &self,
+        catalog: Arc<Catalog>,
+        legacy: &Store,
+        prepare: impl FnOnce() -> Result<Owner>,
+    ) -> Result<Option<Router>> {
+        if !self.enabled {
+            return Ok(None);
+        }
+        let mut routes = catalog.routes();
+        let route = routes
+            .next()
+            .ok_or_else(|| refused("pilot requires one route"))?;
+        if routes.next().is_some() || self.graph.as_deref() != Some(route.graph.as_str()) {
+            return Err(refused(
+                "pilot requires exactly its explicitly selected graph",
+            ));
+        }
+        drop(routes);
+        Router::check_fence(&catalog, legacy)?;
+        let owner = prepare()?;
+        Router::admit(catalog, legacy, vec![owner]).map(Some)
+    }
 }
 
 impl Router {
@@ -41,7 +87,9 @@ impl Router {
         let mut by_graph = BTreeMap::new();
         for owner in owners {
             let route = owner.catalog_route().clone();
-            if catalog.routes().find(|r| r.graph == route.graph) != Some(&route) {
+            if !owner.prepared_for(&catalog)
+                || catalog.routes().find(|r| r.graph == route.graph) != Some(&route)
+            {
                 return Err(refused("owner route is not this catalog's route"));
             }
             if by_graph.insert(route.graph.clone(), owner).is_some() {
@@ -94,6 +142,17 @@ impl Router {
         request: &WriteRequest<'_>,
         input: &Value,
     ) -> Result<Value> {
+        match self.routed_knot(request, input)? {
+            Some(result) => Ok(result),
+            None => crate::tool_knot(legacy, input),
+        }
+    }
+
+    /// Dispatch a routed knot without borrowing or locking the legacy writer.
+    /// `None` selects legacy without executing it; only then should a caller
+    /// acquire its legacy writer. An error is a refusal, never legacy fallback.
+    /// The caller's authentication/provenance scopes are retained as in `knot`.
+    pub fn routed_knot(&self, request: &WriteRequest<'_>, input: &Value) -> Result<Option<Value>> {
         if request.graph != input.get("graph").and_then(Value::as_str) {
             return Err(refused("request graph differs from the write's graph"));
         }
@@ -102,14 +161,25 @@ impl Router {
                 .owners
                 .get(&route.graph)
                 .ok_or_else(|| refused("routed graph has no owner"))?
-                .knot(request, input),
-            WriteTarget::Legacy => crate::tool_knot(legacy, input),
+                .knot(request, input)
+                .map(Some),
+            WriteTarget::Legacy => Ok(None),
         }
     }
 
     /// The owner serving `graph`, if it is routed.
     pub fn owner(&self, graph: &str) -> Option<&Owner> {
         self.owners.get(graph)
+    }
+
+    /// Immutable request revision; does not grant a graph or writer capability.
+    pub fn catalog_revision(&self) -> u64 {
+        self.catalog.revision()
+    }
+
+    /// The source pilot admits one explicit graph, never an inferred default.
+    pub fn single_routed_graph(&self) -> Option<&str> {
+        (self.owners.len() == 1).then(|| self.owners.keys().next().unwrap().as_str())
     }
 }
 

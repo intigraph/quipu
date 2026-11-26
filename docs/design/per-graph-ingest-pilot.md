@@ -73,7 +73,7 @@ The columns are discovered from the live schema; each needs a reviewed class:
 | Authoritative | `facts`, `graphs`, `forks`, `writer_graph_instances`, `frozen_packs`, `pendant_repo_graphs` | insert, update, delete |
 | Log, staging or cursor | `graph_events`, `graph_consumers`, `snapshot_uploads`, `denial_quarantine` | insert, update (retention may delete) |
 | Reference | `dataset_members` | none: consumer dataset configuration must name routed graphs |
-| Derived | `substring_facts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
+| Derived | `substring_facts`, `lexical_fts`, `qp_proj_*` | none: rebuilt from fenced `facts` |
 
 An unclassified graph-bearing column refuses installation and
 `verify_routed_fence`; so does a missing trigger. Term-id columns resolve the
@@ -90,6 +90,13 @@ derivations, are covered only after `verify_routed_fence` passes or the fence
 is re-installed. The fence is never installed in an owner file. Removing a
 fence row after the owner accepted writes still needs fenced reverse
 reconciliation.
+
+The lexical profile is qualified both when its FTS schema predates the fence
+and when it is initialized afterward. `lexical_fts.graph_id` is a derived
+column from `lexical_source`, not an independent graph writer. No fence trigger
+is installed on the virtual table. Routed fact writes still refuse, unrelated
+fact writes still maintain the index, and a drop/backfill rebuild preserves the
+retained index without releasing the authoritative fact fence.
 
 ### Producer source cutover
 
@@ -146,7 +153,101 @@ caller that bypasses the router still meets the legacy file's fence.
 `Router::recheck` repeats the fence check, e.g. after legacy maintenance. The
 router is not wired into the server, CLI or startup.
 
+### Default-off source pilot
+
+`graph_router::IngestPilot` defaults to disabled. Its library admission method
+returns no router without invoking owner preparation. When explicitly enabled,
+it accepts exactly one selected catalog graph and verifies the legacy fence
+before preparing that owner, then repeats ordinary router admission. The caller
+must establish that the selected producer is regenerable; the option does not
+infer ownership or supply a production configuration switch.
+
+`Router::routed_knot` takes no legacy writer reference. A routed request executes
+in its prepared owner; a legacy selection returns `None` without writing, so an
+adapter can acquire its legacy mutex only after selection. A refusal stays an
+error and must never trigger legacy fallback. `Router::knot` retains the existing
+combined interface using this dispatch method. Authentication and provenance
+remain the caller's scopes, and ordinary owner guards still apply.
+
+Disposable qualification holds both the legacy application mutex and a SQLite
+`BEGIN IMMEDIATE` transaction while a worker replaces an ingest snapshot and
+reads its current value. Completion is checked before releasing either lock.
+Idle and held-writer samples report microseconds and p50/p95, with unchanged
+legacy `total_changes` and `data_version` witnesses. These are synthetic source
+controls, not natural-run acceptance or a production memory profile. Enrolled
+startup, server dispatch, composed consumer parity and migration/inverse
+qualification remain required before a production route is advertised.
+
+### Owner admission and durable completion source boundary
+
+The prepared server boundary consumes one admitted single-graph router and
+reserves its configured writer queue and existing reader pool. It installs no
+HTTP route, startup resolver or runtime switch. Every owner must have exactly one
+shared boundary; constructing another queue for the same owner is not supported.
+The owner must have been prepared against the identical immutable catalog,
+including its resource budget, rather than an independently reconstructed route.
+
+Routed writes use an owned per-owner semaphore through the ordinary tracked
+blocking helper. They never acquire the legacy global write permit. Active and
+waiting requests have a bounded combined population. Queued cancellation releases
+only that reservation; after dispatch, the actual worker retains its reservation
+and permit through effect, deferred embedding and receipt finalization even if
+the request future disappears. Request deadlines, identity, provenance and write
+kind still cross the same blocking boundary. Status reads reserve an existing
+owner reader before dispatch, refuse when busy, and never queue behind a writer.
+
+The first durable contract supports stable authenticated, unsigned, unscoped
+single-graph requests. Exact graph, catalog, generation and policy pins must
+match before admission. Scoped v2 refuses before consuming an ID: its existing
+outer writer-scope transaction does not compose with the current outermost
+ticketed effect contract. Ordinary scoped v1 keeps its writer-scope guards;
+it does not gain a durable transport contract from this boundary.
+
+Admission, atomic commit evidence and terminal completion all live in the owner
+file. The original wire write ID remains the ledger primary key. An owner-context
+digest binds catalog revision, graph, file/store identity, epoch, generation and
+policy in the same admission row. Changing context cannot turn a consumed ID
+into a fresh execution. Body, principal or context mismatch produces UNKNOWN or
+refusal, never permission to replay. A nullable private column admits old legacy
+rows without re-keying them; status reads never migrate the ledger. Legacy status
+does not disclose an owner-bound receipt. Explicit sealing retains the consumed
+ID and cannot seal an already committed effect.
+
+These source primitives do not reconcile historical IDs between different files.
+Physical cutover still needs a reviewed disposition for legacy receipt history,
+ambiguous attempts and downgrade prevention across file boundaries. Startup S1
+admission, graph grants, dependency datasets, bypass fencing and composed reads
+remain necessary before a server can advertise this boundary.
+
 ## Composed reads are part of the first slice
+
+### Explicit enrolled factory source checkpoint
+
+The native `IngestPilot::admit_enrolled` factory accepts one explicit
+`EnrolledPilotConfig` and a lazy credential callback from a trusted initializer.
+The disabled pilot does not inspect that configuration or invoke either callback.
+An enabled pilot first verifies the exact single-graph catalog and legacy fence,
+then validates the named HTTPS witness profile and independently supplied served
+policy. Only then can it resolve credentials and call the existing S1 owner
+constructor. It attaches to an existing witness lineage; it cannot seed genesis,
+enroll a file, install a legacy fence or fall back to an ordinary writable open.
+Witness reads are live and bounded per request. The inventory's profile and store
+identity must match the selected source exactly; mismatches remain UNKNOWN.
+
+The configuration includes a precomputed aggregate memory allocation. Passing
+that allocation is not evidence that the initializer counted every connection.
+Credential file protection, secret retrieval, the aggregate reservation and
+installation of the complete served writer configuration remain the trusted
+initializer's responsibilities. The factory does not discover environment
+variables or choose a bucket, principal or inventory implicitly.
+
+This checkpoint adds no TOML switch, HTTP route or production startup caller.
+It must be compiled and qualified with the existing S1 object-store emulator,
+enrollment rejection controls and owner/router suites before use. Refusal before
+credentials, disabled-mode inertness and policy/profile mismatch controls are
+included as source tests; their execution is a separate bounded build gate.
+The subsequent server initializer must retain exactly one shared prepared owner
+and refuse publication until composed-read and mutation-path coverage qualify.
 
 Ingest previously visible in ROOT must remain visible to its existing consumers
 through explicit, reviewed dataset configuration. This is a consumer migration,
@@ -278,3 +379,116 @@ writer wait/hold from total service wait and shared CPU/disk contention. Accepta
 requires near-zero main-store ingest writer time, independent-owner progress,
 unchanged qualified query results and a successful scheduled reaction. Source
 merge, process health or a lower global counter alone does not close the pilot.
+
+## TLS and server adapter source checkpoint
+
+The enrolled factory accepts an optional, explicit DER trust anchor (bounded
+at 64 KiB); absence retains ordinary public roots. It never disables certificate
+or endpoint-name verification. A disposable conditional-object emulator behind
+a real TLS bridge qualifies both untrusted-certificate refusal and successful
+S1 admission with the selected anchor, followed by a routed owner write.
+The fixture generates its own short-lived certificate and key with OpenSSL;
+it uses no deployment credentials or witness service.
+
+The server's `PreparedOwner::initialize` converts the admitted factory router
+into one shared owner admission boundary. OFF invokes neither credential nor
+writer-configuration callbacks. Its source HTTP adapter shares that same Arc
+across `/knot`, `/knot/status` and `/knot/seal`, requiring v2 completion plus
+exact catalog revision, owner generation and policy headers. Missing, duplicate
+or stale pins refuse through the owner boundary; errors never select legacy.
+The mounting initializer must retain the ordinary authentication middleware.
+
+This adapter is intentionally not mounted by production main. There is no
+TOML activation switch, listener, enrollment, migration or automatic catalog
+publication in this checkpoint. Composed-read coverage, complete mutation-path
+fencing and a combined factory-to-HTTP startup qualification still gate the
+production mount. The factory TLS and server HTTP fixtures are distinct
+controls; passing them does not claim a live cross-store read contract.
+
+### Combined startup and strict dataset source checkpoint
+
+The source-only `PreparedDataset` initializer consumes the configured legacy
+writer and admits the enrolled pilot through the same verified TLS/S1 factory.
+Disabled startup returns the original writer without resolving credentials or
+configuration. Enabled startup requires an explicit legacy participant in the
+same catalog and a memory allocation covering both writer/fence/read pools.
+Its HTTP adapter retains the same owner Arc used by strict dataset captures.
+
+The internal read callback accepts only explicit ROOT and/or selected-owner
+participants. It uses `Owner::read_strict` to retain both SQLite snapshots,
+identity/epoch pins and transaction coordinates through evaluation. Unknown,
+duplicate, empty, over-bound or expired selections refuse without evaluation;
+there is no partial answer or writer fallback. Callers still own authentication,
+dataset authorization and evaluator budgets. This is not a new HTTP query route
+or a general cross-file SPARQL evaluator. Per-participant SPARQL projections in
+the combined fixture check visibility in the captured stores; arbitrary joins,
+RDFS/temporal/default-dataset parity remain separate publication prerequisites.
+Production main still does not mount the owner adapter or initialize this path.
+
+### Authorized composed HTTP read transport
+
+`PreparedDataset::routes_with_reads` adds a bounded JSON `/query` handler to the
+same admitted owner routes. The trusted initializer supplies an existing read
+policy, named-credential verifier registry, deadline and the same aggregate
+composed-read admission used to prepare the stores. Requests select one or two
+explicit participants; selection is not a grant. Empty, duplicate, excluded and
+unavailable participants never select a legacy query fallback.
+
+The handler verifies the presented named credential against both current
+registry evidence and the identity established by outer authentication. It
+authorizes the complete dataset, captures the strict cut, evaluates through the
+existing composed evaluator and rechecks fresh policy and credential evidence
+before returning buffered output. The HTTP body owns the original output memory
+lease through its last consumer; constructing a response does not release that
+reservation or copy the response into an unaccounted buffer. Exhaustion and
+unverifiable captures return an unavailable response, never a partial result.
+
+The enrolled TLS/S1 HTTP control proves a positive ROOT/owner join, missing and
+revoked credential refusal, grant revocation and excluded-scope refusal. It also
+holds the response body across a second request to prove that resource admission
+stays bounded until the consumer drops the body. CI requires this named test to
+execute. This transport does not initialize grants, configure production startup,
+enroll or move files, or enable the pilot. Main wiring, full mutation/consumer
+qualification and the scheduled physical cutover remain separate acceptance.
+
+### Enrolled evaluator qualification control
+
+The source control joins ROOT and the owner graph through the actual
+authorized composed evaluator after real TLS/S1 startup and the admitted HTTP
+write. Both pools open before the new owner terms are written. One explicit
+service allocation covers the legacy and owner handles plus a scratch view;
+the view retains the shared admission permit through evaluation. The query must
+return the shared IRI and its language-tagged value, while an excluded graph
+refuses. Publication rechecks the captured bindings and read authority.
+
+The focused startup group passes all five tests, including this join; the
+composed authorization group passes 14 tests. Full witness-feature Clippy and
+all `just check` gates pass. These are source qualification controls. They do
+not certify general evaluator parity, RSS sizing, production mutation fencing
+or physical cutover. No production query route is added. Startup remains OFF.
+
+### Production startup wiring
+
+`[quipu.ingest_pilot]` is the default-OFF startup switch (see the
+configuration guide). Unset, or `enabled = false`, returns the ordinary router
+without reading a file or resolving a credential. Enabled startup loads the
+operator-written JSON catalog (`Catalog::load_file`: bounded, regular, not
+group/other-writable, unknown fields refused, legacy participant mandatory).
+It then calls `PreparedDataset::initialize` with the served `StoreHandle` as
+the borrowed legacy fence. The owner store gets the same identity, search,
+label, import, SHACL and governance policy as the legacy writer. Any refusal
+exits the process; there is no legacy fallback.
+
+The admitted owner's adapter is merged before the ordinary authentication and
+scoped-read layers. Its paths are now `/owner/knot`, `/owner/knot/status` and
+`/owner/knot/seal`, distinct from legacy `/knot`, so a request cannot reach the
+other writer by path. They are classified in the write/read endpoint lists and
+the scoped route census like every other route. The composed `/query` read
+transport (`routes_with_reads`) is still NOT mounted: it would share legacy
+`/query` and needs its own read-policy configuration. Builds without
+`ownership-witness-s3` mount nothing, and a set pilot is reported by
+`unwired_warnings()`.
+
+This is source wiring only. Enabling it on a deployment still requires an
+enrolled owner file, the legacy routed-graph fence, a feature-enabled build and
+the pilot acceptance checks above.

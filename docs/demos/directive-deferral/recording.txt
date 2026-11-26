@@ -1,0 +1,9 @@
+Script started on 2026-11-21 00:02:24-05:00 [COMMAND="python3 docs/demos/directive-deferral/demo.py" <not executed on terminal>]
+BASE a97d2f8c1a74510dd2830f9fddb639157d2a3e7c candidate shape SHA256 9f1c93625b5b857638287548565b29f132f51da7d2bc4b27b03406cba556d319
+base dated conforms False violations 0 warnings 3
+base neither conforms False violations 0 warnings 3
+candidate dated conforms True violations 0 warnings 0
+candidate neither conforms False violations 3 warnings 0
+PASS: dated decisions admitted; missing traceability still refused
+
+Script done on 2026-11-21 00:02:24-05:00 [COMMAND_EXIT_CODE="0"]

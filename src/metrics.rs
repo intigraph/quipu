@@ -417,6 +417,7 @@ impl Metrics {
         self.search_outcomes.render(&mut out);
         crate::search_outcome::render_capture_health(&mut out);
         crate::search_outcome::render_counter_health(&mut out);
+        crate::search_outcome::render_counter_aggregate(&mut out);
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.refusals.render(&mut out);
@@ -443,7 +444,15 @@ impl Metrics {
             "# HELP quipu_http_requests_total Requests served, by route template and status.\n\
              # TYPE quipu_http_requests_total counter\n",
         );
-        for ((ep, status), n) in self.requests.lock().unwrap().iter() {
+        // Export a zero before the first monitored /query outcome. A counter
+        // first scraped at 1 has no earlier baseline: Prometheus rate/increase
+        // then misses that first timeout (aegis-8lz). These four finite series
+        // are observations of counters, not synthetic requests or durations.
+        let mut requests = self.requests.lock().unwrap().clone();
+        for status in [200, 408, 499, 503] {
+            requests.entry(("/query".to_string(), status)).or_insert(0);
+        }
+        for ((ep, status), n) in &requests {
             let _ = writeln!(
                 out,
                 "quipu_http_requests_total{{endpoint=\"{}\",status=\"{status}\"}} {n}",

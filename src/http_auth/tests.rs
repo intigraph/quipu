@@ -367,7 +367,16 @@ fn routes_in_server_source() -> Vec<String> {
             "server/knot_durable.rs",
             include_str!("../server/knot_durable.rs"),
         ),
+        // aegis-4qv: the ingest pilot's owner routes, merged by knot_durable.
+        (
+            "server/owner_pilot_http.rs",
+            include_str!("../server/owner_pilot_http.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
+        (
+            "server/writer_instance.rs",
+            include_str!("../server/writer_instance.rs"),
+        ),
         // Handler-only today; scan future route additions too.
         ("server/fluents.rs", include_str!("../server/fluents.rs")),
         (
@@ -397,7 +406,11 @@ fn routes_in_server_source() -> Vec<String> {
         // /stats off-writer tests (aegis-fclp): test-only, no routes.
         "server/stats_tests.rs",
         "server/graph_metrics.rs",
+        // [quipu.graph_sets] startup (aegis-n0wc.5): a startup check before
+        // any route is mounted, no routes.
+        "server/graph_sets_startup.rs",
         "server/handle.rs",
+        "server/writer_timing.rs", // lock timing only, no routes
         "server/input_fields.rs",
         "server/query_usage.rs",
         // Bounded point-query scheduling recognizer; no HTTP routes.

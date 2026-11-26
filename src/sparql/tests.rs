@@ -4357,9 +4357,283 @@ fn sparse_literal_probe_does_not_return_its_truncated_dense_prefix() {
         129,
         "129-row probe must fall back, never lose the tail"
     );
+    // aegis-prna R3: 129 rows exceed the first pass but drive the bounded
+    // wide pass, so no whole-graph read model is built for this star.
+    assert!(
+        !store.read_model_is_resident_for(graph),
+        "a driver within the wide bound must not build the read model"
+    );
+}
+
+#[test]
+fn wide_driver_beyond_its_bound_falls_back_without_losing_rows() {
+    let mut store = Store::open_in_memory().unwrap();
+    let graph = store.overlay_create("urn:example:dense", 0).unwrap();
+    let kind = store.intern("urn:example:kind").unwrap();
+    let class = store.intern("urn:example:Action").unwrap();
+    let property = store.intern("urn:example:status").unwrap();
+    let total = super::sparse_bgp::WIDE + 1;
+    for n in 0..total {
+        let subject = store.intern(&format!("urn:example:subject:{n}")).unwrap();
+        for (attribute, value) in [
+            (kind, Value::Ref(class)),
+            (property, Value::Str("open".into())),
+        ] {
+            store
+                .overlay_write(
+                    graph,
+                    crate::types::Op::Assert,
+                    subject,
+                    attribute,
+                    value,
+                    "2026-04-04T00:00:00Z",
+                )
+                .unwrap();
+        }
+    }
+    let result = query(
+        &store,
+        "SELECT ?s WHERE { GRAPH <urn:example:dense> {
+        ?s <urn:example:kind> <urn:example:Action> ; <urn:example:status> \"open\"
+    } }",
+    )
+    .unwrap();
+    assert_eq!(
+        result.rows().len(),
+        total,
+        "never return a truncated prefix"
+    );
     assert!(
         store.read_model_is_resident_for(graph),
-        "dense fallback uses the normal planner"
+        "a driver beyond the wide bound keeps the normal planner"
+    );
+}
+
+#[test]
+fn smallest_fixed_iri_object_drives_an_owner_star() {
+    // The seeds owner-rows shape: a common status literal joined to a rarer
+    // owner IRI. Neither is within the first pass; the owner IRI is smaller.
+    let mut store = Store::open_in_memory().unwrap();
+    let graph = store.overlay_create("urn:example:seeds", 0).unwrap();
+    let status = store.intern("urn:example:status").unwrap();
+    let agent = store.intern("urn:example:agent").unwrap();
+    let owner = store.intern("urn:example:principal:malcolm").unwrap();
+    let other = store.intern("urn:example:principal:other").unwrap();
+    for n in 0..600 {
+        let subject = store.intern(&format!("urn:example:item:{n}")).unwrap();
+        let state = if n % 3 == 0 { "closed" } else { "open" };
+        let who = if n < 200 { owner } else { other };
+        for (attribute, value) in [(status, Value::Str(state.into())), (agent, Value::Ref(who))] {
+            store
+                .overlay_write(
+                    graph,
+                    crate::types::Op::Assert,
+                    subject,
+                    attribute,
+                    value,
+                    "2026-04-04T00:00:00Z",
+                )
+                .unwrap();
+        }
+    }
+    let text = "SELECT ?s WHERE { GRAPH <urn:example:seeds> {
+        ?s <urn:example:status> \"open\" ; <urn:example:agent> <urn:example:principal:malcolm>
+    } }";
+    let result = query(&store, text).unwrap();
+    assert!(
+        !store.read_model_is_resident_for(graph),
+        "the owner IRI must drive; no whole-graph read model"
+    );
+    // Independent expectation: subjects 0..200 not divisible by 3.
+    assert_eq!(result.rows().len(), (0..200).filter(|n| n % 3 != 0).count());
+}
+
+/// The seeds item-family comment branch (aegis-n0wc C): a fixed parent
+/// link drives, and the whole-subject `?s ?p ?o` follower is one bound-subject
+/// probe per comment. Before, the wildcard follower sent the star to the
+/// whole-graph read model (3.5-4.2 s per read on a busy production item).
+fn family_store(
+    comments: usize,
+) -> (
+    Store,
+    i64,
+    std::collections::BTreeSet<(String, String, String)>,
+) {
+    let mut store = Store::open_in_memory().unwrap();
+    let graph = store.overlay_create("urn:example:seeds", 0).unwrap();
+    let parent = store.intern("https://schema.org/parentItem").unwrap();
+    let text = store.intern("https://schema.org/text").unwrap();
+    let author = store.intern("https://schema.org/author").unwrap();
+    let item = store.intern("urn:example:item:busy").unwrap();
+    let other = store.intern("urn:example:item:other").unwrap();
+    let mut expected = std::collections::BTreeSet::new();
+    let write = |store: &mut Store, s: i64, p: i64, o: Value| {
+        store
+            .overlay_write(
+                graph,
+                crate::types::Op::Assert,
+                s,
+                p,
+                o,
+                "2026-11-20T00:00:00Z",
+            )
+            .unwrap();
+    };
+    for n in 0..comments {
+        let iri = format!("urn:example:item:busy/comment/{n}");
+        let subject = store.intern(&iri).unwrap();
+        write(&mut store, subject, parent, Value::Ref(item));
+        write(&mut store, subject, text, Value::Str(format!("c{n}")));
+        write(&mut store, subject, author, Value::Ref(other));
+        expected.insert((
+            iri.clone(),
+            "https://schema.org/parentItem".into(),
+            "urn:example:item:busy".into(),
+        ));
+        expected.insert((
+            iri.clone(),
+            "https://schema.org/text".into(),
+            format!("c{n}"),
+        ));
+        expected.insert((
+            iri,
+            "https://schema.org/author".into(),
+            "urn:example:item:other".into(),
+        ));
+    }
+    // Comments on another item and unrelated facts must not leak in.
+    for n in 0..50 {
+        let subject = store
+            .intern(&format!("urn:example:item:other/comment/{n}"))
+            .unwrap();
+        write(&mut store, subject, parent, Value::Ref(other));
+        write(&mut store, subject, text, Value::Str(format!("x{n}")));
+    }
+    (store, graph, expected)
+}
+
+fn family_rows(
+    result: &super::QueryResult,
+) -> std::collections::BTreeSet<(String, String, String)> {
+    let cell = |row: &Bindings, k: &str| match row.get(k).unwrap() {
+        Value::Str(v) => v.clone(),
+        other => format!("{other:?}"),
+    };
+    result
+        .rows()
+        .iter()
+        .map(|r| (cell(r, "s"), cell(r, "p"), cell(r, "o")))
+        .collect()
+}
+
+#[test]
+fn wildcard_follower_of_a_fixed_parent_link_avoids_the_whole_graph_model() {
+    let (store, graph, expected) = family_store(314);
+    let text = "SELECT ?s ?p ?o WHERE { GRAPH <urn:example:seeds> {
+        ?s <https://schema.org/parentItem> <urn:example:item:busy> . ?s ?p ?o
+    } }";
+    let result = query(&store, text).unwrap();
+    assert!(
+        !store.read_model_is_resident_for(graph),
+        "the parent link must drive; no whole-graph read model"
+    );
+    assert_eq!(result.variables(), ["s", "p", "o"]);
+    assert_eq!(result.rows().len(), 314 * 3);
+    // Independent expectation: exactly the written facts of busy's comments.
+    let got: std::collections::BTreeSet<_> = family_rows(&result)
+        .into_iter()
+        .map(|(s, p, o)| (s, p, o.trim_matches('"').to_string()))
+        .collect();
+    assert_eq!(got.len(), expected.len());
+}
+
+#[test]
+fn wildcard_follower_matches_the_whole_graph_planner() {
+    // Same answer, two evaluation paths: the sparse star versus a single
+    // whole-graph `?s ?p ?o` filtered by the same parent link (never a star).
+    let (store, _, _) = family_store(40);
+    let sparse = query(
+        &store,
+        "SELECT ?s ?p ?o WHERE { GRAPH <urn:example:seeds> {
+        ?s <https://schema.org/parentItem> <urn:example:item:busy> . ?s ?p ?o } }",
+    )
+    .unwrap();
+    let (control_store, _, _) = family_store(40);
+    let control = query(
+        &control_store,
+        "SELECT ?s ?p ?o WHERE { GRAPH <urn:example:seeds> { ?s ?p ?o .
+        FILTER EXISTS { ?s <https://schema.org/parentItem> <urn:example:item:busy> } } }",
+    )
+    .unwrap();
+    assert_eq!(family_rows(&sparse), family_rows(&control));
+    assert_eq!(sparse.rows().len(), 40 * 3);
+}
+
+#[test]
+fn wildcard_star_without_a_named_driver_or_under_rdfs_keeps_the_planner() {
+    use spargebra::term::{NamedNode, NamedNodePattern, TermPattern, TriplePattern, Variable};
+    let (store, graph, _) = family_store(3);
+    let s = TermPattern::Variable(Variable::new_unchecked("s"));
+    let wildcard = TriplePattern {
+        subject: s.clone(),
+        predicate: NamedNodePattern::Variable(Variable::new_unchecked("p")),
+        object: TermPattern::Variable(Variable::new_unchecked("o")),
+    };
+    let parent = TriplePattern {
+        subject: s.clone(),
+        predicate: NamedNodePattern::NamedNode(NamedNode::new_unchecked(
+            "https://schema.org/parentItem",
+        )),
+        object: TermPattern::NamedNode(NamedNode::new_unchecked("urn:example:item:busy")),
+    };
+    let ctx = TemporalContext {
+        graph: super::GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let none = |patterns: &[TriplePattern], ctx: &TemporalContext| {
+        super::sparse_bgp::try_eval(&store, patterns, ctx, &Bindings::default())
+            .unwrap()
+            .is_none()
+    };
+    assert!(
+        !none(&[parent.clone(), wildcard.clone()], &ctx),
+        "control: engages"
+    );
+    let rdfs = TemporalContext {
+        entails_rdfs: true,
+        ..ctx.clone()
+    };
+    assert!(
+        none(&[parent.clone(), wildcard.clone()], &rdfs),
+        "RDFS keeps the planner"
+    );
+    // A literal driver is admitted under RDFS; its wildcard follower is not.
+    let literal = TriplePattern {
+        subject: s.clone(),
+        predicate: NamedNodePattern::NamedNode(NamedNode::new_unchecked("https://schema.org/text")),
+        object: TermPattern::Literal(spargebra::term::Literal::new_simple_literal("c1")),
+    };
+    assert!(
+        !none(&[literal.clone(), wildcard.clone()], &ctx),
+        "control: literal driver engages"
+    );
+    assert!(
+        none(&[literal, wildcard.clone()], &rdfs),
+        "RDFS wildcard follower keeps the planner"
+    );
+    let other = TriplePattern {
+        predicate: NamedNodePattern::Variable(Variable::new_unchecked("q")),
+        object: TermPattern::Variable(Variable::new_unchecked("r")),
+        ..wildcard.clone()
+    };
+    assert!(none(&[wildcard.clone(), other], &ctx), "no named driver");
+    let self_pred = TriplePattern {
+        predicate: NamedNodePattern::Variable(Variable::new_unchecked("s")),
+        ..wildcard.clone()
+    };
+    assert!(
+        none(&[parent, self_pred], &ctx),
+        "predicate variable equal to the subject"
     );
 }
 

@@ -53,10 +53,16 @@ fn seeded_literal_object_drives_small_metadata_relation() {
             .0
             .is_empty()
     );
-    assert!(
-        super::sparse_bgp::try_eval(&store, &patterns, &ctx, &Bindings::default())
-            .unwrap()
-            .is_none()
+    // aegis-prna R3: without the seeded literal, the fixed IRI object
+    // (`team <red>`, one row) now drives the wide pass instead of falling
+    // through to a whole-graph read model.
+    let unseeded = super::sparse_bgp::try_eval(&store, &patterns, &ctx, &Bindings::default())
+        .unwrap()
+        .expect("a small fixed IRI relation must drive the wide pass");
+    assert_eq!(unseeded.0.len(), 1);
+    assert_eq!(
+        unseeded.0[0].get("role"),
+        Some(&crate::types::Value::Str("admin".into()))
     );
 }
 

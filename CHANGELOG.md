@@ -7,16 +7,128 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
-### Breaking changes
+## [0.19.5] - 2026-11-25
 
-- Remove the memory-files library, `quipu memory` CLI, `/memory/*` RPCs,
-  `memory_files` configuration and `quipu-memory` credential audience. Crew
-  memory belongs to clients using ordinary shapes and graph operations. Existing
-  Artifact/RDF-value records remain untouched and readable through normal graph
-  query/export; no store migration or record deletion is performed. Old scoped
-  memory credentials are refused rather than promoted to ordinary credentials.
-  Rollback is a normal source revert and CD of the previous build. Client
-  adoption is tracked separately from this removal.
+### Added
+
+- *(store)* Add atomic graph-set owners and strict composed reads (#1298)([3f63fc9](https://github.com/scbrown/quipu/commit/3f63fc9ce88f5bed699910d7df8a9ff61cb267af))
+- *(server)* Add bounded composed pilot query transport (#1299)([9f09e45](https://github.com/scbrown/quipu/commit/9f09e4542fe277bae2b268f414f2b5dbbf331e29))
+- *(store)* Borrow the legacy writer as a read-only pilot participant (#1300)([2ddd467](https://github.com/scbrown/quipu/commit/2ddd467073168285ec9d2186e0e7e242f3d11143))
+- *(server)* StoreHandle is the pilot's borrowed legacy writer fence (#1301)([614f729](https://github.com/scbrown/quipu/commit/614f729cf9823969a154b45cfcdf66d698329c72))
+- *(server)* Default-OFF [quipu.ingest_pilot] startup mounts the per-graph owner (#1302)([57a2839](https://github.com/scbrown/quipu/commit/57a28398001794fe78d837c96c7ff230f7b4d3c7))
+- *(bench)* Share-path adapter and runner for the use-case oracle (#1305)([c7f4aec](https://github.com/scbrown/quipu/commit/c7f4aec546aea688f74835541742070c035401d5))
+- *(bench)* Judge Arm A against declared intent, not the shapes (#1306)([7ab9aeb](https://github.com/scbrown/quipu/commit/7ab9aebf7e9123cf7f4e373a08ffb13021a5f6f7))
+
+### Fixed
+
+- *(bench)* Let the replay and shape_e harnesses run on current main (#1304)([49d8b1c](https://github.com/scbrown/quipu/commit/49d8b1ce225d971895c34ed1b624911b214f0bf6))
+
+## [0.19.4] - 2026-11-24
+
+### Added
+
+- *(catalog)* Plan bounded same-file graph sets (#1296)([0f270f4](https://github.com/scbrown/quipu/commit/0f270f4ccd15b1a9a57facf9353cac4c4ceaf912))
+
+
+
+### Fixed
+
+- *(shacl)* Budget distinct triples in entity contexts (#1291)([9cbea8e](https://github.com/scbrown/quipu/commit/9cbea8e5512ba644b114f31fd74b369a9f33fb32))
+- Keep diagnostic bounds out of receiver admission (#1292)([886a4ea](https://github.com/scbrown/quipu/commit/886a4ea114ea54ae38cd933647b90bff410b0ee3))
+- Bound fluent value reads by value and graph (#1293)([8c51939](https://github.com/scbrown/quipu/commit/8c519398878c67c366fb1ac101cf2a7cd9e8ece5))
+
+### Miscellaneous
+
+- Release v0.19.4 (#1294)([86584fb](https://github.com/scbrown/quipu/commit/86584fbd6898de04f5d6ac6d2143e8e42d9b46e7))
+
+### Testing
+
+- *(store)* Exercise enrolled query parity in ownership CI (#1295)([f09092d](https://github.com/scbrown/quipu/commit/f09092d57ecf073c0933b34d4b263465053e3dd2))
+
+## [0.19.3] - 2026-11-24
+
+### Fixed
+
+- *(server)* Gate Unix pilot transport on Unix (#1289)([6c02349](https://github.com/scbrown/quipu/commit/6c023491d26f5f8d002b324e6108e728f9e7aa0f))
+
+## [0.19.2] - 2026-11-24
+
+### Added
+
+- *(graph)* Expose authenticated owner writer-instance read (#1277)([d5d8c2d](https://github.com/scbrown/quipu/commit/d5d8c2df2260a87e6fc7f7834ff6d938b7d34abe))
+- Emit shared quiet progress proofs for changes streams (#1281)([d90e221](https://github.com/scbrown/quipu/commit/d90e221b2d62892526d5f04ea47e44b433bb2eb7))
+- *(store)* Add default-off graph pilot dispatch and qualify lexical fencing (#1282)([d6077b7](https://github.com/scbrown/quipu/commit/d6077b78c736593881872c826f7f0797c30d26af))
+- *(store)* Add bounded owner admission and durable completion (#1284)([840e0d4](https://github.com/scbrown/quipu/commit/840e0d4c0cffcbdc9e659b9a117d02ee8d5fc205))
+- *(server)* Add default-off enrolled startup and strict read composition (#1285)([a2e3694](https://github.com/scbrown/quipu/commit/a2e369473dabc296a6efc7f14ce93a75cf4915ba))
+
+### Documentation
+
+- Add shared workshop hero to README (#1278)([6cdf6e5](https://github.com/scbrown/quipu/commit/6cdf6e54c41a7972ff50df1d0163448d22209a02))
+
+### Fixed
+
+- *(search)* Preserve same-transaction description comments (#1280)([d51b579](https://github.com/scbrown/quipu/commit/d51b579b50a05fd652f6c78edc812c7d26ac2c60))
+- *(server)* Generic client-declared request labels; no client vocabulary in quipu (#1264)([93847e2](https://github.com/scbrown/quipu/commit/93847e2d8ef30a66e0b29e26ea993da9687f6a51))
+- *(server)* Identify slow writer lock acquisition sites (#1283)([f9480a3](https://github.com/scbrown/quipu/commit/f9480a3a9149856f07b71b18d987a2684486ca15))
+
+
+
+### Testing
+
+- *(store)* Qualify enrolled startup composed evaluator (#1286)([3f9468a](https://github.com/scbrown/quipu/commit/3f9468a1ff389ede541dda54c9dbc60cb3dc8b1c))
+
+## [0.19.1] - 2026-11-22
+
+### Added
+
+- *(metrics)* Serve the counters-only search aggregate at scrape time (#1268)([a97d2f8](https://github.com/scbrown/quipu/commit/a97d2f8c1a74510dd2830f9fddb639157d2a3e7c))
+- *(shapes)* Admit directives with a traceability review deadline (#1269)([1fc72ba](https://github.com/scbrown/quipu/commit/1fc72ba6a57132d063bb38af9ded2521595fcbcb))
+- *(query)* Coalesce identical overlapping in-process reads (#1270)([d694f00](https://github.com/scbrown/quipu/commit/d694f00dd64c4c68b39d41c96eef108681affb93))
+- *(metrics)* Measure completed writer holds for knot and promotion (#1272)([d2a5fb7](https://github.com/scbrown/quipu/commit/d2a5fb7d26af9d6f9aecea4ec04a604ebfeb19aa))
+- *(namespaces)* Expose conditional owner-local removal and restoration (#1275)([5483ea6](https://github.com/scbrown/quipu/commit/5483ea64580c27a7c4d43bd1b200773d9df12355))
+
+### Fixed
+
+- *(query)* Share composed-store reads with per-source fences (#1273)([027c424](https://github.com/scbrown/quipu/commit/027c424146e735697dae94f18f6b88944f99aca5))
+- *(shapes)* Admit shared structural views without owner metadata (#1274)([48ff74e](https://github.com/scbrown/quipu/commit/48ff74ee5ee52cf966b7f550b5de6c3ca8902446))
+- *(metrics)* Expose baselines for first query failures (#1276)([8472a74](https://github.com/scbrown/quipu/commit/8472a74faa0b246e75079968e277581fd72880cb))
+
+
+
+### Perf
+
+- *(sparql)* Let a whole-subject follower ride a fixed-relation star (#1267)([da767e8](https://github.com/scbrown/quipu/commit/da767e826a34e01fa7c71fa9a419b65c6d4eeb44))
+
+## [0.19.0] - 2026-11-20
+
+### Added
+
+- *(scoped-writer)* Admit /fluent/observations as fluent_append on a granted graph (#1255)([aaa9542](https://github.com/scbrown/quipu/commit/aaa9542f2aa4e114e9d04f09094b3d7099a51d05))
+- *(scoped-writer)* Re-land /fluent/observations as fluent_append on a granted graph (#1265)([ac37d5e](https://github.com/scbrown/quipu/commit/ac37d5e3f13b87a99ae4dcc19621e7c9e20e6b82))
+
+### Changed
+
+- [**breaking**] Remove memory-files primitive (#1231)([2d0d4d2](https://github.com/scbrown/quipu/commit/2d0d4d2c3fa33a4a5f2c9c1552bec455685ad23a))
+
+
+
+### Fixed
+
+- *(proposal-plan)* Bound the named-graph scan per graph (#1253)([7874861](https://github.com/scbrown/quipu/commit/7874861918ad6f84ac61c7dc51f3c876e0fc2085))
+- *(share)* Stop publishing former-name aliases in the repository pendant (#1254)([ac95f4c](https://github.com/scbrown/quipu/commit/ac95f4ccc050ef97a49117a6162ba1cf6c4f8583))
+- *(query)* Report a request budget spent queueing as RequestTimeout, not "exceeded 0ms (ran 0ms)" (#1256)([90bc2c3](https://github.com/scbrown/quipu/commit/90bc2c3899ed4c417e9ba13aaf0e181f939dd04c))
+- *(shapes)* Read served canonical shapes and census with full IRIs (#1263)([f30a915](https://github.com/scbrown/quipu/commit/f30a915a10f5b01840a1829367d35381682e8f7c))
+
+
+
+### Reverted
+
+- *(scoped-writer)* Undo /fluent/observations fluent_append (#1255) (#1259)([9b99136](https://github.com/scbrown/quipu/commit/9b99136db04197fec6316d23f78cd83f97d9a552))
+
+### Perf
+
+- *(sparql)* Drive a same-subject star from its smallest fixed relation (#1262)([c3854b2](https://github.com/scbrown/quipu/commit/c3854b29fac0e1c505cab6c018769b975899db62))
+- *(fluent)* Bind and read fluents from indexed slices, not a whole-graph reserialize (#1258)([8e797eb](https://github.com/scbrown/quipu/commit/8e797ebb17a7cadfeb9bc35a066c91d4c023bd9f))
 
 ## [0.18.2] - 2026-11-18
 

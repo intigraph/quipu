@@ -12,6 +12,10 @@ use serde::Deserialize;
 
 mod attachments;
 mod federation;
+mod graph_sets;
+pub use graph_sets::GraphSetsConfig;
+pub(crate) mod ingest_pilot;
+pub use ingest_pilot::IngestPilotConfig;
 mod query_capture;
 mod vector_backend;
 pub use attachments::{
@@ -637,6 +641,14 @@ pub struct QuipuConfig {
     /// to any query's result.
     pub attachments: Vec<AttachmentConfig>,
 
+    /// `[quipu.ingest_pilot]` (aegis-4qv): one enrolled per-graph owner.
+    /// None (default) is byte-identical startup; see [`IngestPilotConfig`].
+    pub ingest_pilot: Option<IngestPilotConfig>,
+
+    /// `[quipu.graph_sets]` (aegis-n0wc.5): graph-set owners from a catalog.
+    /// None (default) is byte-identical startup; see [`GraphSetsConfig`].
+    pub graph_sets: Option<GraphSetsConfig>,
+
     /// Write-maintained current-state projections (aegis-tg5 F2), declared as
     /// `[[quipu.projections]]`. Empty by default: no projection table, no
     /// trigger, no change to any write.
@@ -700,6 +712,8 @@ impl Default for QuipuConfig {
             events: EventsConfig::default(),
             import_policy: ImportPolicyConfig::default(),
             attachments: Vec::new(),
+            ingest_pilot: None,
+            graph_sets: None,
             current_projections: Vec::new(),
         }
     }
@@ -826,9 +840,11 @@ pub struct ServerConfig {
     /// the remaining readers and admission permits. No extra connection opens.
     pub reserve_point_reads: bool,
 
-    /// Cooperative scheduling cap for declared heavy /query operations.
-    /// Empty by default: no scheduling change. Initially supports owner-rows.
-    /// This is neither authorization nor a classifier for undeclared queries.
+    /// Cooperative scheduling cap for declared heavy /query operations: the
+    /// `x-quipu-operation` labels this deployment schedules as heavy. Any
+    /// well-formed label may be listed; Quipu gives none a meaning in source.
+    /// Empty by default: no scheduling change. This is neither authorization
+    /// nor a classifier for undeclared queries.
     pub heavy_read_operations: Vec<String>,
 
     /// Early read shedding (aegis-69x). 0 (default) keeps today's admission:
@@ -847,9 +863,18 @@ pub struct ServerConfig {
     /// When enabled, must be positive and less than actual ordinary readers.
     pub heavy_read_permits: usize,
 
+    /// Distinct client-declared labels (`x-quipu-source`, and separately
+    /// `x-quipu-operation`) the completion log records as themselves for this
+    /// process's lifetime. A new label past the cap is logged as `_overflow`.
+    /// Bounds log cardinality for every client alike (aegis-z29i).
+    pub declared_label_limit: usize,
+
     /// Include an optional permit-acquisition timestamp in query observation
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
+
+    /// Share overlapping identical local /query reads. Off until separately admitted.
+    pub query_singleflight: bool,
 
     /// Add per-query `SQLite` statement totals (count, rows, time, costliest
     /// statement texts) to query observation logs (aegis-xacr). Off by default;
@@ -902,7 +927,9 @@ impl Default for ServerConfig {
             heavy_read_permits: 1,
             read_admission_wait_ms: 0,
             read_background_reserve: 1,
+            declared_label_limit: 256,
             log_query_admission: false,
+            query_singleflight: false,
             log_query_phases: false,
             deck_http: false,
             attest_http: false,
@@ -922,8 +949,18 @@ impl ServerConfig {
         if self.heavy_read_operations.is_empty() {
             return Ok(());
         }
-        if self.heavy_read_operations.as_slice() != ["owner-rows"] {
-            return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
+        for (index, operation) in self.heavy_read_operations.iter().enumerate() {
+            if !crate::request_usage::request_label(operation) {
+                return Err(format!(
+                    "heavy_read_operations: {operation:?} is not a valid declared label \
+                     ([a-z][a-z0-9._-]{{0,63}})"
+                ));
+            }
+            if self.heavy_read_operations[..index].contains(operation) {
+                return Err(format!(
+                    "heavy_read_operations: {operation:?} is listed twice"
+                ));
+            }
         }
         if self.heavy_read_permits == 0 || self.heavy_read_permits >= ordinary_readers {
             return Err("heavy reads require 0 < heavy_read_permits < ordinary_readers".into());
@@ -980,7 +1017,18 @@ impl QuipuConfig {
         // without it. The mechanism stays because the NEXT settable-but-inert
         // knob should have somewhere to be loud, and because deleting it would
         // take the guard test's subject with it.
-        Vec::new()
+        let mut warnings = Vec::new();
+        // aegis-4qv: the pilot consumer exists only in witness-enabled Unix builds.
+        if cfg!(not(all(unix, feature = "ownership-witness-s3")))
+            && self.ingest_pilot.as_ref().is_some_and(|p| p.enabled)
+        {
+            warnings.push(
+                "ingest_pilot.enabled is set but this build lacks ownership-witness-s3; \
+                 the pilot is NOT started"
+                    .to_owned(),
+            );
+        }
+        warnings
     }
 }
 

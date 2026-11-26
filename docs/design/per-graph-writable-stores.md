@@ -327,6 +327,39 @@ writers and recover; do not reset ownership, recycle epochs or conceal a split.
 
 ## Phased plan and Seeds acceptance
 
+### Explicit graph-set planning interface
+
+`graph_catalog::GraphSetCatalog` validates a bounded deployment manifest in
+which several exact logical graph IRIs share one physical-owner pin. Its
+`plan_batch` rejects a mixed-file batch before selecting a writer; every member
+must carry the same current catalog, owner generation and policy pins.
+`plan_read` groups an explicitly selected dataset by physical owner so a future
+executor captures one snapshot per file, without adding unselected members.
+Physical connection and mailbox reservations count owners, while logical
+membership has a separate bound. Separate sets cannot alias the same file or
+lineage. Existing single-graph `Catalog` and router admission are unchanged.
+
+The native `GraphSetOwner` consumes an already configured/admitted writer and
+executes already-planned file-local deltas through the existing guarded atomic
+batch pipeline. All member pins and the batch's store/epoch must match before
+mailbox admission. One physical ownership permit covers the complete commit;
+local transaction heads return only after its outer savepoint releases. Batch
+order is retained, including application-defined provenance ordering. This
+native boundary provides no durable retry protocol, HTTP route, cross-file
+validation or client migration. Automatic embedding and reactive observers
+refuse rather than execute per-member hooks before outer batch completion.
+Their batch-aware completion protocol still needs qualification.
+
+`GraphSetDataset` captures one strict snapshot per selected physical owner,
+then represents each explicitly selected logical member at that file's captured
+head. Legacy ROOT and any selected reference graphs are explicit members too;
+unselected graphs never enter the view. `ComposedReadAdmission::for_graph_sets`
+binds those logical selections to the same physical pins and aggregate resource
+plan. Normal dataset grants and the existing authorized RDF query view still
+apply; physical membership confers no read authority. Ordinary composed-read
+admission does not accept these additional aliases. HTTP planning, application
+integration and production rollout remain separate.
+
 The first implementation slice is the single-graph ingest pilot. It must pass
 the local-owner and composed-reader gates below, but does not implement or
 pretend to provide participant commit. The Seeds application pilot remains

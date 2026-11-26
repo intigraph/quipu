@@ -96,7 +96,7 @@ class RunnerBudget(unittest.TestCase):
                 self.assertTrue(budget.audit(doc)[0])
 
     def test_other_events_and_matrix_arms_must_not_share_a_slot(self):
-        for mutation in ["job", "matrix", "run", "attempt", "event", "unbounded"]:
+        for mutation in ["job", "matrix", "run", "attempt", "event", "unbounded", "pr-scope"]:
             doc = copy.deepcopy(self.actual)
             policy = doc["ci.yml"]["jobs"]["test"]["concurrency"]
             group = policy["group"]
@@ -105,11 +105,29 @@ class RunnerBudget(unittest.TestCase):
                        "run": ("github.run_id", "'same'"),
                        "attempt": ("github.run_attempt", "'same'"),
                        "event": ("github.event_name == 'pull_request'", "true"),
-                       "unbounded": ("quipu-pr-runner-", "per-pr-")}
+                       "unbounded": ("-runner-", "-free-"),
+                       "pr-scope": ("github.event.pull_request.number", "github.run_id")}
             a, b = changes[mutation]
             policy["group"] = group.replace(a, b)
             with self.subTest(mutation=mutation):
                 self.assertTrue(budget.audit(doc)[0])
+
+    def test_repo_wide_pr_slots_are_refused(self):
+        """The #1206 form serialized every PR in the repo through four runners."""
+        doc = copy.deepcopy(self.actual)
+        policy = doc["ci.yml"]["jobs"]["test"]["concurrency"]
+        policy["group"] = re.sub(
+            r"format\('quipu-pr-\{0\}-runner-([1-4])', github\.event\.pull_request\.number\)",
+            r"'quipu-pr-runner-\1'", policy["group"])
+        self.assertIn("'quipu-pr-runner-", policy["group"])
+        self.assertTrue(budget.audit(doc)[0])
+
+    def test_two_prs_get_distinct_slot_keys(self):
+        """Concurrent PRs must not share a concurrency group."""
+        group = self.actual["ci.yml"]["jobs"]["test"]["concurrency"]["group"]
+        slot = re.search(r"format\('(quipu-pr-\{0\}-runner-[1-4])', github\.event\.pull_request\.number\)", group)
+        self.assertIsNotNone(slot)
+        self.assertNotEqual(slot[1].format(1315), slot[1].format(1317))
 
     def test_merge_group_and_same_pr_supersession_remain(self):
         for mutation in ["trigger", "cancel", "ref"]:

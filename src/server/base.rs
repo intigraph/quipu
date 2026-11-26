@@ -211,12 +211,16 @@ pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
     let mut body = store.graph_metrics.render();
+    if let Some(flights) = &store.query_flights {
+        flights.render(&mut body);
+    }
     if let Some(replica) = &store.replica {
         body.push_str(&replica.metrics());
     }
     super::request_middleware::render_request_starts(&mut body);
     super::admission::shed::render_metrics(&mut body);
     super::update::render_update_paths(&mut body);
+    super::handle::writer_timing::render(&mut body);
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
@@ -526,8 +530,9 @@ impl AppError {
     }
 
     /// The underlying error's message, for a response that must report a
-    /// failure AFTER an earlier step committed (aegis-fej9 deferred load).
-    #[cfg(feature = "owl")]
+    /// failure AFTER an earlier step committed (aegis-fej9 deferred load), or
+    /// for a startup refusal printed before exit (aegis-4qv ingest pilot).
+    #[cfg(any(feature = "owl", feature = "ownership-witness-s3"))]
     pub(crate) fn message(&self) -> String {
         self.0.to_string()
     }

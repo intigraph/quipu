@@ -5162,12 +5162,24 @@ mod knot_on_violation {
     use super::*;
 
     const REAL: &str = include_str!("../../shapes/aegis-ontology.shapes.ttl");
-    // Both soft markers: the emit route AND the Warning severity (aegis-1mv0to).
-    // Flipping to reject means dropping both; Warning alone never blocks.
-    const EMIT_LINE: &str = "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:severity sh:Warning ;\n";
+    // rdj production header; generic routing controls opt into both soft markers.
+    const REJECT_LINE: &str = "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"reject\" ;\n    sh:severity sh:Violation ;\n";
     const UNTRACED: &str = "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
         aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
+
+    // Generic routing controls deliberately opt this fixture into emit mode.
+    // Production date-or-links conformance is exercised by integration tests.
+    fn emit_line() -> String {
+        REJECT_LINE
+            .replace("reject", "emit")
+            .replace("sh:severity sh:Violation", "sh:severity sh:Warning")
+    }
+
+    fn emit_fixture() -> String {
+        assert!(REAL.contains(REJECT_LINE), "production header drifted");
+        REAL.replacen(REJECT_LINE, &emit_line(), 1)
+    }
 
     fn store_with(shapes: &str) -> Store {
         let mut store = Store::open_in_memory_test_ns().unwrap();
@@ -5202,7 +5214,7 @@ mod knot_on_violation {
 
     #[test]
     fn emit_shape_violation_commits_and_emits_event() {
-        let mut store = store_with(REAL);
+        let mut store = store_with(&emit_fixture());
         let result = knot(&mut store, UNTRACED);
         assert_eq!(
             result["conforms"], true,
@@ -5222,11 +5234,11 @@ mod knot_on_violation {
     #[test]
     fn without_emit_annotation_the_same_shape_rejects() {
         assert!(
-            REAL.contains(EMIT_LINE),
+            emit_fixture().contains(&emit_line()),
             "fixture drifted from the shapes file"
         );
-        let mutated = REAL.replacen(
-            EMIT_LINE,
+        let mutated = emit_fixture().replacen(
+            &emit_line(),
             "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n",
             1,
         );
@@ -5246,7 +5258,7 @@ mod knot_on_violation {
     /// shapes loaded beside it.
     #[test]
     fn reject_shape_still_gates() {
-        let mut store = store_with(REAL);
+        let mut store = store_with(&emit_fixture());
         let result = tool_knot(
             &mut store,
             &serde_json::json!({

@@ -56,6 +56,15 @@ tokio::task_local! {
     static PRIORITY: ReadPriority;
 }
 
+/// Run the rest of the request with the priority its headers declare.
+pub(crate) async fn run(
+    next: axum::middleware::Next,
+    req: axum::extract::Request,
+) -> axum::response::Response {
+    let priority = ReadPriority::from_headers(req.headers());
+    scope(priority, next.run(req)).await
+}
+
 /// Run a request future with its declared priority visible to admission.
 pub(crate) async fn scope<F: std::future::Future>(priority: ReadPriority, fut: F) -> F::Output {
     PRIORITY.scope(priority, fut).await

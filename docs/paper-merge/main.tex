@@ -43,6 +43,9 @@ names the command that regenerates it.}}
 % paper. arXiv stamps its own submission date on the PDF regardless.
 \date{11 November 2026}
 
+% Lets a paragraph stretch before a \texttt word runs into the margin.
+\emergencystretch=3em
+
 \begin{document}
 \maketitle
 
@@ -54,6 +57,7 @@ names the command that regenerates it.}}
 \input{sections/05-synthetic}
 \input{sections/06-replay}
 \input{sections/06-shapes}
+\input{sections/06-oracle}
 \input{sections/07-limitations}
 \input{sections/08-related}
 \input{sections/09-conclusion}

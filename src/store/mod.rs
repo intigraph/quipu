@@ -113,6 +113,7 @@ mod writer_scope;
 // Source-stage writer reader; no production caller is admitted yet.
 #[allow(dead_code)]
 mod slot_reads;
+mod value_reads;
 // Source-stage prepared-cut bridge; no production caller or admission authority.
 #[allow(dead_code)]
 pub(crate) mod slot_read_batch;
@@ -125,6 +126,7 @@ pub use projections::{
 };
 #[cfg(feature = "owl")]
 mod ontology_window;
+mod query_snapshot;
 mod registry;
 pub mod registry_list;
 pub mod respace;

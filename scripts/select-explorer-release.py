@@ -8,13 +8,14 @@ import json
 import re
 import sys
 
-# PINNED 2026-11-18 (aegis-x5m). The v0.18.2 repository pack (359,444 triples)
-# needs about 4.5-4.8 GiB to receive with SHACL validation, measured natively in
-# docs/probes/receiver-shacl-memory. The browser engine is wasm32, capped at
-# 4 GiB, and traps while loading it. v0.18.0 is the newest pack that validates
-# in the explorer. Unpin (set None) only when the receiver validation-memory fix
-# (aegis-8y0t) has landed AND a newer pack validates in this same Pages build.
-PINNED_TAG = 'quipu-ai-v0.18.0'
+# UNPINNED 2026-11-26 (aegis-1o7r). The pin to quipu-ai-v0.18.0 (aegis-x5m)
+# existed because the v0.18.2 pack (110 MB expanded, 359,874 triples) trapped
+# the wasm32 receiver during SHACL validation. The release pack no longer ships
+# export.ttl or the per-node owl:sameAs aliases: v0.19.5 is 65.2 MB expanded,
+# 327,493 triples. The Pages build validates the selected pack with this
+# checkout's engine and runs the browser loading suite before publishing, so a
+# pack that no longer loads fails the build. To re-pin, set a complete tag here.
+PINNED_TAG = None
 
 
 def select_release(pages, pinned=None):

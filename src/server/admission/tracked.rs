@@ -15,28 +15,96 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
+    // aegis-69x: when read shedding is armed, a sheddable read either gets a
+    // permit within its wait or is refused with 429 before it runs. OFF (the
+    // default) yields no policy and the original acquisition is unchanged.
+    let shed_policy = if super::shed::sheddable(kind) {
+        super::shed::policy()
+    } else {
+        None
+    };
+    let Some(permit) = super::shed::acquire(shed_policy, admission, deadline, started)
+        .await
+        .map_err(AppError::from)?
+    else {
+        return admit_tracked_permit(
+            admission.acquire(),
+            kind,
+            deadline,
+            started,
+            stamp,
+            f,
+            registry,
+        )
+        .await;
+    };
+    admit_tracked_permit(
+        std::future::ready(Ok(permit)),
+        kind,
+        deadline,
+        started,
+        stamp,
+        move || {
+            let ran = std::time::Instant::now();
+            let result = f();
+            super::shed::record_service(ran.elapsed());
+            result
+        },
+        registry,
+    )
+    .await
+}
+
+/// Dynamic owners retain an owned permit rather than borrowing the legacy
+/// static semaphore. Everything after acquisition follows the same path.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) async fn admit_tracked_owned<T, F>(
+    admission: std::sync::Arc<tokio::sync::Semaphore>,
+    kind: &'static str,
+    deadline: Option<quipu::time::Deadline>,
+    started: std::time::Instant,
+    stamp: Option<AdmissionStamp>,
+    f: F,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    admit_tracked_permit(
+        admission.acquire_owned(),
+        kind,
+        deadline,
+        started,
+        stamp,
+        f,
+        registry,
+    )
+    .await
+}
+
+pub(super) async fn admit_tracked_permit<T, F, A, P>(
+    acquire: A,
+    kind: &'static str,
+    deadline: Option<quipu::time::Deadline>,
+    started: std::time::Instant,
+    stamp: Option<AdmissionStamp>,
+    f: F,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+    A: std::future::Future<Output = Result<P, tokio::sync::AcquireError>> + Send,
+    P: Send + 'static,
+{
     let lane = match kind {
         "write" => quipu::metrics::inflight::Lane::Write,
         "point-read" => quipu::metrics::inflight::Lane::PointRead,
         _ => quipu::metrics::inflight::Lane::Read,
     };
     let work = registry.start(lane, quipu::metrics::inflight::Phase::Waiting);
-    // aegis-69x: when read shedding is armed, a sheddable read either gets a
-    // permit within its wait or is refused with 429 before it runs. OFF (the
-    // default) returns None and the original acquisition below is unchanged.
-    let shed_policy = if super::shed::sheddable(kind) {
-        super::shed::policy()
-    } else {
-        None
-    };
-    let shed_permit = super::shed::acquire(shed_policy, admission, deadline, started)
-        .await
-        .map_err(AppError::from)?;
-    let acquire = admission.acquire();
-    let acquired = if let Some(permit) = shed_permit {
-        drop(acquire);
-        Ok(permit)
-    } else if matches!(kind, "point-read" | "episode-read" | "heavy-read") {
+    let acquired = if matches!(kind, "point-read" | "episode-read" | "heavy-read") {
         if let Some(deadline) = deadline {
             let remaining = deadline.remaining_millis();
             let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
@@ -78,12 +146,7 @@ where
         if kind == "write" {
             reject_expired_write()?;
         }
-        let ran = std::time::Instant::now();
-        let result = f();
-        if shed_policy.is_some() {
-            super::shed::record_service(ran.elapsed());
-        }
-        result
+        f()
     })
     .await
 }

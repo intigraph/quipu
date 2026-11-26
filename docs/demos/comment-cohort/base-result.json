@@ -1,0 +1,43 @@
+{
+  "context": {
+    "admitted_count": 0,
+    "candidate_count": 1,
+    "contract": "quipu-context/v1",
+    "minimum_term_coverage": 0.5,
+    "outcome": "NO CONTEXT",
+    "reason": "insufficient_term_coverage",
+    "required_identifiers": [],
+    "similarity_floor": 0.52,
+    "subject_term": "frobnix",
+    "top_term_coverage": 0.42857142857142855
+  },
+  "context_results": [],
+  "count": 1,
+  "insufficient_context": true,
+  "ranking": "semantic",
+  "results": [
+    {
+      "entity": "https://example.invalid/subject/one",
+      "ranking_reason": "semantic",
+      "score": 1.0,
+      "similarity": 1.0,
+      "source": "knowledge",
+      "text": "frobnix. inventory fixture",
+      "valid_from": "2026-01-01T00:00:00Z",
+      "valid_to": null
+    }
+  ],
+  "scoped": false,
+  "search_scope": {
+    "default": "all",
+    "default_source": "store_default",
+    "excluded_graphs": [],
+    "graphs": [
+      "urn:quipu:graph:root"
+    ],
+    "index_completeness": "not_certified",
+    "named_vectors_enabled": false,
+    "remote_endpoints": "not_searched",
+    "selection": "default"
+  }
+}

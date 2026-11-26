@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.18.2"
+version = "0.19.5"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -30,7 +30,11 @@ exclude = [
     "GEMINI.md",
     "CHANGELOG.md",
     "release-plz.toml",
-    "scripts/",
+    "scripts/*",
+    # These entrypoints ship at the release tag and must trigger release-plz.
+    "!scripts/build-repository-share.py",
+    "!scripts/repository_receiver_decision.py",
+    "!scripts/publish-repository-share.sh",
     "wasm/",
     # MCP Registry packaging: it ships an image, not the crate (aegis-gys8sx).
     "server.json",

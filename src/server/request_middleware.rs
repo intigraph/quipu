@@ -33,6 +33,11 @@ pub(super) fn request_id() -> Option<u64> {
     REQUEST_ID.try_with(|id| *id).ok()
 }
 
+/// Install the deployment's generic cap on distinct declared labels (aegis-z29i).
+pub(super) fn init_declared_label_cap(config: &quipu::config::ServerConfig) {
+    request_command::init(config);
+}
+
 /// The same finite, duplicate-refusing declaration used by completion logs.
 /// This is cooperative scheduling metadata, never an authorization result.
 pub(super) fn declared_operation(headers: &axum::http::HeaderMap) -> Option<String> {
@@ -300,7 +305,6 @@ async fn log_request_tracked_stores(
         }),
         finished: false,
     };
-    let read_priority = super::admission::shed::ReadPriority::from_headers(req.headers());
     let resp = STORE_WORK
         .scope(
             StoreWorkContext {
@@ -313,10 +317,8 @@ async fn log_request_tracked_stores(
                     id,
                     super::search_observation::REQUEST.scope(
                         search,
-                        REQUEST_WRITE_PROVENANCE.scope(
-                            provenance.clone(),
-                            super::admission::shed::scope(read_priority, next.run(req)),
-                        ),
+                        REQUEST_WRITE_PROVENANCE
+                            .scope(provenance.clone(), super::admission::shed::run(next, req)),
                     ),
                 ),
             ),

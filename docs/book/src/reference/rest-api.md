@@ -42,6 +42,15 @@ verify the requested facts and preserve the same payload before retrying.
 These diagnostics do not change the configured request budget or bound direct
 protocol handlers that bypass tool-write admission.
 
+## Shed reads
+
+When `[quipu.server] read_admission_wait_ms` is positive, a read that cannot
+be admitted in time returns HTTP **429** with `Retry-After` and
+`code: "read_not_started"`, `read_started: false`. The read did not run, so
+retry after the indicated delay. Send `X-Quipu-Priority: background` on
+non-critical reads to be refused first instead of queueing. See
+[Read concurrency](read-concurrency.md#early-read-shedding).
+
 ## Unrecognized request fields
 
 Successful tool-backed JSON endpoints report unrecognized top-level request keys
@@ -2261,10 +2270,15 @@ migration) are not counted as that client's writes:
 - `quipu_write_provenance_missing_total{client,field}` — commits missing a
   required field (`agent`, `harness`, `host`, `session`, `model`).
 
-A header that is present but blank counts as missing. A write signed with a
+A header value must be printable ASCII of at most 128 characters. A value that
+is blank, longer, or contains any other byte counts as missing and is not
+stored with the transaction; declarations stored before this limit (up to 1024
+bytes) still read back. A write signed with a
 verified `x-quipu-attestation` takes its agent and session from the key
 binding, so a signed client that omits those two headers can still be
-`complete`. Harness, host and model still come from the headers, and a
+`complete`. The transaction also records the binding's session as local
+credential evidence, which is never replicated or shared; bearer writes, and
+transactions committed before the server recorded it, have none. Harness, host and model still come from the headers, and a
 refused signature counts nothing. Coverage per client is
 `rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
 the process restarts, so use rates rather than raw values.

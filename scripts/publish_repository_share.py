@@ -174,7 +174,17 @@ def publish(tag, revision, output):
             spec.loader.exec_module(builder)
         finally:
             sys.dont_write_bytecode = _previous_bytecode
-        builder.build(revision, source, tooling, binary, bobbin, stage)
+        previous_receipt = os.environ.get("QUIPU_SHARE_IMPORT_RECEIPT")
+        os.environ["QUIPU_SHARE_IMPORT_RECEIPT"] = previous_receipt or str(
+            output.with_name(output.name + ".receiver-import-decision.json")
+        )
+        try:
+            builder.build(revision, source, tooling, binary, bobbin, stage)
+        finally:
+            if previous_receipt is None:
+                os.environ.pop("QUIPU_SHARE_IMPORT_RECEIPT", None)
+            else:
+                os.environ["QUIPU_SHARE_IMPORT_RECEIPT"] = previous_receipt
         archive_name = "quipu-" + tag + "-repository.pendant.tar.gz"
         prepared = private / "assets"
         prepared.mkdir(mode=0o700)

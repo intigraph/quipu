@@ -125,3 +125,31 @@ outside the harness. It proves, and exits non-zero if it cannot:
   and reported 121 unparseable lines that were the harness's fault, not git's);
 - an absent `git` is reported as unavailable rather than as a clean sweep;
 - every arm holds its conflicted slots at base.
+
+## Independent judge (no shapes)
+
+`judge.py` scores every arm against truth derived from the three graphs and
+`intent.json`, the intended cardinality of each predicate declared from the use
+case it models. It never reads `shapes.rs` or the generator's conflict labels.
+The one exception is alias-mint, which is invisible at the triple level and is
+taken from the generator's alias log; no shape is consulted to produce it.
+`MERGEBENCH_OPERATOR_SHAPES` changes only the bounds the merge operators are
+told (`name=n|none`, comma separated). The generator, its data and the SHACL
+validator keep the declared table, so shape quality can be measured as a
+predictor.
+
+```bash
+cargo build --locked --release --example mergebench --features shacl,merge-benchmark
+B=target/release/examples/mergebench
+for s in 1 7 42 99 2026; do
+  $B --seed $s --out /tmp/mb --dump /tmp/mb-declared
+  MERGEBENCH_OPERATOR_SHAPES=tag=none $B --seed $s --out /tmp/mb --dump /tmp/mb-tag-none
+done
+python3 benchmark/mergebench/judge.py benchmark/mergebench/intent.json /tmp/mb-declared/dump-seed*.json
+```
+
+Committed results (main 57a28398, five operator-shape variants) are under
+`results/independent-judge/`. With declared shapes the independent truth equals
+the generator truth on every seed, so on this synthetic arm the agreement is by
+construction. The measured content is the sensitivity to wrong shapes; see
+`results/independent-judge/SUMMARY.txt`.

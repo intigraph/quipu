@@ -5,6 +5,23 @@ use std::path::PathBuf;
 
 const GRAPH: &str = "https://example.test/graphs/ingest";
 
+#[path = "graph_router_pilot_tests.rs"]
+mod pilot;
+
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+#[path = "graph_router_enrolled_tests.rs"]
+mod enrolled;
+
+#[test]
+fn identical_routes_from_a_different_catalog_cannot_supply_an_owner_budget() {
+    let f = fixture();
+    let first = catalog_for(&f.route);
+    let second = catalog_for(&f.route);
+    f.legacy.fence_routed_graph(GRAPH, 7, 4).unwrap();
+    let prepared = owner(&f, &first);
+    assert!(Router::admit(second, &f.legacy, vec![prepared]).is_err());
+}
+
 struct Fixture {
     _dir: tempfile::TempDir,
     root: PathBuf,

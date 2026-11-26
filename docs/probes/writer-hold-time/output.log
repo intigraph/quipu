@@ -1,0 +1,59 @@
+Script started on 2026-11-21 15:34:37-05:00 [COMMAND="bash demo.sh" <not executed on terminal>]
+
+running 1 test
+
+thread 'handle::writer_timing::tests::writer_timing_endpoint_survives_client_saturation' (414432) panicked at src/server/writer_timing_tests.rs:131:5:
+late knot endpoint disappeared after caller saturation
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test handle::writer_timing::tests::writer_timing_endpoint_survives_client_saturation ... FAILED
+
+failures:
+
+failures:
+    handle::writer_timing::tests::writer_timing_endpoint_survives_client_saturation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 414 filtered out; finished in 0.00s
+
+
+running 7 tests
+test handle::writer_timing::tests::writer_timing_endpoint_survives_client_saturation ... ok
+test handle::writer_timing::tests::writer_timing_each_endpoint_keeps_its_overflow_and_known_clients ... ok
+
+thread 'handle::writer_timing::tests::writer_timing_error_unwind_and_cancellation_release_actual_guard' (414447) panicked at src/server/writer_timing_tests.rs:36:17:
+unwind control
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test handle::writer_timing::tests::writer_timing_error_unwind_and_cancellation_release_actual_guard ... ok
+test handle::writer_timing::tests::writer_timing_labels_and_registry_are_bounded ... ok
+{"auth_outcome":"pending","client":"hold-native","declared_operation":null,"declared_source":null,"endpoint":"/knot","event":"request_start","method":"POST","path":"/knot","request_id":0,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+{"durations_ms":{},"elapsed_ms":0.008714,"event":"write_stage_start","observation_id":1,"outcome":"started","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"dispatch","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364},"elapsed_ms":0.695553,"event":"write_stage_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"dispatch","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364},"elapsed_ms":0.83749,"event":"write_stage_start","observation_id":1,"outcome":"started","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"store_wait","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"store_wait":0.126982},"elapsed_ms":0.967657,"event":"write_stage_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"store_wait","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"store_wait":0.126982},"elapsed_ms":1.0815169999999998,"event":"write_stage_start","observation_id":1,"outcome":"started","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"store_held","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"store_wait":0.126982},"elapsed_ms":1.208921,"event":"write_stage_start","observation_id":1,"outcome":"started","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"tool","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"store_wait":0.126982},"elapsed_ms":2.419226,"event":"write_stage_start","observation_id":1,"outcome":"started","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"guards","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"store_wait":0.126982},"elapsed_ms":4.152429,"event":"write_stage_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"guards","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"store_wait":0.126982},"elapsed_ms":4.286903,"event":"write_stage_start","observation_id":1,"outcome":"started","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"release","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"release":0.16347799999999998,"store_wait":0.126982},"elapsed_ms":4.452122,"event":"write_stage_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"release","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"release":0.16347799999999998,"store_wait":0.126982},"elapsed_ms":4.585293,"event":"write_stage_start","observation_id":1,"outcome":"started","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"hooks","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"hooks":0.198762,"release":0.16347799999999998,"store_wait":0.126982},"elapsed_ms":4.788504,"event":"write_stage_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"hooks","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"hooks":0.198762,"release":0.16347799999999998,"store_wait":0.126982,"tool":3.815489},"elapsed_ms":5.027958,"event":"write_stage_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"tool","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"hooks":0.198762,"release":0.16347799999999998,"store_held":4.10382,"store_wait":0.126982,"tool":3.815489},"elapsed_ms":5.1885769999999996,"event":"write_stage_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":"store_held","timestamp":"2026-11-21T20:34:37Z"}
+{"durations_ms":{"dispatch":0.644364,"guards":1.727735,"hooks":0.198762,"release":0.16347799999999998,"store_held":4.10382,"store_wait":0.126982,"tool":3.815489},"elapsed_ms":7.782165,"event":"write_observation_end","observation_id":1,"outcome":"ok","page":null,"path":"Knot","request_id":0,"server_process_id":414437,"stage":null,"timestamp":"2026-11-21T20:34:37Z"}
+{"auth_outcome":"pending","client":"hold-native","completion_outcome":"response","declared_operation":null,"declared_source":null,"duration_ms":8,"endpoint":"/knot","event":"request_complete","method":"POST","path":"/knot","request_id":0,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"status":200,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+{"auth_outcome":"pending","client":"hold-native","declared_operation":null,"declared_source":null,"endpoint":"/knot/stage","event":"request_start","method":"POST","path":"/knot/stage","request_id":1,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+{"auth_outcome":"pending","client":"hold-native","completion_outcome":"response","declared_operation":null,"declared_source":null,"duration_ms":0,"endpoint":"/knot/stage","event":"request_complete","method":"POST","path":"/knot/stage","request_id":1,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"status":200,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+{"auth_outcome":"pending","client":"hold-native","declared_operation":null,"declared_source":null,"endpoint":"/knot/promote","event":"request_start","method":"POST","path":"/knot/promote","request_id":2,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+{"auth_outcome":"pending","client":"hold-native","completion_outcome":"response","declared_operation":null,"declared_source":null,"duration_ms":0,"endpoint":"/knot/promote","event":"request_complete","method":"POST","path":"/knot/promote","request_id":2,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"status":200,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+native promote completed writer holds=1 held_seconds=0.001595878
+{"auth_outcome":"pending","client":"hold-native","declared_operation":null,"declared_source":null,"endpoint":"/knot/promote","event":"request_start","method":"POST","path":"/knot/promote","request_id":3,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+{"auth_outcome":"pending","client":"hold-native","completion_outcome":"response","declared_operation":null,"declared_source":null,"duration_ms":0,"endpoint":"/knot/promote","event":"request_complete","method":"POST","path":"/knot/promote","request_id":3,"request_provenance":"absent","request_provenance_missing":["agent","harness","host"],"server_process_id":414437,"status":200,"task":"unattributed","timestamp":"2026-11-21T20:34:37Z","transport_peer":null,"transport_peer_source":"unavailable"}
+{"event":"search_outcome","logical_call_id":"9fe473a33fc5811712faf6be61313fe0","operation":"query","status":null,"summary":{"admitted_count":null,"candidate_count":null,"outcome":"hits","result_count":1,"zero_kind":null},"surface":"library"}
+test handle::writer_timing::tests::writer_timing_native_knot_stage_and_detached_promotion ... ok
+test handle::writer_timing::tests::writer_timing_wait_and_post_unlock_work_are_excluded ... ok
+test handle::writer_timing::tests::writer_timing_read_interfaces_are_not_explicit_writer_holds ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 408 filtered out; finished in 0.59s
+
+
+Script done on 2026-11-21 15:34:37-05:00 [COMMAND_EXIT_CODE="0"]

@@ -16,8 +16,8 @@ recorded edit histories. The judgement, however, is still derived from the shape
 predicate carries \texttt{sh:maxCount 1}, and \emph{SHACL violations} is scored
 against the same shapes in every arm. The one result in this arm that does not
 depend on the shapes is the alias column, and it is a negative: $0$ of $93$.
-Judging correctness with an oracle that does not read the shapes is follow-up
-work (\S\ref{sec:limits}).
+An oracle that does not read the shapes judges the same operator on a small
+set of cases in \S\ref{sec:oracle}.
 
 \paragraph{The corpus.} Extracted from a live multi-agent knowledge graph in
 which software agents and people had been writing concurrently for months, and
@@ -42,7 +42,7 @@ production append path doubled instead of replacing --- $939$ affected subjects
 carrying $1{,}784$ excess values.
 
 \paragraph{Results.} Table~\ref{tab:armB} reports the replay. Regenerate with
-\texttt{cargo run --example replay --features shacl}.
+\texttt{cargo run -{}-example replay -{}-features shacl}.
 
 \begin{table}[t]
 \centering\small

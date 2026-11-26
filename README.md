@@ -18,17 +18,46 @@
 <p align="center"><strong><a href="https://intigraph.github.io/quipu/">Read the book →</a></strong></p>
 
 **Quipu is a governed, bitemporal knowledge store for AI agents and the
-people who run them.** Use it from the command line, REST, MCP or a Rust application.
+people who run them.** It keeps facts, decisions and work history in one graph,
+checks what is written against your rules, and can answer what was true at any
+earlier point. Use it from the command line, REST, MCP, Python or a Rust application.
 
-## Why you would want it
-
-- **Governed:** check incoming knowledge against your vocabulary and shapes.
-- **Bitemporal:** keep a queryable history of facts and decisions.
-- **Reusable agent knowledge:** store memory agents can read, reuse and share across tools.
-- **Time-aware entities:** attach event-triggering time attributes for [Chaski](https://github.com/intigraph/chaski) to react to.
-
-Use Quipu as the **central graph and base for many tools**: see [the stack](#-the-stack).
+It is also the **central graph and base for many tools**: see [the stack](#-the-stack).
 The full case is in [Why Quipu](https://intigraph.github.io/quipu/why-quipu.html).
+
+## What it does today
+
+| Capability | What you get |
+|---|---|
+| **A history of every fact** | Facts are appended, never overwritten. Each one carries when it was true and when it was recorded, so you can query the graph as it stood at any transaction. [The temporal model](https://intigraph.github.io/quipu/concepts/temporal-model.html) |
+| **Standard graph data and queries** | RDF data, SPARQL 1.1 queries, stored queries and typed query builders. [SPARQL from zero](https://intigraph.github.io/quipu/tutorials/sparql.html), [conformance results](https://intigraph.github.io/quipu/benchmarks/conformance.html) |
+| **Governed writes** | SHACL shapes and policies are checked at the write gate. A write that breaks your vocabulary is refused with a reason. [Governance](https://intigraph.github.io/quipu/concepts/governance.html) |
+| **Provenance on ingestion** | Episodes record a batch of entities and relationships together with their source, and entity resolution matches new mentions to the nodes you already have. [Episode ingestion](https://intigraph.github.io/quipu/architecture/episodes.html) |
+| **Named graphs with trust labels** | Separate bodies of knowledge, composed into overlays and datasets, labelled by trust and frozen when they must not change. [Named graphs](https://intigraph.github.io/quipu/concepts/named-graphs.html) |
+| **Reasoning** | An OWL layer and a rule engine that says when an answer is unknown instead of guessing. [The reasoner](https://intigraph.github.io/quipu/concepts/reasoning.html) |
+| **Search** | Keyword search with no model to download, semantic search once an embedding model is installed, and hybrid ranking over both. [Embeddings and search](https://intigraph.github.io/quipu/concepts/embeddings.html) |
+| **Verified sharing** | Export a signed share, verify it in quarantine, then promote what you admit. Conflicts come back as decisions, not silent merges. [Sharing and federation](https://intigraph.github.io/quipu/sharing/index.html) |
+| **A change stream** | Committed changes are published in order, so other tools react to the graph without polling. [Committed feed streams](https://intigraph.github.io/quipu/architecture/event-stream.html) |
+| **Files from the graph** | Render graph data into files such as agent instructions and configuration. [Render](https://intigraph.github.io/quipu/reference/render.html) |
+| **Runs where you are** | One store behind a CLI, an HTTP server with a graph explorer, an MCP server, a Rust library, a Python client and WebAssembly. It works offline. |
+
+## What is planned
+
+Month-level targets, in order. The stack-wide plan is the
+[Intigraph roadmap](https://github.com/intigraph/.github/blob/main/ROADMAP.md).
+
+| When | Planned |
+|---|---|
+| **Now** (December 2026) | **Faster reads:** the slow tail of board-shaped queries, anti-joins and aggregates under one second. |
+| | **A store per graph:** each named graph gets its own store file and writer, composed into one read view. [Design](docs/design/per-graph-writable-stores.md) |
+| | **Fluents:** frequently changing values kept as append-only observations with a derived current value, so they merge without conflict. [Contract](docs/design/fluents-v1-contract.md) |
+| **Next** (January and February 2027) | **Read standby:** a follower of the change stream that takes reads if the primary stops. |
+| | **Subscription filters:** by class, predicate and subject, so a consumer hears only what it asked for. |
+| | **Local sync:** a scoped copy that stays fresh from the stream, works offline and reports how stale it is. [Design](docs/design/local-sync-mode.md) |
+| | **Search v2:** keyword and semantic ranking with a configurable balance. |
+| | **Pendants that write files:** a pendant, the cut of the graph handed to one job, declares the files an agent needs, and the client writes them with a receipt. |
+| **Later** (March to May 2027) | **Merge-back:** a signed changeset from a local copy, merged three-way, with a conflict returned as a decision for a person. |
+| | **A data map:** Quipu as the catalog of where data lives, with a read-only tool that joins those locations and keeps provenance. |
 
 <p align="center">
   <img src="assets/run-anywhere.svg" width="900" alt="Animated: one Quipu store connects the CLI, MCP clients, HTTP server, Rust library, offline use and WebAssembly"/>
@@ -118,7 +147,8 @@ Use [Tambo](https://github.com/intigraph/tambo) to configure and verify the tool
 - [The Quipu book](https://intigraph.github.io/quipu/): tutorials, concepts and references.
 - [Quick Start](https://intigraph.github.io/quipu/getting-started/quick-start.html): governed local examples.
 - [Domain shapes](https://intigraph.github.io/quipu/concepts/domain-shapes.html): producer-owned vocabulary.
-- [Stack README format](https://github.com/intigraph/tambo/blob/main/docs/stack/README-TEMPLATE.md) and [shared hero theme](assets/readme-theme.md).
+- [Intigraph roadmap](https://github.com/intigraph/.github/blob/main/ROADMAP.md): what is planned across the stack.
+- [Stack README format](https://github.com/intigraph/tambo/blob/main/docs/stack/README-TEMPLATE.md).
 
 ## 🧺 The stack
 

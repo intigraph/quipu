@@ -207,6 +207,7 @@ demo name="explorer":
     set -euo pipefail
     case {{quote(name)}} in
         writer-lock) cargo run --quiet --locked --no-default-features --example writer_lock_demo ;;
+        comment-cohort) cargo run --quiet --locked --example comment_cohort ;;
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
         strict-new) cargo run --quiet --locked --no-default-features --example episode_strict_new ;;
         merge-risk-plan) cargo run --quiet --locked --offline --no-default-features --example merge_risk_plan ;;
@@ -393,6 +394,7 @@ contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":
     set -euo pipefail
     case "{{cmd}}" in
         test) scripts/check-contributor-knowledge.sh ;;
+        receiver-test) python3 scripts/test-receiver-decision.py; python3 scripts/test-repository-share-publication.py ;;
         generate) node scripts/build-contributor-knowledge.mjs . "{{output}}" ;;
         verify) node scripts/verify-contributor-knowledge.mjs "${QUIPU_BIN:?}" "{{output}}" ;;
         pack) scripts/build-repository-share.sh "${QUIPU_BIN:?}" "$(command -v bobbin)" "$PWD" "{{output}}" "$(git rev-parse HEAD)" ;;

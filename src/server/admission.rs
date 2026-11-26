@@ -14,6 +14,9 @@ pub(crate) mod heavy_reads;
 #[path = "admission/shed.rs"]
 pub(crate) mod shed;
 
+#[path = "admission/owner.rs"]
+pub(crate) mod owner;
+
 /// Admit one write before moving it onto Tokio's uncancellable blocking pool.
 ///
 /// A request future can be cancelled while it waits for this permit, so an

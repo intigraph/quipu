@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "7f0e4e7941b1aa8a7cb7548aacb0a4470fba78b4e60d450d34c14c106bbb40e0",
+      "source_sha256": "90a0b120715f34f931b166a22ea7a71e4ac88093b7c15217ce04f13cc6c85c29",
       "type": "Concept"
     },
     {
@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "79c1fd394c3967a41b8d634e2f0e4988fc327d2ac2191b5627dc6e677c98131c",
+      "source_sha256": "f8ffb94c6973d10145d9dd774d08fa376d8820b0075fef0273073bd64d0e199b",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "b7376341fa2e849c764a9163da32b078a5ed647d9bbeb123cb366d2b73c4f0f1",
+      "source_sha256": "336de78cacd3b7b642137f1ea60eff3663fbfcf3bb96610ca93a686ebaa99c62",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "2c03f84446e3c63f817fe896fa932e900e6deb6d959396c2607bcc0aefbcd130",
+      "source_sha256": "c0a39482ef6f39b95fcf8bb4a8693be72354b6f01d705daf3a694dcc28b15023",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"

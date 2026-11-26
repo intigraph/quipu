@@ -1,6 +1,7 @@
 //! SPARQL Protocol transports and the primary query endpoint.
 
 mod routes;
+pub(crate) mod singleflight;
 pub(crate) use routes::routes;
 
 use axum::{
@@ -201,7 +202,7 @@ async fn query_core(
     // Every failure, a deadline 408 included, still names its shape in the
     // request log (aegis-raq1ok.1). It returned no result: its size is
     // unknown, which is not an empty result.
-    answer_query(store, headers, input, is_post, query_shape)
+    singleflight::answer(store, headers, input, is_post, query_shape)
         .await
         .map_err(|error| {
             error.with_usage(quipu::request_usage::RequestUsage {
@@ -217,6 +218,7 @@ async fn answer_query(
     input: JsonValue,
     is_post: bool,
     query_shape: quipu::request_usage::QueryShape,
+    proof: Option<std::sync::Arc<singleflight::Proof>>,
 ) -> Result<axum::response::Response, AppError> {
     if input.get("execution_profile").and_then(JsonValue::as_bool) == Some(true)
         && (input.get("federated").and_then(JsonValue::as_bool) == Some(true)
@@ -281,6 +283,10 @@ async fn answer_query(
     let stamp = observation.admission_stamp();
     query_blocking(point, heavy, stamp, move || {
         observation.dispatched();
+        #[cfg(test)]
+        store
+            .query_execution_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the
         // record. Completion-only text logging is how the mfg0 killer query
@@ -489,11 +495,32 @@ async fn answer_query(
 
         // Pin readiness and evaluation to the same schema/fact snapshot: a
         // concurrent explicit index drop cannot turn this into a scan fallback.
+        let evaluate = || {
+            if let Some(proof) = &proof {
+                // Pin the actual evaluation snapshot and validate admission's
+                // generation before sharing. A later commit does not invalidate
+                // this already-pinned answer for followers at the same watermark.
+                store
+                    .query_composed_snapshot(|head, sources| {
+                        proof.observe_sources(head, sources);
+                        run(&store)
+                    })
+                    // Uncertain source proof disables sharing. Even a failed
+                    // read-transaction commit must not publish a fallback under
+                    // the earlier admission generation.
+                    .unwrap_or_else(|_| {
+                        proof.invalidate();
+                        run(&store)
+                    })
+            } else {
+                run(&store)
+            }
+        };
         let mut result = super::query_usage::profiled(&mut observation, phases, || {
             if require_substring {
-                store.substring_query(|| run(&store))
+                store.substring_query(evaluate)
             } else {
-                Ok(run(&store))
+                Ok(evaluate())
             }
         })?;
         if require_substring && let Ok(response) = &mut result {

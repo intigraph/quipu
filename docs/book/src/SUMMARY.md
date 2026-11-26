@@ -103,6 +103,7 @@
 
 # Operations
 
+- [Read concurrency: pool, processes, replicas](reference/read-concurrency.md)
 - [Write refusal accounting](reference/write-refusals.md)
 - [Search outcome accounting](reference/search-outcomes.md)
 - [CI/CD and Releases](architecture/ci-cd.md)

@@ -1,4 +1,4 @@
-//! Two bounded forwarding lanes, with one service-wide owner-row executor.
+//! Two bounded forwarding lanes, with one service-wide heavy-operation executor.
 use super::{Ordering, Routing, Worker};
 use tokio::sync::OwnedSemaphorePermit;
 
@@ -24,7 +24,9 @@ mod tests;
 
 impl Routing {
     pub(super) fn heavy(&self, path: &str, operation: Option<&str>) -> bool {
-        self.heavy_permits > 0 && path == "/query" && operation == Some("owner-rows")
+        self.heavy_permits > 0
+            && path == "/query"
+            && operation.is_some_and(|op| self.heavy_operations.iter().any(|known| known == op))
     }
 
     pub(super) fn select(&self, heavy: bool) -> Option<(&Worker, OwnedSemaphorePermit)> {

@@ -50,7 +50,10 @@ for (const s of registry.stories) {
     fact(ns + s.id, ns + "governs", codeNS + "code/quipu/" + encodeURIComponent(path));
   }
 }
-node("trust-directive", codeNS + "Directive", "Verify before trust", registry.stories[3].quote);
+// A public design principle, not a governed crew Directive: aegis:Directive
+// requires traceability links (DirectiveTraceabilityShape, reject), which a
+// repository share cannot carry, so the receiver would quarantine the share.
+node("trust-directive", codeNS + "DecisionRecord", "Verify before trust", registry.stories[3].quote);
 evidence("trust-directive", registry.stories[3]);
 fact(ns + "verify-before-trust", ns + "requires", ns + "trust-directive");
 node("book", ns + "Book", "Contributor's book", "The book's reading order, linked to its indexed documents.");

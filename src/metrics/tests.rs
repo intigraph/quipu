@@ -501,3 +501,34 @@ fn positive_auth_diagnostic_failures_remain_unexpected() {
         1
     );
 }
+
+#[test]
+fn monitored_query_outcomes_export_zero_before_the_first_request() {
+    let metrics = Metrics::default();
+    let before = metrics.render(0, 0, 0, None);
+    for status in [200, 408, 499, 503] {
+        assert!(before.contains(&format!(
+            "quipu_http_requests_total{{endpoint=\"/query\",status=\"{status}\"}} 0\n"
+        )));
+    }
+    // Scraping establishes baselines without manufacturing traffic/histograms.
+    assert!(metrics.requests.lock().unwrap().is_empty());
+    assert!(metrics.durations.lock().unwrap().is_empty());
+    metrics.observe_request("/query", 408, 0.1);
+    let after = metrics.render(0, 0, 0, None);
+    let series = "quipu_http_requests_total{endpoint=\"/query\",status=\"408\"}";
+    assert_eq!(
+        after
+            .lines()
+            .filter(|line| line.starts_with(series))
+            .count(),
+        1
+    );
+    assert!(after.contains(&format!("{series} 1\n")));
+    // A later scrape cannot reset the observed counter to its baseline.
+    assert!(
+        metrics
+            .render(0, 0, 0, None)
+            .contains(&format!("{series} 1\n"))
+    );
+}

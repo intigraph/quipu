@@ -155,6 +155,9 @@
   "/graph/thaw": [
     "post"
   ],
+  "/graph/writer-instance": [
+    "get"
+  ],
   "/graphs": [
     "get"
   ],
@@ -226,6 +229,15 @@
     "post"
   ],
   "/overlay/write": [
+    "post"
+  ],
+  "/owner/knot": [
+    "post"
+  ],
+  "/owner/knot/seal": [
+    "post"
+  ],
+  "/owner/knot/status": [
     "post"
   ],
   "/patch": [

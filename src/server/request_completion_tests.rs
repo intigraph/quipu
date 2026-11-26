@@ -93,7 +93,11 @@ fn completed_response_disarms_drop_and_retains_metadata() {
     assert!(counters.0.lock().unwrap().is_empty());
     let text = metrics.render(0, 0, 0, None);
     assert!(text.contains("quipu_http_request_duration_seconds_count{endpoint=\"/pending\"} 1"));
-    assert!(!text.contains("status=\"499\""));
+    // Monitored /query outcomes are exported at zero before any such request.
+    // Completing this /pending response must not count a dropped request.
+    assert!(text.contains("quipu_http_requests_total{endpoint=\"/query\",status=\"499\"} 0"));
+    assert!(!text.contains("quipu_http_requests_total{endpoint=\"/pending\",status=\"499\"}"));
+    assert!(text.contains("quipu_http_requests_total{endpoint=\"/pending\",status=\"200\"} 1"));
 }
 
 #[test]

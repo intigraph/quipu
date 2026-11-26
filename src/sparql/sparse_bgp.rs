@@ -1,4 +1,19 @@
-//! Use a proven small literal relation before constructing a whole graph model.
+//! Use a proven small fixed-object relation before constructing a whole graph model.
+//!
+//! First pass (unchanged): the first fixed literal relation of at most
+//! [`SMALL`] rows drives. Second pass (aegis-prna R3): otherwise the SMALLEST
+//! fixed literal or non-type IRI relation of at most [`WIDE`] rows drives.
+//! Without it, a seeds owner star such as `?s status "open" . ?s agent <p>`
+//! (1,229 and 390 rows) fell through to the resident whole-graph read model:
+//! a full current-fact scan per reader handle plus write catch-up, measured
+//! at 0.8-10 s per query and the dominant owner-rows store hold in production.
+//!
+//! aegis-n0wc C: a follower may also be a whole-subject read `?s ?p ?o` once the
+//! driver has bound `?s` (a bound-subject index probe per driver row). The
+//! seeds family read `?s <parentItem> <item> . ?s ?p ?o` (314 comment facts on
+//! a busy item) otherwise fell through to the whole-graph model: 3.5-4.2 s of
+//! store per read, three reads per crew comment. The driver itself must still
+//! be a named, fixed relation, and RDFS entailment keeps the ordinary planner.
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
@@ -8,6 +23,9 @@ use super::{Bindings, TemporalContext};
 use crate::{Result, Store};
 
 pub(super) const SMALL: usize = 128;
+/// Largest driver of the second pass: each remaining pattern then costs at
+/// most this many bound-subject index probes, never a whole-graph build.
+pub(super) const WIDE: usize = 1024;
 
 pub(super) fn try_eval(
     store: &Store,
@@ -37,10 +55,7 @@ pub(super) fn try_eval(
         {
             continue;
         }
-        if patterns.iter().any(|other| {
-            other.subject != pattern.subject
-                || !matches!(other.predicate, NamedNodePattern::NamedNode(_))
-        }) {
+        if !indexed_star(patterns, ctx) {
             continue; // Only indexed same-subject stars; disconnected joins keep their planner.
         }
         // The ordinary triple reader composes and canonicalizes aliases before
@@ -51,6 +66,9 @@ pub(super) fn try_eval(
             chosen = Some((index, rows));
             break;
         }
+    }
+    if chosen.is_none() && !patterns.iter().any(|p| p.subject != patterns[0].subject) {
+        chosen = smallest_fixed_driver(store, patterns, ctx, seed)?;
     }
     let Some((chosen, mut rows)) = chosen else {
         return Ok(None);
@@ -89,4 +107,69 @@ pub(super) fn try_eval(
         rows = next;
     }
     Ok(Some((rows, variables)))
+}
+
+/// The smallest fixed-object relation of at most [`WIDE`] rows, if any.
+///
+/// Only same-subject stars over named predicates reach here (checked by the
+/// caller and below). `rdf:type` objects keep the entailment-aware planner,
+/// and an IRI object is skipped under RDFS entailment, where a sub-property
+/// could contribute rows that a direct lookup cannot see.
+fn smallest_fixed_driver(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<Option<(usize, Vec<Bindings>)>> {
+    if !indexed_star(patterns, ctx) {
+        return Ok(None);
+    }
+    let mut best: Option<(usize, Vec<Bindings>)> = None;
+    for (index, pattern) in patterns.iter().enumerate() {
+        let NamedNodePattern::NamedNode(predicate) = &pattern.predicate else {
+            continue;
+        };
+        // An if-chain, not a match: TermPattern's variant set depends on
+        // features, so a wildcard arm trips clippy on one build or the other.
+        let fixed = if let TermPattern::Variable(v) = &pattern.object {
+            matches!(seed.get(v.as_str()), Some(crate::types::Value::Str(_)))
+        } else if matches!(pattern.object, TermPattern::NamedNode(_)) {
+            !ctx.entails_rdfs && predicate.as_str() != crate::namespace::RDF_TYPE
+        } else {
+            matches!(pattern.object, TermPattern::Literal(_))
+        };
+        if !fixed {
+            continue;
+        }
+        let bound = best.as_ref().map_or(WIDE, |(_, rows)| rows.len());
+        let rows = eval_triple_pattern_limited(store, pattern, seed, ctx, Some(bound + 1))?;
+        if rows.len() <= bound && best.as_ref().is_none_or(|(_, b)| rows.len() < b.len()) {
+            best = Some((index, rows));
+        }
+    }
+    Ok(best)
+}
+
+/// A same-subject star every pattern of which is an indexed probe once the
+/// subject is bound: a named predicate, or (aegis-n0wc C) a whole-subject
+/// `?s ?p ?o` follower whose predicate variable is not the subject. At least
+/// one pattern must be named, because only a named relation can drive. Under
+/// RDFS entailment a variable predicate could need inferred facts that a
+/// direct lookup does not see, so it keeps the ordinary planner.
+fn indexed_star(patterns: &[TriplePattern], ctx: &TemporalContext) -> bool {
+    let TermPattern::Variable(subject) = &patterns[0].subject else {
+        return false;
+    };
+    let mut named = false;
+    for pattern in patterns {
+        if pattern.subject != patterns[0].subject {
+            return false;
+        }
+        match &pattern.predicate {
+            NamedNodePattern::NamedNode(_) => named = true,
+            NamedNodePattern::Variable(p) if !ctx.entails_rdfs && p != subject => {}
+            NamedNodePattern::Variable(_) => return false,
+        }
+    }
+    named
 }

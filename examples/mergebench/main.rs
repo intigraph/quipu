@@ -40,6 +40,7 @@ fn main() {
         seed: 42,
     };
     let mut out = String::from("benchmark/mergebench/out");
+    let mut dump: Option<String> = None;
     let mut sweep = false;
     let mut selftest = false;
     let mut i = 1;
@@ -54,6 +55,7 @@ fn main() {
             "--edits" => params.edits_per_side = next(&mut i).parse().unwrap_or_else(|_| usage()),
             "--overlap" => params.overlap = next(&mut i).parse().unwrap_or_else(|_| usage()),
             "--out" => out = next(&mut i),
+            "--dump" => dump = Some(next(&mut i)),
             "--sweep" => sweep = true,
             "--selftest" => selftest = true,
             _ => usage(),
@@ -81,11 +83,14 @@ fn main() {
         run_sweep(params, &out);
         return;
     }
-    run_one(params, &out);
+    run_one(params, &out, dump.as_deref());
 }
 
-fn run_one(params: Params, out: &str) {
+fn run_one(params: Params, out: &str, dump: Option<&str>) {
     let scenario = generate::scenario(params);
+    if let Some(dir) = dump {
+        dump_arms(&scenario, dir);
+    }
     let arms = score::score(&scenario);
 
     let mut by_class: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
@@ -272,4 +277,42 @@ fn run_sweep(base: Params, out: &str) {
     )
     .expect("write sweep");
     println!("\n-> {path}");
+}
+
+/// Write the three graphs, the generator's truth and every arm's merged graph
+/// and conflict slots as JSON, for a judge that reads none of this crate
+/// (aegis-karb.4). Lines are canonical N-Triples.
+fn dump_arms(scenario: &generate::Scenario, dir: &str) {
+    let nt = |g: &model::Graph| -> Vec<String> {
+        model::to_canonical_nt(g)
+            .lines()
+            .map(str::to_string)
+            .collect()
+    };
+    let mut arms = serde_json::Map::new();
+    for arm in strategies::ARMS {
+        let o = strategies::run(arm, &scenario.base, &scenario.ours, &scenario.theirs);
+        arms.insert(
+            (*arm).to_string(),
+            serde_json::json!({
+                "available": o.available,
+                "merged": nt(&o.merged),
+                "conflicts": o.conflicts.iter().map(|(s, p)| [s, p]).collect::<Vec<_>>(),
+            }),
+        );
+    }
+    let truth: Vec<_> = scenario
+        .truth
+        .iter()
+        .map(|((s, p), c)| serde_json::json!({"s": s, "p": p, "class": c.as_str()}))
+        .collect();
+    let doc = serde_json::json!({
+        "params": scenario.params,
+        "operator_shapes": std::env::var("MERGEBENCH_OPERATOR_SHAPES").unwrap_or_default(),
+        "base": nt(&scenario.base), "ours": nt(&scenario.ours), "theirs": nt(&scenario.theirs),
+        "generator_truth": truth, "arms": arms,
+    });
+    std::fs::create_dir_all(dir).expect("dump directory");
+    let path = format!("{dir}/dump-seed{}.json", scenario.params.seed);
+    std::fs::write(&path, serde_json::to_vec(&doc).expect("dump json")).expect("dump write");
 }

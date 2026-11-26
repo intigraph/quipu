@@ -16,6 +16,7 @@ mod portable;
 mod projection;
 pub(crate) mod registration;
 mod shapes;
+mod slice;
 // Source-only protocol core; no runtime witness grant loader or import adapter.
 #[allow(dead_code)]
 pub(crate) mod source_witness;

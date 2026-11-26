@@ -345,6 +345,7 @@ impl Store {
         Self::migrate_pendant_repos(&conn)?;
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
+        crate::transaction_auth::migrate_attested_session(&conn)?;
         Self::migrate_decision_nonces(&conn)?;
         #[cfg(not(target_arch = "wasm32"))]
         Self::migrate_attested_write(&conn)?;

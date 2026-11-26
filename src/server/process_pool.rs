@@ -121,6 +121,8 @@ struct Routing {
     timeout: Duration,
     response_limit: usize,
     heavy_permits: usize,
+    /// The deployment's configured heavy operation labels.
+    heavy_operations: Vec<String>,
 }
 
 #[path = "process_pool_routing.rs"]

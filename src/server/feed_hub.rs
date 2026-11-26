@@ -6,7 +6,8 @@
 //! into a bounded in-memory ring, and every subscriber builds its own page from
 //! the ring in memory: its graph filter, its own `since`, the records renumbered
 //! exactly as a filtered store read numbers them. A subscriber does no store
-//! read while it is served from the ring, and an idle one costs nothing.
+//! read while it is served from the ring. Opt-in progress users share one
+//! 60-second snapshot observation; ordinary idle streams retain hourly reconcile.
 //!
 //! The ring covers every transaction in `(floor, head]`. A subscriber behind
 //! the floor (a new one resuming from an old cursor, or one that fell behind a
@@ -57,6 +58,7 @@ struct Ring {
     floor: i64,
     head: i64,
     source: Value,
+    observed_at: Option<f64>,
     entries: VecDeque<Entry>,
     bytes: usize,
 }
@@ -82,6 +84,9 @@ pub(crate) struct Hub {
     pub(crate) member_reads: AtomicU64,
     /// Live `member` conditions and how many subscriptions hold each.
     members: Mutex<HashMap<MemberSpec, usize>>,
+    progress_users: AtomicU64,
+    progress_wake: tokio::sync::Notify,
+    pub(crate) observations: AtomicU64,
 }
 
 /// One subscription's hold on a `member` condition: the hub evaluates the
@@ -106,6 +111,13 @@ impl Drop for MemberLease {
     }
 }
 
+pub(crate) struct ProgressLease(Arc<Hub>);
+impl Drop for ProgressLease {
+    fn drop(&mut self) {
+        self.0.progress_users.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 impl Hub {
     /// The store's hub, started on first use.
     pub(crate) fn of(store: &SharedStore) -> Arc<Self> {
@@ -118,6 +130,7 @@ impl Hub {
                         floor: 0,
                         head: 0,
                         source: Value::Null,
+                        observed_at: None,
                         entries: VecDeque::new(),
                         bytes: 0,
                     }),
@@ -126,11 +139,31 @@ impl Hub {
                     catchup_reads: AtomicU64::new(0),
                     member_reads: AtomicU64::new(0),
                     members: Mutex::new(HashMap::new()),
+                    progress_users: AtomicU64::new(0),
+                    progress_wake: tokio::sync::Notify::new(),
+                    observations: AtomicU64::new(0),
                 });
                 tokio::spawn(read_loop(Arc::downgrade(store), hub.clone()));
                 hub
             })
             .clone()
+    }
+
+    /// Progress observations are shared across all opted-in subscriptions.
+    pub(crate) fn progress_lease(self: &Arc<Self>) -> ProgressLease {
+        if self.progress_users.fetch_add(1, Ordering::Relaxed) == 0 {
+            self.progress_wake.notify_one();
+        }
+        ProgressLease(self.clone())
+    }
+
+    /// Only a fully scanned fresh snapshot can attest an empty interval.
+    pub(crate) fn progress(&self, scanned: i64, source: &Value) -> Option<(i64, f64)> {
+        let ring = self.ring.lock().ok()?;
+        if !ring.ready || ring.source != *source || scanned < ring.head || scanned < ring.floor {
+            return None;
+        }
+        Some((ring.head, ring.observed_at?))
     }
 
     /// Hold `spec` for one subscription, or refuse when the hub already
@@ -295,7 +328,12 @@ async fn read_loop(store: Weak<StoreHandle>, hub: Arc<Hub>) {
         let read = blocking(move || {
             // Let the hinted commit finish before reading it.
             drop(shared.writer.lock());
-            read_new(&shared, &reader);
+            let store = shared.read();
+            let observed_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| quipu::Error::InvalidValue(e.to_string()))?
+                .as_secs_f64();
+            store.with_change_snapshot(|store| read_new(store, &reader, observed_at))?;
             Ok(())
         })
         .await;
@@ -304,35 +342,48 @@ async fn read_loop(store: Weak<StoreHandle>, hub: Arc<Hub>) {
             // reports the failure to each of them.
             if let Ok(mut ring) = hub.ring.lock() {
                 ring.ready = false;
+                ring.observed_at = None;
                 ring.entries.clear();
                 ring.bytes = 0;
             }
         }
-        if tokio::time::timeout(Duration::from_secs(3600), hints.changed())
-            .await
-            .is_ok_and(|r| r.is_err())
-        {
-            return;
+        let interval = if hub.progress_users.load(Ordering::Relaxed) > 0 {
+            60
+        } else {
+            3600
+        };
+        tokio::select! {
+            result = hints.changed() => { if result.is_err() { return; } },
+            () = hub.progress_wake.notified() => {},
+            () = tokio::time::sleep(Duration::from_secs(interval)) => {},
         }
     }
 }
 
 /// Read every transaction after the ring's head into the ring.
-fn read_new(store: &StoreHandle, hub: &Hub) {
-    let read = store.read();
+fn read_new(read: &quipu::Store, hub: &Hub, observed_at: f64) -> quipu::Result<()> {
     let Ok(source) = read.store_id().and_then(|id| Ok((id, read.log_epoch()?))) else {
-        return;
+        return Err(quipu::Error::InvalidValue(
+            "change observation incomplete".into(),
+        ));
     };
     let source = json!({"store_id": source.0, "log_epoch": source.1});
     let mut moved = false;
     {
         let Ok(mut ring) = hub.ring.lock() else {
-            return;
+            return Err(quipu::Error::InvalidValue(
+                "change observation incomplete".into(),
+            ));
         };
+        // In-flight pages may move the ring head before the snapshot is fully
+        // scanned. Never pair that partial head with the previous timestamp.
+        ring.observed_at = None;
         if !ring.ready || ring.source != source {
             // First read, or a different history: start empty at the head.
             let Ok(head) = read.latest_tx_id() else {
-                return;
+                return Err(quipu::Error::InvalidValue(
+                    "change observation incomplete".into(),
+                ));
             };
             ring.entries.clear();
             ring.bytes = 0;
@@ -346,17 +397,26 @@ fn read_new(store: &StoreHandle, hub: &Hub) {
     // A wake with nothing new (a hint for a commit already read, or one that
     // wrote no facts) costs one id lookup, never a page read.
     let Ok(latest) = read.latest_tx_id() else {
-        return;
+        return Err(quipu::Error::InvalidValue(
+            "change observation incomplete".into(),
+        ));
     };
     // With no `member` subscriber this is empty and costs no read.
     let specs = hub.member_specs();
+    let mut pages = 0;
     loop {
         let head = match hub.ring.lock() {
             Ok(ring) => ring.head,
-            Err(_) => return,
+            Err(_) => return Err(quipu::Error::InvalidValue("change ring unavailable".into())),
         };
         if latest <= head {
             break;
+        }
+        pages += 1;
+        if pages > 16 && hub.progress_users.load(Ordering::Relaxed) > 0 {
+            return Err(quipu::Error::InvalidValue(
+                "change observation page budget exhausted".into(),
+            ));
         }
         hub.reads.fetch_add(1, Ordering::Relaxed);
         let Ok(page) = read.changes_after(
@@ -365,10 +425,14 @@ fn read_new(store: &StoreHandle, hub: &Hub) {
             quipu::store::changes::Capture::OldAndNewValues,
             None,
         ) else {
-            return;
+            return Err(quipu::Error::InvalidValue(
+                "change observation incomplete".into(),
+            ));
         };
         if page.records.is_empty() {
-            break;
+            return Err(quipu::Error::InvalidValue(
+                "change observation backlog gap".into(),
+            ));
         }
         // A short page reached the head: no second read to learn that.
         let short = page.next_tx == page.watermark_tx;
@@ -382,10 +446,12 @@ fn read_new(store: &StoreHandle, hub: &Hub) {
         let short = short || by_tx.len() < PAGE_TXS;
         let members: Vec<HashMap<MemberSpec, Members>> = by_tx
             .iter()
-            .map(|(tx, records)| members_of(&read, hub, &specs, *tx, records))
+            .map(|(tx, records)| members_of(read, hub, &specs, *tx, records))
             .collect();
         let Ok(mut ring) = hub.ring.lock() else {
-            return;
+            return Err(quipu::Error::InvalidValue(
+                "change observation incomplete".into(),
+            ));
         };
         for ((tx, records), member) in by_tx.into_iter().zip(members) {
             let bytes = records.iter().map(|r| r.to_string().len()).sum::<usize>()
@@ -417,9 +483,21 @@ fn read_new(store: &StoreHandle, hub: &Hub) {
             break;
         }
     }
-    if moved && let Ok(ring) = hub.ring.lock() {
+    let mut ring = hub
+        .ring
+        .lock()
+        .map_err(|_| quipu::Error::InvalidValue("change ring unavailable".into()))?;
+    if ring.head != latest {
+        return Err(quipu::Error::InvalidValue(
+            "change observation did not reach snapshot head".into(),
+        ));
+    }
+    ring.observed_at = Some(observed_at);
+    hub.observations.fetch_add(1, Ordering::Relaxed);
+    if moved || hub.progress_users.load(Ordering::Relaxed) > 0 {
         hub.head.send_replace(ring.head);
     }
+    Ok(())
 }
 
 /// Membership of one transaction's subjects for each live condition: one
@@ -478,3 +556,7 @@ mod tests;
 #[cfg(test)]
 #[path = "feed_member_tests.rs"]
 mod member_tests;
+
+#[cfg(test)]
+#[path = "feed_progress_tests.rs"]
+mod progress_tests;

@@ -36,7 +36,7 @@ use crate::{
 pub struct Owner {
     catalog: Arc<Catalog>,
     route: Route,
-    writer: FairMutex<Store>,
+    writer: Writer,
     readers: Vec<FairMutex<Store>>,
     next_reader: AtomicUsize,
     admitted: AtomicUsize,
@@ -47,11 +47,17 @@ pub struct Owner {
 
 struct Placement {
     path: PathBuf,
+    device: u64,
+    inode: u64,
+    /// `None` for a borrowed legacy participant: the legacy writer keeps its
+    /// own lease and the participant claims none.
+    lease: Option<HeldLease>,
+}
+
+struct HeldLease {
     lease: Arc<super::writer_lease::Lease>,
     device: u64,
     inode: u64,
-    lease_device: u64,
-    lease_inode: u64,
 }
 
 fn refused(message: impl std::fmt::Display) -> Error {
@@ -59,7 +65,7 @@ fn refused(message: impl std::fmt::Display) -> Error {
 }
 
 impl Placement {
-    fn claim(store: &Store) -> Result<Self> {
+    fn canonical_path(store: &Store) -> Result<PathBuf> {
         let path = store
             .conn
             .path()
@@ -69,26 +75,52 @@ impl Placement {
         if !path.is_absolute() || path.canonicalize().map_err(refused)? != path {
             return Err(refused("canonical path without symlinks required"));
         }
+        Ok(path)
+    }
+
+    /// Identify the database by path metadata (a stat, no descriptor).
+    fn file_identity(path: &Path) -> Result<(u64, u64)> {
+        let metadata = std::fs::symlink_metadata(path).map_err(refused)?;
+        if !metadata.is_file() {
+            return Err(refused("store is not a regular file"));
+        }
+        Ok((metadata.dev(), metadata.ino()))
+    }
+
+    fn claim(store: &Store) -> Result<Self> {
+        let path = Self::canonical_path(store)?;
         let lease = store
             .writer_lease
             .as_ref()
             .ok_or_else(|| refused("writable Store admission required"))?
             .clone();
         lease.claim_exclusive()?;
-        // Identify the database by path metadata (a stat, no descriptor): the
-        // lease is held on a sibling file, never on the database itself.
-        let metadata = std::fs::symlink_metadata(&path).map_err(refused)?;
-        if !metadata.is_file() {
-            return Err(refused("store is not a regular file"));
-        }
+        // The lease is held on a sibling file, never on the database itself.
+        let (device, inode) = Self::file_identity(&path)?;
         let held = lease.file.metadata().map_err(refused)?;
         let placement = Self {
             path,
-            lease,
-            device: metadata.dev(),
-            inode: metadata.ino(),
-            lease_device: held.dev(),
-            lease_inode: held.ino(),
+            device,
+            inode,
+            lease: Some(HeldLease {
+                lease,
+                device: held.dev(),
+                inode: held.ino(),
+            }),
+        };
+        placement.verify()?;
+        Ok(placement)
+    }
+
+    /// Observe a borrowed writer's file without claiming its lease.
+    fn observe(store: &Store) -> Result<Self> {
+        let path = Self::canonical_path(store)?;
+        let (device, inode) = Self::file_identity(&path)?;
+        let placement = Self {
+            path,
+            device,
+            inode,
+            lease: None,
         };
         placement.verify()?;
         Ok(placement)
@@ -96,19 +128,24 @@ impl Placement {
 
     fn verify(&self) -> Result<()> {
         let metadata = std::fs::symlink_metadata(&self.path).map_err(refused)?;
-        let lease_path = super::ownership_latch::sibling(&self.path, ".writer-lease")?;
-        let lease = std::fs::symlink_metadata(&lease_path).map_err(refused)?;
-        let held = self.lease.file.metadata().map_err(refused)?;
         if !metadata.is_file()
             || metadata.dev() != self.device
             || metadata.ino() != self.inode
-            || lease.dev() != self.lease_device
-            || lease.ino() != self.lease_inode
-            || held.dev() != self.lease_device
-            || held.ino() != self.lease_inode
             || self.path.canonicalize().map_err(refused)? != self.path
         {
             return Err(refused("native file placement changed"));
+        }
+        if let Some(held) = &self.lease {
+            let lease_path = super::ownership_latch::sibling(&self.path, ".writer-lease")?;
+            let lease = std::fs::symlink_metadata(&lease_path).map_err(refused)?;
+            let file = held.lease.file.metadata().map_err(refused)?;
+            if lease.dev() != held.device
+                || lease.ino() != held.inode
+                || file.dev() != held.device
+                || file.ino() != held.inode
+            {
+                return Err(refused("native file placement changed"));
+            }
         }
         Ok(())
     }
@@ -271,7 +308,7 @@ impl Owner {
         Ok(Self {
             catalog,
             route,
-            writer: FairMutex::new(store),
+            writer: Writer::Owned(Box::new(FairMutex::new(store))),
             readers,
             next_reader: AtomicUsize::new(0),
             admitted: AtomicUsize::new(0),
@@ -283,6 +320,20 @@ impl Owner {
     /// The immutable catalog route this owner serves.
     pub fn catalog_route(&self) -> &Route {
         &self.route
+    }
+
+    /// Already reserved writer queue slots; excludes the active worker.
+    pub fn queued_per_owner(&self) -> usize {
+        self.capacity - 1
+    }
+
+    /// Dedicated read connections already reserved by the owner initializer.
+    pub fn read_pool_size(&self) -> usize {
+        self.readers.len()
+    }
+
+    pub(crate) fn prepared_for(&self, catalog: &Arc<Catalog>) -> bool {
+        Arc::ptr_eq(&self.catalog, catalog)
     }
 
     fn check_identity(route: &Route, store: &Store) -> Result<()> {
@@ -314,21 +365,52 @@ impl Owner {
     /// No signed replay or cross-file synchronous validation is admitted.
     /// A post-commit embedding failure remains an error, never an implicit retry.
     pub fn knot(&self, request: &WriteRequest<'_>, input: &Value) -> Result<Value> {
+        self.check_knot_request(request, input)?;
+        let _admission = self.admit()?;
+        self.execute_knot(input, None)
+    }
+
+    fn check_knot_request(&self, request: &WriteRequest<'_>, input: &Value) -> Result<()> {
         if self.catalog.write_target(request)? != WriteTarget::Routed(&self.route)
             || input.get("graph").and_then(Value::as_str) != Some(self.route.graph.as_str())
             || crate::transaction_auth::current_attestation().is_some()
         {
             return Err(refused("request does not select this unsigned owner"));
         }
-        let _admission = self.admit()?;
+        Ok(())
+    }
+
+    fn execute_knot(
+        &self,
+        input: &Value,
+        ticket: Option<&super::knot_completion::Ticket>,
+    ) -> Result<Value> {
         let (result, work, provider, batch_size) = {
-            let mut store = self.writer.lock();
+            let mut store = self.writer.owned()?;
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
-            let result = store.ownership_operation(|store| crate::tool_knot(store, input))?;
+            let targets = std::collections::BTreeSet::from([self.route.graph.clone()]);
+            let result = store.ownership_operation(|store| {
+                store.with_writer_scope(
+                    crate::writer_scope::WriteOperation::Knot,
+                    &targets,
+                    |store| match ticket {
+                        Some(ticket) => {
+                            crate::mcp::knot::tool_knot_with_completion(store, input, ticket)
+                        }
+                        None => crate::tool_knot(store, input),
+                    },
+                )
+            })?;
+            let work = if crate::writer_scope::is_scoped_request() {
+                let _ = store.take_deferred_embed();
+                None
+            } else {
+                store.take_deferred_embed()
+            };
             (
                 result,
-                store.take_deferred_embed(),
+                work,
                 store.embedding_provider(),
                 match store.embedding_config().embed_batch_size {
                     0 => 32,
@@ -343,7 +425,7 @@ impl Owner {
                 // Owner admission remains reserved; inference holds no writer.
                 embeddings.extend(provider.embed_batch(chunk)?);
             }
-            let mut store = self.writer.lock();
+            let mut store = self.writer.owned()?;
             self.placement.verify()?;
             Self::check_identity(&self.route, &store)?;
             store.ownership_operation(|store| store.apply_deferred_embed(&work, &embeddings))?;
@@ -361,7 +443,7 @@ impl Owner {
         timestamp: &str,
     ) -> Result<Option<i64>> {
         let _admission = self.admit()?;
-        let mut store = self.writer.lock();
+        let mut store = self.writer.owned()?;
         self.placement.verify()?;
         Self::check_identity(&self.route, &store)?;
         let graph = self.route.graph.clone();
@@ -391,9 +473,21 @@ impl Owner {
     }
 }
 
+#[path = "graph_owner_legacy.rs"]
+mod legacy;
+pub use legacy::LegacyWriterFence;
+use legacy::Writer;
+
 #[path = "graph_owner_read.rs"]
 mod strict_read;
 pub use strict_read::CapturedRead;
+
+#[path = "graph_owner_durable.rs"]
+mod durable;
+
+#[path = "graph_owner_set.rs"]
+mod graph_set;
+pub use graph_set::{GraphSetBatch, GraphSetDataset, GraphSetOwner, GraphSetRouter, SetTarget};
 
 #[cfg(test)]
 #[path = "graph_owner_tests.rs"]

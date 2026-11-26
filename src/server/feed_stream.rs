@@ -32,8 +32,11 @@ use super::{
 
 #[path = "feed_hub.rs"]
 pub(crate) mod feed_hub;
+#[path = "feed_progress.rs"]
+mod feed_progress;
 #[path = "feed_ws.rs"]
 pub(crate) mod feed_ws;
+pub(crate) use feed_progress::scope_ok;
 
 /// The change and event feeds, as server-sent events and over one WebSocket.
 pub(crate) fn routes() -> Router<SharedStore> {
@@ -47,6 +50,9 @@ pub(crate) fn routes() -> Router<SharedStore> {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Params {
     since: Option<i64>,
+    /// Opt-in fresh empty-range proofs for one named graph and predicate.
+    #[serde(default)]
+    progress: bool,
     types: Option<String>,
     group: Option<String>,
     graph: Option<String>,
@@ -108,6 +114,9 @@ pub(crate) struct Cursor {
     /// The hub's hold on this stream's `member` condition. A member stream
     /// without one is served from the store only, never unfiltered.
     member: Option<feed_hub::MemberLease>,
+    progress_lease: Option<feed_hub::ProgressLease>,
+    progress_source: Option<Value>,
+    progress_observed: f64,
     _slot: Option<OwnedSemaphorePermit>,
 }
 
@@ -164,32 +173,6 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         .into_response()
 }
 
-/// Whether a stream may serve this scope: a change feed takes a graph,
-/// predicates, subjects and one member condition; an event feed takes types,
-/// a group and a graph. No filter is empty or oversized, a term list holds 1
-/// to [`feed::MAX_TERM_LIST`] IRIs, and a member condition parses.
-pub(crate) fn scope_ok(params: &Params, changes: bool) -> bool {
-    let term_list_bad = |list: &Option<String>| {
-        list.as_ref()
-            .is_some_and(|s| s.len() > 2048 || feed::term_list(s).is_none())
-    };
-    !(changes && (params.types.is_some() || params.group.is_some())
-        || !changes
-            && (params.predicate.is_some() || params.subject.is_some() || params.member.is_some())
-        || params
-            .member
-            .as_ref()
-            .is_some_and(|m| MemberSpec::parse(m).is_err())
-        || term_list_bad(&params.predicate)
-        || term_list_bad(&params.subject)
-        || params
-            .graph
-            .as_ref()
-            .is_some_and(|s| s.is_empty() || s.len() > 2048)
-        || params.group.as_ref().is_some_and(|s| s.len() > 2048)
-        || params.types.as_ref().is_some_and(|s| s.len() > 2048))
-}
-
 impl Cursor {
     /// A subscription from `offset`. `slot` is the stream slot when the
     /// cursor is a connection of its own (SSE); a WebSocket connection holds
@@ -217,6 +200,9 @@ impl Cursor {
             hub: None,
             scanned: 0,
             member: None,
+            progress_lease: None,
+            progress_source: None,
+            progress_observed: 0.0,
             _slot: slot,
         }
     }
@@ -284,6 +270,9 @@ impl Cursor {
             let page = if let feed_hub::Serve::Page(body) = served {
                 Ok(axum::Json(body))
             } else if matches!(served, feed_hub::Serve::Wait) {
+                if let Some(frame) = self.progress_frame() {
+                    return Some(frame);
+                }
                 self.wait = true;
                 continue;
             } else if self.changes {
@@ -348,7 +337,24 @@ impl Cursor {
             if attached {
                 let hub = feed_hub::Hub::of(&self.store);
                 let head = hub.watch();
+                if self.params.progress {
+                    self.progress_lease = Some(hub.progress_lease());
+                }
                 self.hub = Some((hub, head));
+            }
+            if self.params.progress {
+                let source = body["source"].clone();
+                if self
+                    .progress_source
+                    .as_ref()
+                    .is_some_and(|old| *old != source)
+                {
+                    self.terminal = true;
+                    return Some(FeedFrame::error(
+                        "change source changed; rebootstrap required",
+                    ));
+                }
+                self.progress_source = Some(source);
             }
             let key = if self.changes {
                 "next_tx"
@@ -366,6 +372,11 @@ impl Cursor {
                     && let Some(watermark) = body.get("watermark_tx").and_then(Value::as_i64)
                 {
                     self.scanned = self.scanned.max(watermark);
+                }
+                // Catch-up can finish at a quiet head. Do not wait for a new
+                // commit before publishing an already-complete observation.
+                if let Some(frame) = self.progress_frame() {
+                    return Some(frame);
                 }
                 // A stream that just attached asks the hub before it waits, so
                 // a commit the hub read meanwhile is not slept through.

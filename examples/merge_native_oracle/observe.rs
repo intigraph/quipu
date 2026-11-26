@@ -35,7 +35,21 @@ fn query(store: &Store, tx: Option<i64>, valid_at: Option<String>) -> Res<Vec<St
     Ok(values)
 }
 
-fn receipt_role(source: &str) -> Res<&'static str> {
+/// Which native writer produced the receipts being bound.
+#[derive(Clone, Copy)]
+pub(super) enum Writer {
+    Fork,
+    Share,
+}
+
+fn receipt_role(path: Writer, source: &str) -> Res<&'static str> {
+    match path {
+        Writer::Fork => fork_role(source),
+        Writer::Share => share_role(source),
+    }
+}
+
+fn fork_role(source: &str) -> Res<&'static str> {
     let prefix = format!("fork-promote:{FORK}");
     if source == prefix {
         return Ok("receive");
@@ -56,6 +70,42 @@ fn receipt_role(source: &str) -> Res<&'static str> {
     Ok(role)
 }
 
+/// `share-merge:parents=<ours>,<incoming>;[decisions=sha256:<h>;reviewer=oracle-input;]merge_id=sha256:<h>[;step=receive|decide]`.
+fn share_role(source: &str) -> Res<&'static str> {
+    let (body, role) = if let Some(b) = source.strip_suffix(";step=decide") {
+        (b, "decide")
+    } else {
+        (
+            source.strip_suffix(";step=receive").unwrap_or(source),
+            "receive",
+        )
+    };
+    let hash = |h: &str| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit());
+    let rest = body
+        .strip_prefix("share-merge:parents=")
+        .ok_or("unrecognized share receipt prefix")?;
+    let (_, binding) = rest
+        .split_once(';')
+        .ok_or("share receipt without merge binding")?;
+    let binding = match binding.strip_prefix("decisions=sha256:") {
+        Some(decided) => {
+            let (h, tail) = decided
+                .split_once(";reviewer=oracle-input;")
+                .ok_or("unrecognized share decisions binding")?;
+            if !hash(h) {
+                return Err("unrecognized share decisions hash".into());
+            }
+            tail
+        }
+        None => binding,
+    };
+    let ok = binding.strip_prefix("merge_id=sha256:").is_some_and(hash);
+    if !ok {
+        return Err(format!("unrecognized share receipt binding: {source}").into());
+    }
+    Ok(role)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn capture(
     store: &Store,
@@ -66,6 +116,7 @@ pub(super) fn capture(
     after: i64,
     base_tx: i64,
     probes: &[Probe],
+    path: Writer,
 ) -> Res<serde_json::Value> {
     let conn = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let mut stmt = conn.prepare("SELECT v,tx,valid_from,valid_to,op,retracted_tx FROM facts WHERE g=0 AND e=?1 AND a=?2 ORDER BY rowid LIMIT 4097")?;
@@ -113,7 +164,7 @@ pub(super) fn capture(
             .source
             .as_deref()
             .ok_or("native receipt source missing")?;
-        let role = receipt_role(source)?;
+        let role = receipt_role(path, source)?;
         if pins.insert(role.into(), id).is_some() {
             return Err("ambiguous native receipt role".into());
         }
@@ -152,12 +203,12 @@ mod tests {
             "fork-promote:{FORK};decisions=sha256:{};reviewer=oracle-input",
             "a".repeat(64)
         );
-        assert_eq!(receipt_role(&source).unwrap(), "receive");
+        assert_eq!(receipt_role(Writer::Fork, &source).unwrap(), "receive");
         assert_eq!(
-            receipt_role(&format!("{source};step=decide")).unwrap(),
+            receipt_role(Writer::Fork, &format!("{source};step=decide")).unwrap(),
             "decide"
         );
-        assert!(receipt_role(&format!("{source};step=other")).is_err());
-        assert!(receipt_role("fork-promote:other").is_err());
+        assert!(receipt_role(Writer::Fork, &format!("{source};step=other")).is_err());
+        assert!(receipt_role(Writer::Fork, "fork-promote:other").is_err());
     }
 }
