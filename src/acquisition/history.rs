@@ -248,6 +248,7 @@ pub fn read(store: &Store, request: &Request) -> Result<JsonValue> {
                 )?,
                 "authenticated":store.transaction_auth(tx)?,
                 "declared":store.transaction_declarations(tx)?,
+                "provenance":store.transaction_provenance(tx)?,
             });
             bytes += serde_json::to_vec(&entry)
                 .map_err(|e| invalid(e.to_string()))?

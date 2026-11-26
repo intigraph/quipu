@@ -191,6 +191,21 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x3_prefix_or_pattern_member_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x4_multi_file_set_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x5_fork_from_a_mini_quipu_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+      # aegis-7tt P3: the read-side provenance object and the metric share one
+      # classifier. Named-test proofs keep this step from passing on zero tests.
+      - name: Read-side write provenance equals the metric class
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --lib -- write_provenance_read --test-threads=2 --color never | tee "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_signed_write_with_a_forged_session_reads_the_binding_session_as_effective ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_bearer_write_reads_every_field_as_declared ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_transaction_with_no_declaration_row_reads_unknown_no_row ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_read_only_open_of_a_store_without_the_table_reads_unknown_no_table ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::the_read_completeness_equals_the_metric_class_for_the_same_request ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
       - name: Compile the server on Windows without Unix pilot modules
         if: runner.os == 'Windows'
         run: cargo check --locked --no-default-features --features shacl,onnx,server --bin quipu-server
