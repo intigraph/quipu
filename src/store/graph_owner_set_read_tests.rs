@@ -344,3 +344,6 @@ fn physical_manifest_does_not_grant_logical_graphs_or_weaken_ordinary_admission(
     };
     assert!(dataset.catalog.plan_batch(&[request]).is_err());
 }
+
+#[path = "graph_owner_set_read_matrix_tests.rs"]
+mod matrix;
