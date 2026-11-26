@@ -22,6 +22,11 @@ use crate::{Result, Store};
 pub(crate) struct AssertRecord<'a> {
     pub(crate) actor: &'a Option<String>,
     pub(crate) attribute: &'a str,
+    /// The origin transaction's carried declarations, already scrubbed for
+    /// the cut's destination. Omitted when the transaction declared nothing
+    /// readable here, which is UNKNOWN, never "declared nothing".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) declared: Option<&'a BTreeMap<String, String>>,
     pub(crate) entity: &'a str,
     pub(crate) graph: &'a str,
     pub(crate) op: &'static str,
@@ -31,6 +36,37 @@ pub(crate) struct AssertRecord<'a> {
     pub(crate) valid_from: &'a str,
     pub(crate) valid_to: &'a Option<String>,
     pub(crate) value: &'a serde_json::Value,
+}
+
+/// Whether this store has the declarations table (every store from `INIT_SQL`
+/// does; an older one may not).
+pub(super) fn has_declarations(store: &Store) -> Result<bool> {
+    Ok(store.conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM main.sqlite_master \
+         WHERE type = 'table' AND name = 'transaction_declarations')",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+/// One transaction's declarations, scrubbed for `destination` through the
+/// shared field rule before anything is serialized. `None` when it has no row.
+pub(super) fn carried_declarations(
+    stmt: &mut rusqlite::Statement<'_>,
+    tx: i64,
+    destination: &crate::share_scrub::ShareDestination,
+) -> Result<Option<BTreeMap<String, String>>> {
+    use rusqlite::OptionalExtension as _;
+    let Some(text) = stmt
+        .query_row(params![tx], |row| row.get::<_, String>(0))
+        .optional()?
+    else {
+        return Ok(None);
+    };
+    let mut declared: BTreeMap<String, String> = serde_json::from_str(&text)
+        .map_err(|e| crate::Error::Serialization(format!("tx {tx} declarations: {e}")))?;
+    crate::share_scrub::scrub_declarations(destination, &mut declared);
+    Ok(Some(declared))
 }
 
 /// A transaction's `timestamp`, `actor` and `source`.

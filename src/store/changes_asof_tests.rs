@@ -26,6 +26,7 @@ fn request(store: &Store, tx: Option<i64>) -> Request {
         context_graphs: Vec::new(),
         tx,
         expected_store_id: store.store_id().unwrap(),
+        destination: Default::default(),
     }
 }
 
@@ -802,6 +803,7 @@ fn an_assert_record_serializes_as_the_canonical_line() {
         let record = AssertRecord {
             actor: &actor,
             attribute: "http://example.org/body",
+            declared: None,
             entity: "http://example.org/\"quoted\" é",
             graph: "ROOT",
             op: "assert",
