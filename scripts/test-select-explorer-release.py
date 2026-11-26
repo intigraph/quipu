@@ -56,9 +56,9 @@ class Selection(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     selector.select_release(pages, pinned='quipu-ai-v0.18.0')
 
-    def test_pages_build_uses_the_recorded_pin(self):
-        # The Pages build passes PINNED_TAG; unpinning is an explicit, reviewed edit.
-        self.assertEqual(selector.PINNED_TAG, 'quipu-ai-v0.18.0')
+    def test_pages_build_selects_the_latest_complete_release(self):
+        pages = [release('0.19.5', '2026-11-25'), release('0.18.0', '2026-11-13')]
+        self.assertEqual(selector.select_release(pages, pinned=selector.PINNED_TAG)['tag'], 'quipu-ai-v0.19.5')
 
 
 if __name__ == '__main__':
