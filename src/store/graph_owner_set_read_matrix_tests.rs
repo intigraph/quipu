@@ -773,3 +773,38 @@ fn every_attached_schema_has_the_bounded_page_cache() {
         );
     }
 }
+
+// Phase 2 exit row "hot-graph deadline": a selected member whose writer holds
+// its commit fence makes the strict composed read REFUSE at once (try-all,
+// never queue behind it), with no partial or vector-cut answer. A read that
+// does not select the hot graph is not delayed by it, and the refused read
+// leaves nothing checked out: the one pooled connection answers afterwards.
+#[test]
+fn a_held_selected_writer_refuses_the_strict_read_and_an_unselected_one_does_not_delay() {
+    let m = matrix();
+    let query = format!(
+        "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+        named(&BOTH)
+    );
+    let legacy_only = format!(
+        "SELECT ?o FROM NAMED <{REFS}> WHERE {{ GRAPH <{REFS}> {{ <urn:pointer> <urn:pointsTo> ?o }} }}"
+    );
+    {
+        let _held = m.dataset.routed[APP].owner.writer.lock();
+        let started = Instant::now();
+        let refused = run(&m, &BOTH, &query).expect_err("read answered past a held fence");
+        assert!(
+            refused.to_string().contains("commit fence occupied"),
+            "refusal must name the occupied fence: {refused}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "the strict read waited behind the held writer: {:?}",
+            started.elapsed()
+        );
+        let unselected = run(&m, &[REFS], &legacy_only).unwrap();
+        assert_eq!(values(&unselected, "o"), ["urn:left"]);
+    }
+    let after = run(&m, &BOTH, &query).unwrap();
+    assert_eq!(values(&after, "v"), ["must-not-join"]);
+}
