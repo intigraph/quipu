@@ -171,6 +171,24 @@ jobs:
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set::an_unenrolled_file_or_a_missing_member_refuses_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test config::graph_sets::tests::enabled_startup_refuses_in_one_line_naming_the_reason ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
+      # aegis-2g7f: mini-Quipu M1 fork registry entry (docs/design/mini-quipu.md).
+      # Named-test proofs keep this step from passing on zero tests.
+      - name: Mini-Quipu fork registry entry and refusals X1-X5
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --lib -- graph_owner::graph_set::mini_fork --test-threads=2 --color never | tee "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::whole_set_fork_from_one_routed_owner_records_the_expected_cut_and_digest ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::legacy_fork_digest_equals_the_local_sync_base_slice_hash ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::sabotage_a_different_digest_construction_is_detected ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x1_routed_writer_claim_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x2_partial_catalog_set_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x3_prefix_or_pattern_member_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x4_multi_file_set_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x5_fork_from_a_mini_quipu_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       - name: Compile the server on Windows without Unix pilot modules
         if: runner.os == 'Windows'
         run: cargo check --locked --no-default-features --features shacl,onnx,server --bin quipu-server
