@@ -864,3 +864,62 @@ fn comment_cohort_is_order_independent_and_new_transaction_replaces_it() {
     store.embedding_config_mut().exclude_predicates = vec![format!("{}comment", namespace::RDFS)];
     assert_eq!(build_entity_text(&store, id).unwrap(), "Fixture");
 }
+
+/// aegis-jio5.3 acceptance, counted in ALL vector rows (current and
+/// superseded): `vector_count` alone cannot see the leak, because a write that
+/// closes a vector and inserts an identical one leaves the current count
+/// unchanged while adding a superseded row. Through `set_triple` (the /set
+/// write path): a write that leaves the embedded text byte-identical adds no
+/// row; a write that changes it adds exactly one.
+fn unchanged_text_write_adds_no_row(deferred: bool) {
+    let mut store = probe_store(deferred, &[]);
+    let rows = probe_rows(&mut store, OTHER_PREDICATE, 0);
+    assert_eq!(rows, 1, "the marker's label vector");
+    let entity = store.lookup(PROBE_ENTITY).unwrap().unwrap();
+    let text_before = build_entity_text(&store, entity).unwrap();
+
+    // A Ref-valued fact is not embedded text: the entity is touched, its text
+    // is byte-identical, so no vector may be written or superseded.
+    let links = store.intern("http://example.org/v/linksTo").unwrap();
+    for i in 0..5 {
+        let target = store.intern(&format!("http://example.org/t{i}")).unwrap();
+        let ts = format!("2026-01-03T00:00:{i:02}Z");
+        let (_, _, asserted) = store
+            .set_triple(entity, links, Value::Ref(target), &ts, None, true, None)
+            .unwrap();
+        assert_eq!(asserted, 1, "each write must really write");
+        drain(&mut store);
+        assert_eq!(build_entity_text(&store, entity).unwrap(), text_before);
+        assert_eq!(all_vector_rows(&store), 1, "unchanged-text write {i}");
+    }
+    assert_eq!(store.vector_count().unwrap(), 1, "still current");
+
+    // A changed label: exactly one new row, and the old one superseded.
+    let label = store
+        .intern("http://www.w3.org/2000/01/rdf-schema#label")
+        .unwrap();
+    store
+        .set_triple(
+            entity,
+            label,
+            Value::Str("renamed marker".into()),
+            "2026-01-04T00:00:00Z",
+            None,
+            true,
+            None,
+        )
+        .unwrap();
+    drain(&mut store);
+    assert_eq!(all_vector_rows(&store), 2, "changed text adds exactly one");
+    assert_eq!(store.vector_count().unwrap(), 1, "one current vector");
+}
+
+#[test]
+fn unchanged_text_write_adds_no_vector_row_inline() {
+    unchanged_text_write_adds_no_row(false);
+}
+
+#[test]
+fn unchanged_text_write_adds_no_vector_row_deferred() {
+    unchanged_text_write_adds_no_row(true);
+}
