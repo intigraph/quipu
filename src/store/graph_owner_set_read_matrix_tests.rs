@@ -715,3 +715,34 @@ fn p3_a_write_after_the_fences_release_is_invisible_to_the_pinned_read() {
     let next = run(&m, &BOTH, &query).unwrap();
     assert_eq!(values(&next, "v"), ["after-cut"]);
 }
+
+// The first composed reader has a BOUNDED attached set (design: "Over-limit
+// queries refuse before execution"). A selection needing more attachments
+// than the bound refuses before any ATTACH, naming the limit; a selection
+// within the bound still answers.
+#[test]
+fn an_attached_set_over_the_bound_refuses_before_any_attach() {
+    let mut m = matrix();
+    m.dataset.set_composition_attach_limit_for_test(0);
+    let refused = run(
+        &m,
+        &BOTH,
+        &format!(
+            "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+            named(&BOTH)
+        ),
+    )
+    .expect_err("an over-limit attached set answered");
+    assert!(
+        refused.to_string().contains("attachment limit"),
+        "refusal must name the attachment limit: {refused}"
+    );
+    // Within the bound (no attachment needed): the legacy-only read answers.
+    let legacy = run(
+        &m,
+        &[REFS],
+        &format!("SELECT ?o FROM NAMED <{REFS}> WHERE {{ GRAPH <{REFS}> {{ <urn:pointer> <urn:pointsTo> ?o }} }}"),
+    )
+    .unwrap();
+    assert_eq!(values(&legacy, "o"), ["urn:left"]);
+}

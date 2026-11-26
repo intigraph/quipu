@@ -75,6 +75,7 @@ impl GraphSetDataset {
                 .to_str()
                 .ok_or_else(|| refused("legacy path is not UTF-8"))?,
             1,
+            catalog.physical().budget().max_owners,
         )?;
         Ok(Self {
             catalog,
@@ -203,6 +204,15 @@ impl GraphSetDataset {
 
     pub(crate) fn composition_checkout(&self) -> Result<crate::store::composition::Checkout> {
         self.composition.checkout()
+    }
+
+    pub(crate) fn set_composition_attach_limit_for_test(&mut self, limit: usize) {
+        self.composition = crate::store::composition::CompositionPool::new(
+            &self.composition.legacy_path_for_test(),
+            1,
+            limit,
+        )
+        .unwrap();
     }
 }
 

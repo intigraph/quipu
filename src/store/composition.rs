@@ -92,10 +92,17 @@ pub(crate) fn check_term_spaces(reads: &[CapturedRead<'_>]) -> Result<()> {
     Ok(())
 }
 
+/// SQLite's default compiled `SQLITE_MAX_ATTACHED` (the bundled build does not
+/// raise it).
+const SQLITE_MAX_ATTACHED: usize = 10;
+
 /// A bounded pool of read-only composition connections over one legacy file.
 pub(crate) struct CompositionPool {
     legacy_path: String,
     capacity: usize,
+    /// Bounded attached set: the first composed reader refuses a selection
+    /// needing more attachments BEFORE any ATTACH (design: attachment limit).
+    max_attached: usize,
     state: Mutex<PoolState>,
 }
 
@@ -105,13 +112,20 @@ struct PoolState {
 }
 
 impl CompositionPool {
-    pub(crate) fn new(legacy_path: &str, capacity: usize) -> Result<Arc<Self>> {
+    pub(crate) fn new(
+        legacy_path: &str,
+        capacity: usize,
+        max_attached: usize,
+    ) -> Result<Arc<Self>> {
         if capacity == 0 {
             return Err(refused("composition pool needs at least one connection"));
         }
         Ok(Arc::new(Self {
             legacy_path: legacy_path.to_owned(),
             capacity,
+            // Never above SQLite's default compiled SQLITE_MAX_ATTACHED: past it
+            // ATTACH itself fails mid-mount instead of refusing up front.
+            max_attached: max_attached.min(SQLITE_MAX_ATTACHED),
             state: Mutex::new(PoolState {
                 idle: Vec::new(),
                 open: 0,
@@ -157,6 +171,7 @@ impl CompositionPool {
             return Err(refused("a fresh composition connection is not clean"));
         }
         Ok(Checkout {
+            max_attached: self.max_attached,
             pool: self.clone(),
             store: Some(Store::with_connection(conn)),
             aliases: Vec::new(),
@@ -172,6 +187,11 @@ impl CompositionPool {
     /// Cleanup already ran; checkout is where cleanliness is VERIFIED (P1).
     fn give_back(&self, conn: Connection) {
         self.state.lock().idle.push(conn);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn legacy_path_for_test(&self) -> String {
+        self.legacy_path.clone()
     }
 
     #[cfg(test)]
@@ -207,6 +227,7 @@ pub(crate) struct Mount {
 /// A checked-out composition connection. Dropping it returns the connection
 /// through the P1 cleanup; a connection that cannot be cleaned is discarded.
 pub(crate) struct Checkout {
+    max_attached: usize,
     pool: Arc<CompositionPool>,
     store: Option<Store>,
     aliases: Vec<String>,
@@ -235,6 +256,13 @@ impl Checkout {
     pub(crate) fn begin(&mut self, mounts: &[Mount]) -> Result<()> {
         if !self.aliases.is_empty() || !self.store().conn.is_autocommit() {
             return Err(refused("checkout already began a snapshot"));
+        }
+        if mounts.len() > self.max_attached {
+            return Err(refused(&format!(
+                "selection needs {} attached files, over the attachment limit of {}",
+                mounts.len(),
+                self.max_attached
+            )));
         }
         let attachments: Vec<Attachment> = mounts
             .iter()
