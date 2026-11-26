@@ -17,6 +17,15 @@
 //! for example an import or a write from before P1), or `unknown-no-table` (a
 //! read-only open of a store that predates the table). An unknown state is
 //! never an empty declaration: its completeness is `unknown`.
+//!
+//! Grant split (aegis-lw5 P4): agent, harness and model are readable under the
+//! same graph read authorization as the transaction actor and source. Host and
+//! session are returned only to an authenticated reader (a named bearer or an
+//! attested session, the classes [`reader_disclosure`] admits); any other
+//! reader gets the literal [`REDACTED`] in their place, in `effective`,
+//! `superseded` and the `declared` block. Never an omission, because an
+//! omitted field reads as "not declared". Redaction runs AFTER
+//! classification, so `completeness` and `state` do not depend on the reader.
 
 use std::collections::BTreeMap;
 
@@ -24,6 +33,53 @@ use rusqlite::OptionalExtension;
 use serde_json::{Map, Value, json};
 
 use crate::write_provenance::{FIELDS, RequestProvenance};
+
+/// The literal a reader without the grant sees in place of host and session.
+pub const REDACTED: &str = "redacted";
+
+/// The fields only an authenticated reader is shown.
+const GRANTED_ONLY: [&str; 2] = ["host", "session"];
+
+/// What the reader of a provenance read may be shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Disclosure {
+    /// An authenticated reader: every field as stored.
+    Full,
+    /// An anonymous or legacy shared-bearer reader: host and session redacted.
+    Redacted,
+}
+
+/// The disclosure for the reader identity in scope: full only for a named
+/// bearer or an attested session, the same classes read authorization admits.
+#[must_use]
+pub fn reader_disclosure(reader: Option<&crate::transaction_auth::Identity>) -> Disclosure {
+    match reader.map(|r| r.auth_class.as_str()) {
+        Some("named_bearer" | "attested_session") => Disclosure::Full,
+        _ => Disclosure::Redacted,
+    }
+}
+
+fn current_disclosure() -> Disclosure {
+    reader_disclosure(crate::transaction_auth::current_identity().as_ref())
+}
+
+/// The `declared` block as this reader may see it: host and session become
+/// [`REDACTED`] when present, and are never removed.
+#[must_use]
+pub fn disclose_declarations(
+    declarations: Option<BTreeMap<String, String>>,
+    disclosure: Disclosure,
+) -> Option<BTreeMap<String, String>> {
+    let mut declarations = declarations?;
+    if disclosure == Disclosure::Redacted {
+        for field in GRANTED_ONLY {
+            if let Some(value) = declarations.get_mut(field) {
+                REDACTED.clone_into(value);
+            }
+        }
+    }
+    Some(declarations)
+}
 
 /// Whether a declaration row was there to read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,12 +120,14 @@ fn entry(value: &str, basis: &str) -> Value {
 
 /// Assemble the object from what was read. `principal` is `Some` only for an
 /// `attested_session` transaction; `binding_session` is its persisted session.
+/// The object is classified first and only then disclosed to the reader.
 #[must_use]
 pub fn provenance_object(
     declarations: Option<&BTreeMap<String, String>>,
     state: ReadState,
     principal: Option<&str>,
     binding_session: Option<&str>,
+    disclosure: Disclosure,
 ) -> Value {
     let mut effective = Map::new();
     let mut superseded = Map::new();
@@ -94,18 +152,29 @@ pub fn provenance_object(
     let completeness = declarations.map_or("unknown", |d| {
         read_class(d, principal.is_some()).completeness.as_str()
     });
-    disclose(json!({
+    let mut provenance = json!({
         "effective": effective,
         "superseded": superseded,
         "completeness": completeness,
         "state": state.as_str(),
-    }))
+    });
+    disclose(&mut provenance, disclosure);
+    provenance
 }
 
-/// The single seam for the P4 grant split, which will redact host and session
-/// for a reader without the grant. Today every reader sees the whole object.
-fn disclose(provenance: Value) -> Value {
-    provenance
+/// The single seam for the grant split: replace the value of host and session
+/// in `effective` and `superseded`, keeping the entry and its basis.
+fn disclose(provenance: &mut Value, disclosure: Disclosure) {
+    if disclosure == Disclosure::Full {
+        return;
+    }
+    for block in ["effective", "superseded"] {
+        for field in GRANTED_ONLY {
+            if let Some(entry) = provenance[block].get_mut(field) {
+                entry["value"] = Value::from(REDACTED);
+            }
+        }
+    }
 }
 
 impl crate::Store {
@@ -139,8 +208,29 @@ impl crate::Store {
         Ok((Some(map), ReadState::Observed))
     }
 
-    /// The read-side provenance object of transaction `tx`.
+    /// The read-side provenance object of transaction `tx`, disclosed to the
+    /// reader identity in scope (none in scope reads as anonymous).
     pub fn transaction_provenance(&self, tx: i64) -> crate::Result<Value> {
+        self.transaction_provenance_for(tx, current_disclosure())
+    }
+
+    /// The `declared` block of `tx`, disclosed to the reader identity in scope.
+    pub fn transaction_declarations_disclosed(
+        &self,
+        tx: i64,
+    ) -> crate::Result<Option<BTreeMap<String, String>>> {
+        Ok(disclose_declarations(
+            self.transaction_declarations(tx)?,
+            current_disclosure(),
+        ))
+    }
+
+    /// The read-side provenance object of transaction `tx` for `disclosure`.
+    pub fn transaction_provenance_for(
+        &self,
+        tx: i64,
+        disclosure: Disclosure,
+    ) -> crate::Result<Value> {
         let (declarations, state) = self.declaration_row(tx)?;
         let principal = self
             .transaction_auth(tx)?
@@ -155,6 +245,7 @@ impl crate::Store {
             state,
             principal.as_deref(),
             binding_session.as_deref(),
+            disclosure,
         ))
     }
 }
@@ -162,3 +253,7 @@ impl crate::Store {
 #[cfg(test)]
 #[path = "write_provenance_read_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "write_provenance_disclose_tests.rs"]
+mod disclose_tests;

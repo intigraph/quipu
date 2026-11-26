@@ -87,7 +87,23 @@ fn qualified_history_preserves_named_graph_assert_retract_and_provenance() {
     assert_eq!(after["count"], 2);
     assert_eq!(after["history"][0]["op"], "assert");
     assert_eq!(after["history"][1]["op"], "retract");
-    assert_eq!(after["history"][0]["declared"]["host"], "unit-host");
+    // An anonymous reader gets host redacted, never omitted (aegis-lw5).
+    assert_eq!(after["history"][0]["declared"]["host"], "redacted");
+    assert_eq!(after["history"][0]["declared"]["harness"], "service");
+    let reader = crate::transaction_auth::Identity {
+        principal: "urn:crew:reader".into(),
+        credential_id: Some("cred-r".into()),
+        auth_class: "named_bearer".into(),
+        attestation: crate::transaction_auth::AttestationSlot::default(),
+    };
+    let named = crate::transaction_auth::with_identity(Some(reader), || {
+        read_json(&store, &request).unwrap()
+    });
+    assert_eq!(named["history"][0]["declared"]["host"], "unit-host");
+    assert_eq!(
+        named["history"][0]["provenance"]["effective"]["host"]["value"],
+        "unit-host"
+    );
     assert!(after["history"][0]["authenticated"].is_null());
     assert_eq!(after["history"][0]["transaction"]["actor"], "actor");
     assert_eq!(after["source_receipt"]["continuous_history"], false);

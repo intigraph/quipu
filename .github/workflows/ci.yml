@@ -192,7 +192,8 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x4_multi_file_set_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x5_fork_from_a_mini_quipu_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
-      # classifier. Named-test proofs keep this step from passing on zero tests.
+      # classifier. P4: host and session are redacted, never omitted, for a
+      # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.
       - name: Read-side write provenance equals the metric class
         if: runner.os == 'Linux'
         env:
@@ -206,6 +207,11 @@ jobs:
           grep -Fx 'test write_provenance_read::tests::a_transaction_with_no_declaration_row_reads_unknown_no_row ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
           grep -Fx 'test write_provenance_read::tests::a_read_only_open_of_a_store_without_the_table_reads_unknown_no_table ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
           grep -Fx 'test write_provenance_read::tests::the_read_completeness_equals_the_metric_class_for_the_same_request ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::an_anonymous_read_shows_redacted_for_host_and_session_never_an_omission ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::a_legacy_shared_bearer_read_shows_redacted_for_host_and_session ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::a_named_bearer_read_shows_host_and_session_values ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::an_attested_session_read_shows_host_and_session_values ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::completeness_and_state_are_the_same_for_every_reader ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
       - name: Compile the server on Windows without Unix pilot modules
         if: runner.os == 'Windows'
         run: cargo check --locked --no-default-features --features shacl,onnx,server --bin quipu-server

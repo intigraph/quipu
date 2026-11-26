@@ -10,14 +10,15 @@ use crate::Store;
 use crate::session_attestation::SessionBinding;
 use crate::transaction_auth::{AttestationSlot, Identity, PendingAttestation, with_identity};
 use crate::write_provenance::{RequestProvenance, scoped};
+use crate::write_provenance_read::Disclosure;
 
 const TS: &str = "2026-01-01T00:00:00Z";
 const NONCE: &str = "fedcba9876543210fedcba9876543210";
 /// A forged session header on a signed write: never the effective session.
-const FORGED: &str = "forged-session";
+pub(super) const FORGED: &str = "forged-session";
 /// Headers in `FIELDS` order (agent, harness, host, session, model): a signed
 /// client omits the agent, and this one also forges a session.
-const SIGNED_HEADERS: [Option<&str>; 5] = [
+pub(super) const SIGNED_HEADERS: [Option<&str>; 5] = [
     None,
     Some("claude"),
     Some("host-a"),
@@ -25,7 +26,7 @@ const SIGNED_HEADERS: [Option<&str>; 5] = [
     Some("model-x"),
 ];
 
-fn attested(store: &Store, session: &str) -> Identity {
+pub(super) fn attested(store: &Store, session: &str) -> Identity {
     let key = Ed25519KeyPair::from_seed_unchecked(&[42u8; 32]).unwrap();
     let now = crate::time::epoch_secs();
     let mut binding = SessionBinding::new(
@@ -53,7 +54,7 @@ fn attested(store: &Store, session: &str) -> Identity {
     }
 }
 
-fn bearer() -> Identity {
+pub(super) fn bearer() -> Identity {
     Identity {
         principal: "urn:crew:bearer".into(),
         credential_id: Some("cred-1".into()),
@@ -64,7 +65,12 @@ fn bearer() -> Identity {
 
 /// Commit one transaction the way the server does: the middleware's
 /// classification, credited only for a verified attestation, under `identity`.
-fn write(store: &mut Store, client: &str, headers: [Option<&str>; 5], who: Identity) -> i64 {
+pub(super) fn write(
+    store: &mut Store,
+    client: &str,
+    headers: [Option<&str>; 5],
+    who: Identity,
+) -> i64 {
     let classified = RequestProvenance::classify(client, "/knot", headers);
     let credited = if who.auth_class == "attested_session" {
         classified.with_verified_identity()
@@ -87,7 +93,7 @@ fn series(client: &str, class: &str) -> u64 {
         .map_or(0, |n| n.parse().unwrap())
 }
 
-fn field(value: &str, basis: &str) -> Value {
+pub(super) fn field(value: &str, basis: &str) -> Value {
     json!({ "value": value, "basis": basis })
 }
 
@@ -96,7 +102,9 @@ fn a_signed_write_with_a_forged_session_reads_the_binding_session_as_effective()
     let mut store = Store::open_in_memory().unwrap();
     let who = attested(&store, "binding-s1");
     let tx = write(&mut store, "test-d4yw-forged", SIGNED_HEADERS, who);
-    let p = store.transaction_provenance(tx).unwrap();
+    let p = store
+        .transaction_provenance_for(tx, Disclosure::Full)
+        .unwrap();
     assert_eq!(p["state"], "observed");
     assert_eq!(
         p["effective"]["agent"],
@@ -134,7 +142,9 @@ fn a_bearer_write_reads_every_field_as_declared() {
         Some("model-b"),
     ];
     let tx = write(&mut store, "test-d4yw-bearer", headers, bearer());
-    let p = store.transaction_provenance(tx).unwrap();
+    let p = store
+        .transaction_provenance_for(tx, Disclosure::Full)
+        .unwrap();
     assert_eq!(p["superseded"], json!({}));
     let effective = p["effective"].as_object().unwrap();
     assert_eq!(effective.len(), 5);
@@ -149,7 +159,9 @@ fn a_transaction_with_no_declaration_row_reads_unknown_no_row() {
     let mut store = Store::open_in_memory().unwrap();
     // No request scope: an engine write, which records no declaration row.
     let tx = store.transact(&[], TS, None, None).unwrap();
-    let p = store.transaction_provenance(tx).unwrap();
+    let p = store
+        .transaction_provenance_for(tx, Disclosure::Full)
+        .unwrap();
     assert_eq!(p["state"], "unknown-no-row");
     assert_eq!(p["completeness"], "unknown");
     assert_eq!(p["effective"], json!({}));
@@ -171,7 +183,9 @@ fn a_read_only_open_of_a_store_without_the_table_reads_unknown_no_table() {
         tx
     };
     let store = Store::open_read_only(path).unwrap();
-    let p = store.transaction_provenance(tx).unwrap();
+    let p = store
+        .transaction_provenance_for(tx, Disclosure::Full)
+        .unwrap();
     assert_eq!(p["state"], "unknown-no-table");
     assert_eq!(p["completeness"], "unknown");
 }
@@ -185,7 +199,9 @@ fn the_read_completeness_equals_the_metric_class_for_the_same_request() {
     let mut store = Store::open_in_memory().unwrap();
     let who = attested(&store, "binding-s2");
     let tx = write(&mut store, CLIENT, SIGNED_HEADERS, who);
-    let read = store.transaction_provenance(tx).unwrap();
+    let read = store
+        .transaction_provenance_for(tx, Disclosure::Full)
+        .unwrap();
     let class = read["completeness"].as_str().unwrap();
     assert_eq!(series(CLIENT, class), 1, "metric counted {class}");
     for other in ["complete", "partial", "absent"] {
