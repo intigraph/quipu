@@ -167,6 +167,8 @@ fn a_byte_copied_home_file_is_not_accepted_as_a_mini_quipu() {
     assert!(err.contains("not a mini-Quipu"), "{err}");
 }
 
+// The pinned shapes gate exists only with SHACL; without it nothing refuses.
+#[cfg(feature = "shacl")]
 #[test]
 fn local_writes_pass_the_pinned_shapes_gate() {
     let dir = tempfile::tempdir().unwrap();
