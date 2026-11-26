@@ -167,6 +167,9 @@ fn eval_single_edge(
     fixed_obj: Option<i64>,
     ctx: &TemporalContext,
 ) -> Result<Vec<(i64, i64)>> {
+    if store.has_attachments() {
+        return eval_single_edge_composed(store, pred_iri, fixed_subj, fixed_obj, ctx);
+    }
     let Some(pred_id) = store.lookup(pred_iri)? else {
         return Ok(vec![]);
     };
@@ -183,6 +186,82 @@ fn eval_single_edge(
     }
     add_temporal_conditions(&mut conds, &mut params, ctx);
     query_pairs(store, &conds, &params)
+}
+
+/// [`eval_single_edge`] over a composed store. One IRI may carry an id per
+/// file (an alias), so the predicate and any fixed endpoint match EVERY id of
+/// their IRI, and returned pairs are canonical. Otherwise a path through a
+/// shared IRI stops at the file boundary
+/// (`property_paths_follow_aliases_across_term_spaces`).
+fn eval_single_edge_composed(
+    store: &Store,
+    pred_iri: &str,
+    fixed_subj: Option<i64>,
+    fixed_obj: Option<i64>,
+    ctx: &TemporalContext,
+) -> Result<Vec<(i64, i64)>> {
+    let preds = store.lookup_all(pred_iri)?;
+    if preds.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    let placeholders = |params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+                        values: Vec<Box<dyn rusqlite::types::ToSql>>| {
+        let start = params.len();
+        let marks: Vec<String> = (0..values.len())
+            .map(|i| format!("?{}", start + i + 1))
+            .collect();
+        params.extend(values);
+        marks.join(",")
+    };
+    let a = placeholders(
+        &mut params,
+        preds
+            .iter()
+            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+            .collect(),
+    );
+    let mut conds = vec![format!("a IN ({a})"), "op = 1".to_string()];
+    add_graph_condition(&mut conds, &mut params, ctx)?;
+    if let Some(s) = fixed_subj {
+        let ids = alias_ids(store, s)?;
+        let e = placeholders(
+            &mut params,
+            ids.into_iter()
+                .map(|id| Box::new(id) as Box<dyn rusqlite::types::ToSql>)
+                .collect(),
+        );
+        conds.push(format!("e IN ({e})"));
+    }
+    if let Some(o) = fixed_obj {
+        let ids = alias_ids(store, o)?;
+        let v = placeholders(
+            &mut params,
+            ids.into_iter()
+                .map(|id| Box::new(Value::Ref(id).to_bytes()) as Box<dyn rusqlite::types::ToSql>)
+                .collect(),
+        );
+        conds.push(format!("v IN ({v})"));
+    }
+    add_temporal_conditions(&mut conds, &mut params, ctx);
+    let mut out = Vec::new();
+    for (s, o) in query_pairs(store, &conds, &params)? {
+        push_unique(&mut out, (store.canonical_id(s)?, store.canonical_id(o)?));
+    }
+    Ok(out)
+}
+
+/// Every id the composed dictionaries hold for `id`'s IRI (itself included).
+fn alias_ids(store: &Store, id: i64) -> Result<Vec<i64>> {
+    let iri = store.resolve(id)?;
+    if iri.starts_with("_:") {
+        return Ok(vec![id]);
+    }
+    let mut ids = store.lookup_all(&iri)?;
+    if !ids.contains(&id) {
+        ids.push(id);
+    }
+    Ok(ids)
 }
 
 /// Evaluate a sequence path (left / right).
@@ -491,6 +570,12 @@ fn resolve_term_to_id(
     bindings: &Bindings,
 ) -> Result<Option<i64>> {
     match term {
+        // A composed store can hold an IRI only in an attached file; the
+        // local-only lookup would leave such an endpoint unfixed.
+        // `lookup_all` returns the canonical id first.
+        TermPattern::NamedNode(n) if store.has_attachments() => {
+            Ok(store.lookup_all(n.as_str())?.into_iter().next())
+        }
         TermPattern::NamedNode(n) => Ok(store.lookup(n.as_str())?),
         TermPattern::BlankNode(b) => match bindings.get(b.as_str()) {
             Some(Value::Ref(id)) => Ok(Some(*id)),

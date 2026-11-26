@@ -476,3 +476,112 @@ fn late_alias_miss_is_snapshot_scoped_and_not_cached_across_commits() {
         "the old miss must not hide a local spelling at the next cut"
     );
 }
+
+/// A property path through an IRI shared across term spaces follows the
+/// alias. `urn:a next urn:b` is local ROOT and `urn:b next urn:c` is in an
+/// attached layer graph. `urn:next` and `urn:b` have a different id in each
+/// file. Before the fix, `eval_single_edge` resolved the predicate with a
+/// local-only lookup and hopped on raw ids, so the path stopped at the file
+/// boundary and silently returned `[urn:b]`.
+#[test]
+fn property_paths_follow_aliases_across_term_spaces() {
+    let scratch = Scratch::new("path");
+    let main = scratch.path("main.db");
+    {
+        let mut s = Store::open(&main.to_string_lossy()).unwrap();
+        let (a, next, b) = (
+            s.intern("urn:a").unwrap(),
+            s.intern("urn:next").unwrap(),
+            s.intern("urn:b").unwrap(),
+        );
+        s.transact(&[fact(a, next, Value::Ref(b))], T0, None, None)
+            .unwrap();
+    }
+    let src = scratch.path("layer-src.db");
+    {
+        let mut s = Store::open(&src.to_string_lossy()).unwrap();
+        // Different intern order: the shared IRIs get different rowids too.
+        let c = s.intern("urn:c").unwrap();
+        let b = s.intern("urn:b").unwrap();
+        let next = s.intern("urn:next").unwrap();
+        let g = s.intern("urn:layer:graph").unwrap();
+        s.conn
+            .execute(
+                "INSERT OR IGNORE INTO graphs (g, class, parent_branch, created_at) \
+                 VALUES (?1, 'committed', NULL, ?2)",
+                rusqlite::params![g, T0],
+            )
+            .unwrap();
+        s.transact_to_graph(&[fact(b, next, Value::Ref(c))], T0, None, None, g)
+            .unwrap();
+    }
+    let layer = scratch.path("layer.db");
+    crate::store::respace::respace_file(&src, &layer, 31).unwrap();
+    let store = Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only("layer", &layer.to_string_lossy())],
+    )
+    .unwrap();
+    assert_eq!(store.lookup_all("urn:next").unwrap().len(), 2);
+    assert_eq!(store.lookup_all("urn:b").unwrap().len(), 2);
+    let root = crate::schema::ROOT_GRAPH_IRI;
+    let iris = |query: &str, var: &str| -> Vec<String> {
+        let mut out: Vec<String> = select_rows(&store, query)
+            .iter()
+            .map(|row| match &row[var] {
+                Value::Ref(id) => store.resolve(*id).unwrap(),
+                other => panic!("expected a node, got {other:?}"),
+            })
+            .collect();
+        out.sort();
+        out
+    };
+    let dataset = format!("FROM <{root}> FROM <urn:layer:graph>");
+    // Forward from a fixed subject.
+    assert_eq!(
+        iris(
+            &format!("SELECT ?x {dataset} WHERE {{ <urn:a> <urn:next>+ ?x }}"),
+            "x"
+        ),
+        ["urn:b", "urn:c"]
+    );
+    // Backward from a fixed object.
+    assert_eq!(
+        iris(
+            &format!("SELECT ?s {dataset} WHERE {{ ?s <urn:next>+ <urn:c> }}"),
+            "s"
+        ),
+        ["urn:a", "urn:b"]
+    );
+    // Both ends free: exactly the three distinct pairs, no alias duplicates.
+    let pairs = select_rows(
+        &store,
+        &format!("SELECT ?s ?o {dataset} WHERE {{ ?s <urn:next>+ ?o }}"),
+    );
+    let mut pairs: Vec<(String, String)> = pairs
+        .iter()
+        .map(|row| match (&row["s"], &row["o"]) {
+            (Value::Ref(s), Value::Ref(o)) => {
+                (store.resolve(*s).unwrap(), store.resolve(*o).unwrap())
+            }
+            other => panic!("expected nodes, got {other:?}"),
+        })
+        .collect();
+    pairs.sort();
+    assert_eq!(
+        pairs,
+        [
+            ("urn:a".to_owned(), "urn:b".to_owned()),
+            ("urn:a".to_owned(), "urn:c".to_owned()),
+            ("urn:b".to_owned(), "urn:c".to_owned()),
+        ]
+    );
+    // Each graph alone still stops at its own boundary: no cross-graph leak.
+    assert_eq!(
+        iris(
+            &format!("SELECT ?x FROM <{root}> WHERE {{ <urn:a> <urn:next>+ ?x }}"),
+            "x"
+        ),
+        ["urn:b"]
+    );
+}
