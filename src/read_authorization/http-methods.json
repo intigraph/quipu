@@ -74,6 +74,9 @@
   "/embed_backfill_graph": [
     "post"
   ],
+  "/embed_refresh": [
+    "post"
+  ],
   "/entity": [
     "get"
   ],
