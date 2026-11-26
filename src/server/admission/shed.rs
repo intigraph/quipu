@@ -143,13 +143,21 @@ impl Drop for Waiting {
 /// Fold one completed read's service time into the mean (weight 1/8).
 pub(crate) fn record_service(elapsed: std::time::Duration) {
     let sample = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
-    let _ = SERVICE_EWMA_MS.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |old| {
-        Some(if old == 0 {
+    // A plain CAS loop: current stable deprecates `fetch_update` (renamed
+    // `try_update`), which older toolchains do not have.
+    let mut old = SERVICE_EWMA_MS.load(Ordering::Relaxed);
+    loop {
+        let next = if old == 0 {
             sample
         } else {
             old.saturating_mul(7).saturating_add(sample) / 8
-        })
-    });
+        };
+        match SERVICE_EWMA_MS.compare_exchange_weak(old, next, Ordering::Relaxed, Ordering::Relaxed)
+        {
+            Ok(_) => return,
+            Err(actual) => old = actual,
+        }
+    }
 }
 
 /// Seconds until a retry is likely to be admitted: the queue ahead drained at
