@@ -2261,10 +2261,15 @@ migration) are not counted as that client's writes:
 - `quipu_write_provenance_missing_total{client,field}` — commits missing a
   required field (`agent`, `harness`, `host`, `session`, `model`).
 
-A header that is present but blank counts as missing. A write signed with a
+A header value must be printable ASCII of at most 128 characters. A value that
+is blank, longer, or contains any other byte counts as missing and is not
+stored with the transaction; declarations stored before this limit (up to 1024
+bytes) still read back. A write signed with a
 verified `x-quipu-attestation` takes its agent and session from the key
 binding, so a signed client that omits those two headers can still be
-`complete`. Harness, host and model still come from the headers, and a
+`complete`. The transaction also records the binding's session as local
+credential evidence, which is never replicated or shared; bearer writes, and
+transactions committed before the server recorded it, have none. Harness, host and model still come from the headers, and a
 refused signature counts nothing. Coverage per client is
 `rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
 the process restarts, so use rates rather than raw values.
