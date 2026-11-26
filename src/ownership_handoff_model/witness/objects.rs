@@ -77,3 +77,23 @@ pub(super) fn parse(name: &str) -> Option<Key> {
     };
     (self::name(key) == name).then_some(key)
 }
+
+/// A borrowed backend is the same backend: enrollment verifies through the
+/// exact client it created genesis with, never a second one.
+impl<B: Objects + ?Sized> Objects for &B {
+    fn get(&self, key: &str) -> Reply<Option<Object>> {
+        (**self).get(key)
+    }
+    fn create(&self, key: &str, bytes: &[u8]) -> Reply<Created> {
+        (**self).create(key, bytes)
+    }
+    fn list(&self, limit: usize) -> Reply<Vec<String>> {
+        (**self).list(limit)
+    }
+    fn fault(&self) -> Option<super::Fault> {
+        (**self).fault()
+    }
+    fn read_budget(&self) -> usize {
+        (**self).read_budget()
+    }
+}

@@ -43,6 +43,13 @@ mod ownership_admission;
 mod ownership_admission_fixture;
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_inventory;
+// Owner enrollment library API (aegis-4qv.2): S3 witness genesis, inventory, marker.
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub(crate) mod ownership_enroll;
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+mod ownership_enroll_pilot;
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub use ownership_enroll_pilot::{PilotEnroll, enroll_pilot_owner};
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_journal;

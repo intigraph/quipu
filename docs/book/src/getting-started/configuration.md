@@ -302,6 +302,34 @@ behind the ordinary authentication. Each request carries the v2 completion
 contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
 `x-quipu-owner-policy` pins. Legacy `/knot` is unchanged.
 
+### Enrolling the pilot owner
+
+An owner file must be enrolled before `[quipu.ingest_pilot]` can start it.
+`quipu::store::enroll_pilot_owner` (an `ownership-witness-s3` build, Unix
+only) is the library entry point the `quipu pilot enroll` CLI wraps. It takes
+the same `[quipu.ingest_pilot]` table, an existing Quipu database, a journal
+path and the owning principal. Without `execute` it is a dry run: a read-only
+preflight plus the planned authority, with no local or remote write.
+
+With `execute` it runs, in order: an owner-only intent file next to the
+journal; witness genesis as one conditional create (`If-None-Match: *`) of
+`active/00` under the configured prefix; the Active journal; the owner-only
+inventory (`<journal>.inventory`); the database marker in one SQLite
+transaction; and a real enrolled startup against the same witness. The
+intent is retired only after that startup admits the file. A run interrupted
+at any step resumes to the identical receipt when re-run with the same
+arguments. Existing genesis bytes are accepted only when they are identical,
+and nothing is ever deleted or overwritten.
+
+Enrollment refuses, and leaves the database, inventory and witness unchanged,
+when: the database already has a marker; an inventory already exists; the
+witness prefix holds anything other than the identical genesis; the
+credentials file or an existing journal is group- or other-readable; the
+witness profile differs from the configuration; the database path is a
+symlink or not a regular file; or its device/inode changes before the marker
+is written. Credentials are read only from `credentials_file` and never
+appear in the report or errors.
+
 ## Choosing a vector backend
 
 `[quipu.vector] backend` selects the store's vector backend at open, for both
