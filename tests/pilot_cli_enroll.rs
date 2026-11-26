@@ -2,7 +2,7 @@
 //! minimal create-only S3 stand-in: `PUT` requires `If-None-Match: *` and
 //! answers 412 for an existing key, so an overwrite is impossible. Every
 //! refusal must leave the database byte-identical and the witness unchanged.
-#![cfg(all(unix, feature = "ownership-witness-s3"))]
+#![cfg(all(unix, feature = "shacl", feature = "ownership-witness-s3"))]
 
 use quipu::Store;
 use serde_json::Value;
