@@ -96,6 +96,12 @@ pub(crate) fn check_term_spaces(reads: &[CapturedRead<'_>]) -> Result<()> {
 /// raise it).
 const SQLITE_MAX_ATTACHED: usize = 10;
 
+/// Page cache per ATTACHED schema, in KiB (SQLite's negative `cache_size`).
+/// Set explicitly so the composition memory plan does not rest on a compiled
+/// default: worst case per connection is the main cache plus
+/// `max_attached x ATTACHED_CACHE_KIB` (aegis-n0wc.5 memory plan).
+pub(crate) const ATTACHED_CACHE_KIB: i64 = 2000;
+
 /// A bounded pool of read-only composition connections over one legacy file.
 pub(crate) struct CompositionPool {
     legacy_path: String,
@@ -276,6 +282,9 @@ impl Checkout {
             .collect();
         let conn = &self.store().conn;
         attach::attach_all(conn, &attachments)?;
+        for alias in &self.aliases {
+            conn.execute_batch(&format!("PRAGMA {alias}.cache_size=-{ATTACHED_CACHE_KIB}"))?;
+        }
         let local = super::local_term_space(conn)?;
         attach::verify_attached_schema(conn, &attachments, local)?;
         conn.execute_batch("BEGIN DEFERRED")?;
@@ -385,6 +394,22 @@ impl Checkout {
         store.attachments = attachments;
         store.attached_graphs = contributed;
         Ok(())
+    }
+
+    /// `cache_size` of `main` and of every attachment, for the memory-plan pin.
+    #[cfg(test)]
+    pub(crate) fn cache_sizes_for_test(&self) -> Result<Vec<(String, i64)>> {
+        let conn = &self.store().conn;
+        let mut schemas = vec!["main".to_owned()];
+        schemas.extend(self.aliases.iter().cloned());
+        schemas
+            .into_iter()
+            .map(|schema| {
+                let size: i64 =
+                    conn.query_row(&format!("PRAGMA {schema}.cache_size"), [], |r| r.get(0))?;
+                Ok((schema, size))
+            })
+            .collect()
     }
 
     #[cfg(test)]

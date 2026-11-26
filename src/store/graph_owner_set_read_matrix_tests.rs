@@ -746,3 +746,30 @@ fn an_attached_set_over_the_bound_refuses_before_any_attach() {
     .unwrap();
     assert_eq!(values(&legacy, "o"), ["urn:left"]);
 }
+
+// Composition memory plan (aegis-n0wc.5 c37): every ATTACHED schema gets an
+// explicit, bounded page cache, so the per-connection worst case is the main
+// cache plus max_attached x ATTACHED_CACHE_KIB, not a compiled default.
+#[test]
+fn every_attached_schema_has_the_bounded_page_cache() {
+    let m = matrix();
+    let sizes = m
+        .dataset
+        .read_attached(&BOTH, deadline(), |_, checkout| {
+            checkout.cache_sizes_for_test()
+        })
+        .unwrap();
+    assert_eq!(sizes[0], ("main".to_owned(), -32000), "{sizes:?}");
+    let attached: Vec<_> = sizes[1..].to_vec();
+    assert!(
+        !attached.is_empty(),
+        "the selection attached nothing: {sizes:?}"
+    );
+    for (schema, size) in attached {
+        assert_eq!(
+            size,
+            -crate::store::composition::ATTACHED_CACHE_KIB,
+            "{schema} cache_size"
+        );
+    }
+}
