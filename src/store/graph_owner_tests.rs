@@ -1265,12 +1265,14 @@ fn composed_cut_recheck_binds_generation_policy_and_expired_buffer() {
                     catalog_revision: reads[0].catalog_revision,
                     local_tx: reads[0].local_tx,
                     store: reads[0].store,
+                    legacy: reads[0].legacy,
                 },
                 CapturedRead {
                     route: reads[1].route,
                     catalog_revision: reads[1].catalog_revision,
                     local_tx: reads[1].local_tx,
                     store: reads[1].store,
+                    legacy: reads[1].legacy,
                 },
             ];
             assert!(

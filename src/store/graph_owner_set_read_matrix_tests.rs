@@ -198,12 +198,14 @@ fn run(m: &Matrix, graphs: &[&str], sparql: &str) -> Result<serde_json::Value> {
     let (policy, identity) = authority(graphs);
     let policy = policy.snapshot().unwrap();
     let permit = m.admission.try_reserve()?;
-    let output = m.dataset.read(graphs, deadline(), |reads| {
-        let view = policy
-            .authorize(&identity, ReadOperation::Query, None, 2)?
-            .open_composed_cut(reads, permit, 2, deadline())?;
-        view.query(sparql, false, 2)
-    })?;
+    let output = m
+        .dataset
+        .read_attached(graphs, deadline(), |reads, checkout| {
+            let view = policy
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_attached_cut(reads, checkout, permit, 2, deadline())?;
+            view.query(sparql, false, 2)
+        })?;
     Ok(serde_json::from_slice(&output).unwrap())
 }
 
@@ -274,6 +276,27 @@ fn r1a_files_sharing_one_term_space_refuse_before_mount() {
 #[test]
 fn r1c_a_declared_space_whose_real_ids_overlap_refuses_at_mount() {
     assert_space_refusal(Spaces::DeclaredOnly, "R1c");
+}
+
+// The paired mutant: trusting the declared space alone answers again.
+#[test]
+fn r1c_mutant_trusting_the_declared_space_lets_overlapping_ids_mount() {
+    use crate::read_authorization::mutants::{Mutant, with};
+    let m = matrix_with(Spaces::DeclaredOnly);
+    let answer = with(Mutant::AttachTrustDeclaredSpace, || {
+        run(
+            &m,
+            &BOTH,
+            &format!(
+                "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+                named(&BOTH)
+            ),
+        )
+    });
+    assert!(
+        answer.is_ok(),
+        "mutant did not disable the id-range check: {answer:?}"
+    );
 }
 
 #[test]
@@ -545,10 +568,10 @@ fn a_selected_member_that_cannot_be_captured_is_an_error_never_an_empty_answer()
     let policy = policy.snapshot().unwrap();
     let permit = m.admission.try_reserve().unwrap();
     let short = Instant::now() + Duration::from_millis(300);
-    let result = m.dataset.read(&BOTH, short, |reads| {
+    let result = m.dataset.read_attached(&BOTH, short, |reads, checkout| {
         let view = policy
             .authorize(&identity, ReadOperation::Query, None, 2)?
-            .open_composed_cut(reads, permit, 2, short)?;
+            .open_attached_cut(reads, checkout, permit, 2, short)?;
         view.query(
             &format!(
                 "SELECT * {} WHERE {{ GRAPH ?g {{ ?s ?p ?o }} }}",
@@ -574,4 +597,121 @@ fn a_selected_member_that_cannot_be_captured_is_an_error_never_an_empty_answer()
     )
     .unwrap();
     assert_eq!(rows(&after).len(), 11);
+}
+
+// P1/P2 (dearing n0wc.5 c32): a pooled composition connection starts clean.
+// X mounts the routed file; Y on the SAME connection must see only `main`
+// and an empty TEMP, and must still answer exactly.
+#[test]
+fn p2_a_reused_composition_connection_carries_nothing_from_the_previous_read() {
+    let m = matrix();
+    let x = run(
+        &m,
+        &BOTH,
+        &format!(
+            "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+            named(&BOTH)
+        ),
+    )
+    .unwrap();
+    assert_eq!(values(&x, "v"), ["must-not-join"]);
+    assert_eq!(m.dataset.composition_idle(), 1, "X returned its connection");
+    let checkout = m.dataset.composition_checkout().unwrap();
+    assert!(
+        checkout.is_clean_now().unwrap(),
+        "X left state on the connection"
+    );
+    drop(checkout);
+    // Y on the same connection: legacy-only, then both again.
+    let y = run(
+        &m,
+        &[REFS],
+        &format!("SELECT ?o FROM NAMED <{REFS}> WHERE {{ GRAPH <{REFS}> {{ <urn:pointer> <urn:pointsTo> ?o }} }}"),
+    )
+    .unwrap();
+    assert_eq!(values(&y, "o"), ["urn:left"]);
+    let again = run(
+        &m,
+        &BOTH,
+        &format!(
+            "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+            named(&BOTH)
+        ),
+    )
+    .unwrap();
+    assert_eq!(values(&again, "v"), ["must-not-join"]);
+}
+
+// Skip-detach alone: checkout verification still discards the dirty
+// connection, so the next read gets a fresh, clean one.
+#[test]
+fn p1_checkout_verification_discards_a_connection_left_attached() {
+    use crate::read_authorization::mutants::{Mutant, with};
+    let m = matrix();
+    let query = format!(
+        "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+        named(&BOTH)
+    );
+    with(Mutant::CompositionSkipDetach, || run(&m, &BOTH, &query)).unwrap();
+    let checkout = m.dataset.composition_checkout().unwrap();
+    assert!(
+        checkout.is_clean_now().unwrap(),
+        "dirty connection was reused"
+    );
+}
+
+// Both mutants: the leftover attachment is visible to the next checkout.
+// This is what proves the test above can SEE leakage.
+#[test]
+fn p2_mutant_skipping_detach_and_verification_leaks_the_attachment() {
+    use crate::read_authorization::mutants::{Mutant, with};
+    let m = matrix();
+    let query = format!(
+        "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:right> <urn:value> ?v }} }}",
+        named(&BOTH)
+    );
+    with(Mutant::CompositionSkipDetach, || run(&m, &BOTH, &query)).unwrap();
+    let checkout = with(Mutant::CompositionSkipCheckoutVerify, || {
+        m.dataset.composition_checkout()
+    })
+    .unwrap();
+    assert!(
+        !checkout.is_clean_now().unwrap(),
+        "mutant left no trace: the leakage test cannot observe leakage"
+    );
+}
+
+// P3: the snapshot is pinned at checkout, under the fences. A write that
+// commits after the fences are released (inside the read callback) is NOT
+// seen by this read, and IS seen by the next one.
+#[test]
+fn p3_a_write_after_the_fences_release_is_invisible_to_the_pinned_read() {
+    let m = matrix();
+    let query = format!(
+        "SELECT ?v {} WHERE {{ GRAPH <{APP}> {{ <urn:late> <urn:value> ?v }} }}",
+        named(&BOTH)
+    );
+    let (policy, identity) = authority(&BOTH);
+    let policy = policy.snapshot().unwrap();
+    let permit = m.admission.try_reserve().unwrap();
+    let output = m
+        .dataset
+        .read_attached(&BOTH, deadline(), |reads, checkout| {
+            {
+                let mut writer = m.dataset.routed[APP].owner.writer.lock();
+                write(&mut writer, APP, "<urn:late> <urn:value> \"after-cut\" .");
+            }
+            let view = policy
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_attached_cut(reads, checkout, permit, 2, deadline())?;
+            view.query(&query, false, 2)
+        })
+        .unwrap();
+    let pinned: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert!(
+        rows(&pinned).is_empty(),
+        "read saw a post-cut write: {pinned}"
+    );
+    let next = run(&m, &BOTH, &query).unwrap();
+    assert_eq!(values(&next, "v"), ["after-cut"]);
 }

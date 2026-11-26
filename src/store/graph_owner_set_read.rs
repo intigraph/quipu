@@ -9,6 +9,9 @@ pub struct GraphSetDataset {
     catalog: Arc<GraphSetCatalog>,
     legacy: Owner,
     routed: BTreeMap<String, GraphSetOwner>,
+    root: std::path::PathBuf,
+    /// Phase 2 read-only ATTACH composition connections (aegis-n0wc.5).
+    composition: Arc<crate::store::composition::CompositionPool>,
 }
 
 impl GraphSetDataset {
@@ -59,11 +62,75 @@ impl GraphSetDataset {
             }
             Ok(())
         })?;
+        let legacy_file = &catalog
+            .physical()
+            .legacy_participant()
+            .ok_or_else(|| refused("explicit legacy participant required"))?
+            .file_id;
+        let legacy_path = root.join(format!("{legacy_file}.db"));
+        // ONE composition connection until the memory plan accounts for more
+        // (follow-up): it is counted beside the legacy readers it reads.
+        let composition = crate::store::composition::CompositionPool::new(
+            legacy_path
+                .to_str()
+                .ok_or_else(|| refused("legacy path is not UTF-8"))?,
+            1,
+        )?;
         Ok(Self {
             catalog,
             legacy,
             routed,
+            root: root.to_path_buf(),
+            composition,
         })
+    }
+
+    /// Phase 2 read (seam A): like [`Self::read`], plus one composition
+    /// connection that attaches exactly the selected routed files read-only
+    /// and begins its snapshot while every commit fence is held, so it reads
+    /// the same strict cut as the captured participants.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn read_attached<T>(
+        &self,
+        graphs: &[&str],
+        deadline: Instant,
+        query: impl FnOnce(&[CapturedRead<'_>], crate::store::composition::Checkout) -> Result<T>,
+    ) -> Result<T> {
+        let checkout = std::cell::RefCell::new(Some(self.composition.checkout()?));
+        self.read_inner(
+            graphs,
+            deadline,
+            |physical| {
+                // R1: prove disjoint term spaces BEFORE anything is attached.
+                crate::store::composition::check_term_spaces(physical)?;
+                let mounts = physical
+                    .iter()
+                    .filter(|read| !read.legacy)
+                    .enumerate()
+                    .map(|(i, read)| crate::store::composition::Mount {
+                        store_id: read.route.store_id.clone(),
+                        alias: format!("set{i}"),
+                        path: self
+                            .root
+                            .join(format!("{}.db", read.route.file_id))
+                            .to_string_lossy()
+                            .into_owned(),
+                    })
+                    .collect::<Vec<_>>();
+                checkout
+                    .borrow_mut()
+                    .as_mut()
+                    .ok_or_else(|| refused("composition checkout missing"))?
+                    .begin(&mounts)
+            },
+            |selected| {
+                let checkout = checkout
+                    .borrow_mut()
+                    .take()
+                    .ok_or_else(|| refused("composition checkout missing"))?;
+                query(selected, checkout)
+            },
+        )
     }
 
     /// Capture once per selected physical owner, then expose ONLY the selected
@@ -73,6 +140,16 @@ impl GraphSetDataset {
         &self,
         graphs: &[&str],
         deadline: Instant,
+        query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
+    ) -> Result<T> {
+        self.read_inner(graphs, deadline, |_| Ok(()), query)
+    }
+
+    fn read_inner<T>(
+        &self,
+        graphs: &[&str],
+        deadline: Instant,
+        under_fence: impl FnOnce(&[CapturedRead<'_>]) -> Result<()>,
         query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
     ) -> Result<T> {
         let plans = self.catalog.plan_read(graphs)?;
@@ -98,7 +175,7 @@ impl GraphSetDataset {
                     .ok_or_else(|| refused("logical graph left pinned dataset"))
             })
             .collect::<Result<Vec<_>>>()?;
-        Owner::read_strict(&owners, deadline, |physical| {
+        Owner::read_strict_with(&owners, deadline, under_fence, |physical| {
             let mut selected = Vec::with_capacity(routes.len());
             for route in &routes {
                 let source = physical
@@ -110,10 +187,22 @@ impl GraphSetDataset {
                     catalog_revision: source.catalog_revision,
                     local_tx: source.local_tx,
                     store: source.store,
+                    legacy: source.legacy,
                 });
             }
             query(&selected)
         })
+    }
+}
+
+#[cfg(test)]
+impl GraphSetDataset {
+    pub(crate) fn composition_idle(&self) -> usize {
+        self.composition.idle_len()
+    }
+
+    pub(crate) fn composition_checkout(&self) -> Result<crate::store::composition::Checkout> {
+        self.composition.checkout()
     }
 }
 

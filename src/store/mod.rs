@@ -10,6 +10,8 @@ pub mod attestation;
 pub mod attested_write;
 mod batches;
 pub mod changes;
+#[cfg(unix)]
+pub(crate) mod composition;
 pub mod conditional;
 pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
