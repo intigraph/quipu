@@ -9,6 +9,9 @@ use crate::writer_scope::{Capability, GraphInstance, WriteGrant, WriteOperation,
 use crate::{Error, Result};
 
 impl Store {
+    /// Only MISSING instance rows are inserted: a BEFORE INSERT trigger (the
+    /// routed-graph fence) fires even for a row `OR IGNORE` would skip, so
+    /// re-offering existing rows on every open refused a fenced legacy file.
     pub(super) fn migrate_writer_scope(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "BEGIN IMMEDIATE;
@@ -17,7 +20,8 @@ impl Store {
              CREATE TABLE IF NOT EXISTS writer_grants (
                  id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);
              INSERT OR IGNORE INTO writer_graph_instances(g,generation)
-                 SELECT g,lower(hex(randomblob(32))) FROM graphs;
+                 SELECT g,lower(hex(randomblob(32))) FROM graphs
+                 WHERE g NOT IN (SELECT g FROM writer_graph_instances);
              CREATE TRIGGER IF NOT EXISTS writer_graph_insert AFTER INSERT ON graphs BEGIN
                  INSERT OR REPLACE INTO writer_graph_instances VALUES(NEW.g,lower(hex(randomblob(32))));
              END;

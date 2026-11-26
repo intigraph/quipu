@@ -37,6 +37,12 @@ pub use routed_fence::{FenceClass, FencedColumn};
 /// Canonical producer slice copy between files (per-graph pilot parity).
 mod routed_slice;
 pub use routed_slice::{SliceFact, slice_multiset};
+/// Fenced reverse reconciliation of a routed graph back to legacy (pilot).
+mod routed_reverse;
+pub use routed_reverse::{
+    GraphFact, OwnerLock, ReversePlan, ReverseReceipt, ReverseState, WITNESS_STATE,
+    graph_multiset_sha256, lock_owner_file, validate_reverse_catalogs,
+};
 #[cfg(unix)]
 mod writer_lease;
 // Dormant enrollment inventory: native identity fields, no startup wiring.

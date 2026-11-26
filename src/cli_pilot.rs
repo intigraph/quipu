@@ -8,7 +8,8 @@
 //! `Store::import_routed_slice`,
 //! `cutover` → `Store::cut_over_routed_source`, `catalog` →
 //! `Catalog::from_json` / `Catalog::load_file`, `enroll` →
-//! `quipu::store::enroll_pilot_owner`. Write verbs default to a dry
+//! `quipu::store::enroll_pilot_owner`, `reverse` →
+//! `Store::reverse_routed_graph`. Write verbs default to a dry
 //! run that opens the file read-only; `--execute` writes. Every verb prints one
 //! JSON receipt with the target file identity before and after.
 //!
@@ -28,6 +29,9 @@ mod enroll;
 #[path = "cli_pilot_slice.rs"]
 mod slice;
 
+#[path = "cli_pilot_reverse.rs"]
+mod reverse;
+
 type Out = Result<Json, String>;
 
 pub fn run(args: &[String]) {
@@ -40,9 +44,7 @@ pub fn run(args: &[String]) {
         "cutover" => cutover(rest),
         "catalog" => catalog(rest),
         "enroll" => enroll::enroll(rest),
-        "reverse" => Err(
-            "`pilot reverse` is not implemented yet (no library API to wrap); see docs/book/src/getting-started/configuration.md (Pilot operator CLI)".into()
-        ),
+        "reverse" => reverse::reverse(rest),
         _ => {
             eprintln!("{USAGE}");
             std::process::exit(if verb == "--help" || verb == "-h" {
@@ -70,7 +72,8 @@ usage: quipu pilot <verb> [--execute]   (dry run unless --execute)
   pilot cutover --db LEGACY --tag snapshot:KEY --graph IRI --revision N --generation N [--at RFC3339] [--execute]
   pilot catalog --validate FILE
   pilot catalog --write FILE --from INPUT [--execute]
-  pilot enroll --db DB --journal J --unit full-store --principal P --witness-config F [--execute]";
+  pilot enroll --db DB --journal J --unit full-store --principal P --witness-config F [--execute]
+  pilot reverse --db LEGACY --owner-file OWNER --graph IRI --revision R --generation G --catalog CAT_R --next-catalog CAT_R1 [--execute]";
 
 /// Parse `rest` against an exact allow-list. Values never echo into errors.
 pub(super) struct Flags {

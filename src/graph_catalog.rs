@@ -221,6 +221,11 @@ impl Catalog {
         Ok(self)
     }
 
+    /// Durable identity of the legacy store this catalog was published for.
+    pub fn legacy_store_id(&self) -> &str {
+        &self.legacy_store_id
+    }
+
     /// Exact optional legacy pin; excluded from routed writes and owner counts.
     pub fn legacy_participant(&self) -> Option<&Route> {
         self.legacy_participant.as_ref()
