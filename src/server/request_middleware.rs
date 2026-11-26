@@ -317,7 +317,8 @@ async fn log_request_tracked_stores(
                     id,
                     super::search_observation::REQUEST.scope(
                         search,
-                        REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                        REQUEST_WRITE_PROVENANCE
+                            .scope(provenance.clone(), super::admission::shed::run(next, req)),
                     ),
                 ),
             ),

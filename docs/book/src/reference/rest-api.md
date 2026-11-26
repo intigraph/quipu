@@ -42,6 +42,15 @@ verify the requested facts and preserve the same payload before retrying.
 These diagnostics do not change the configured request budget or bound direct
 protocol handlers that bypass tool-write admission.
 
+## Shed reads
+
+When `[quipu.server] read_admission_wait_ms` is positive, a read that cannot
+be admitted in time returns HTTP **429** with `Retry-After` and
+`code: "read_not_started"`, `read_started: false`. The read did not run, so
+retry after the indicated delay. Send `X-Quipu-Priority: background` on
+non-critical reads to be refused first instead of queueing. See
+[Read concurrency](read-concurrency.md#early-read-shedding).
+
 ## Unrecognized request fields
 
 Successful tool-backed JSON endpoints report unrecognized top-level request keys

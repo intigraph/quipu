@@ -15,13 +15,41 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
+    // aegis-69x: when read shedding is armed, a sheddable read either gets a
+    // permit within its wait or is refused with 429 before it runs. OFF (the
+    // default) yields no policy and the original acquisition is unchanged.
+    let shed_policy = if super::shed::sheddable(kind) {
+        super::shed::policy()
+    } else {
+        None
+    };
+    let Some(permit) = super::shed::acquire(shed_policy, admission, deadline, started)
+        .await
+        .map_err(AppError::from)?
+    else {
+        return admit_tracked_permit(
+            admission.acquire(),
+            kind,
+            deadline,
+            started,
+            stamp,
+            f,
+            registry,
+        )
+        .await;
+    };
     admit_tracked_permit(
-        admission.acquire(),
+        std::future::ready(Ok(permit)),
         kind,
         deadline,
         started,
         stamp,
-        f,
+        move || {
+            let ran = std::time::Instant::now();
+            let result = f();
+            super::shed::record_service(ran.elapsed());
+            result
+        },
         registry,
     )
     .await

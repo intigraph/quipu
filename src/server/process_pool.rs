@@ -249,6 +249,19 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
     let operation = super::request_middleware::declared_operation(req.headers());
     let selected = routing.select(routing.heavy(req.uri().path(), operation.as_deref()));
     let Some((worker, permit)) = selected else {
+        // aegis-69x: busy is load, not a fault. With read shedding armed it is
+        // a 429 + Retry-After the caller can act on; transport, identity and
+        // response-budget failures below stay 503.
+        if super::admission::shed::policy().is_some() {
+            let priority = super::admission::shed::ReadPriority::from_headers(req.headers());
+            return super::base::AppError::from(super::admission::shed::shed(
+                super::admission::shed::ShedReason::WorkersBusy,
+                priority,
+                std::time::Duration::ZERO,
+                routing.configured,
+            ))
+            .into_response();
+        }
         return unavailable("all read processes are busy");
     };
     let url = format!(
