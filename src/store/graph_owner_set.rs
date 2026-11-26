@@ -37,6 +37,9 @@ pub use dataset::GraphSetDataset;
 mod router;
 pub use router::{GraphSetRouter, SetTarget};
 
+#[path = "mini_fork.rs"]
+pub mod mini_fork;
+
 impl GraphSetOwner {
     fn check_hooks(store: &Store) -> Result<()> {
         if store.pending_embed.is_some()

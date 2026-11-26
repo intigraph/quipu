@@ -487,7 +487,9 @@ mod durable;
 
 #[path = "graph_owner_set.rs"]
 mod graph_set;
-pub use graph_set::{GraphSetBatch, GraphSetDataset, GraphSetOwner, GraphSetRouter, SetTarget};
+pub use graph_set::{
+    GraphSetBatch, GraphSetDataset, GraphSetOwner, GraphSetRouter, SetTarget, mini_fork,
+};
 
 #[cfg(test)]
 #[path = "graph_owner_tests.rs"]
