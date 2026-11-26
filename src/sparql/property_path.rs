@@ -12,6 +12,8 @@ use crate::types::Value;
 use super::pattern_util::bind_var;
 use super::{Bindings, TemporalContext};
 
+#[path = "property_path_alias.rs"]
+mod alias;
 #[path = "property_path_lits.rs"]
 mod lits;
 
@@ -167,6 +169,9 @@ fn eval_single_edge(
     fixed_obj: Option<i64>,
     ctx: &TemporalContext,
 ) -> Result<Vec<(i64, i64)>> {
+    if store.has_attachments() {
+        return alias::eval_single_edge_composed(store, pred_iri, fixed_subj, fixed_obj, ctx);
+    }
     let Some(pred_id) = store.lookup(pred_iri)? else {
         return Ok(vec![]);
     };
@@ -491,6 +496,12 @@ fn resolve_term_to_id(
     bindings: &Bindings,
 ) -> Result<Option<i64>> {
     match term {
+        // A composed store can hold an IRI only in an attached file; the
+        // local-only lookup would leave such an endpoint unfixed.
+        // `lookup_all` returns the canonical id first.
+        TermPattern::NamedNode(n) if store.has_attachments() => {
+            Ok(store.lookup_all(n.as_str())?.into_iter().next())
+        }
         TermPattern::NamedNode(n) => Ok(store.lookup(n.as_str())?),
         TermPattern::BlankNode(b) => match bindings.get(b.as_str()) {
             Some(Value::Ref(id)) => Ok(Some(*id)),
