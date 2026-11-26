@@ -27,6 +27,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use rusqlite::params;
 
 use crate::error::{Error, Result};
+use crate::merge_core::selection::{Mode, select};
 use crate::merge_core::{Card, Decision, FactOp, SlotInput, plan_merge};
 use crate::merge3::{DecisionRecord, FocusView, ShapeBounds, Slots, merge_slots, reaches};
 use crate::types::{Fact, Op, Value};
@@ -39,6 +40,11 @@ type Key = (i64, i64, Vec<u8>);
 /// reconcile flow resolved them (`crate::fork_merge_decisions`). Every key
 /// must be a slot the merge holds in conflict.
 pub type ForkResolutions = HashMap<(i64, i64), Vec<Value>>;
+
+/// The `theirs` side's own close time per value of one slot, keyed by the
+/// home `term_key`. A same-store fork reads its fork graph
+/// ([`Store::fork_closes`]); a mini-Quipu reads its own file.
+pub(super) type TheirsCloses<'a> = &'a dyn Fn(i64, i64) -> Result<BTreeMap<Vec<u8>, String>>;
 
 /// What promotion would do to ROOT, or why it cannot.
 pub(super) struct ForkMerge {
@@ -55,19 +61,28 @@ pub(super) struct ForkMerge {
     /// Bounded slots both sides changed incompatibly. Non-empty means the
     /// caller must write nothing.
     pub(super) conflicts: Vec<DecisionRecord>,
+    /// Slots a partial mode held back (oracle §6). Always `0` in atomic
+    /// mode, where any conflict writes nothing.
+    pub(super) held: usize,
 }
 
 impl Store {
     /// ROOT's live triples as of transaction `tx`, with the predicate
     /// `fork_create` materializes a fork with.
     pub(super) fn root_facts_as_of(&self, tx: i64) -> Result<Vec<Fact>> {
+        self.graph_facts_as_of(crate::schema::ROOT_GRAPH, tx)
+    }
+
+    /// Graph `g`'s live triples as of transaction `tx`, with the same
+    /// predicate: the base a mini-Quipu member is rebuilt from at home.
+    pub(super) fn graph_facts_as_of(&self, g: i64, tx: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
              WHERE g = ?1 AND op = 1 AND tx <= ?2 \
                AND (valid_to IS NULL OR retracted_tx > ?2) \
              ORDER BY e, a, tx",
         )?;
-        Self::collect_visible_facts(&mut stmt, params![crate::schema::ROOT_GRAPH, tx])
+        Self::collect_visible_facts(&mut stmt, params![g, tx])
     }
 
     /// Three-way merge of `theirs` (the fork) into `ours` (ROOT) over `base`.
@@ -78,14 +93,18 @@ impl Store {
     /// fork's close time clamped to the ROOT row (aegis-0s2a), and a decided
     /// slot (from `resolved`) is written as a receipt then a live assertion
     /// from `Td`, so a winner never overlaps the value it replaces. Without
-    /// `timestamp` only the conflicts are computed.
+    /// `timestamp` only the conflicts are computed. `mode` is oracle §6: in a
+    /// partial mode a held slot (and its closure) is planned but not written,
+    /// through [`crate::merge_core::selection::select`] over `plan_merge`.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn fork_merge(
         &self,
         base: Vec<Fact>,
         ours: Vec<Fact>,
         theirs: Vec<Fact>,
         resolved: Option<&ForkResolutions>,
-        fork_g: i64,
+        theirs_closes: TheirsCloses<'_>,
+        mode: Mode,
         timestamp: Option<&str>,
     ) -> Result<ForkMerge> {
         let bounds = match self.get_combined_shapes()? {
@@ -188,8 +207,10 @@ impl Store {
             added: Vec::new(),
             removed: Vec::new(),
             conflicts,
+            held: 0,
         };
-        let Some(td) = timestamp.filter(|_| out.conflicts.is_empty()) else {
+        let Some(td) = timestamp.filter(|_| out.conflicts.is_empty() || mode != Mode::Atomic)
+        else {
             return Ok(out);
         };
 
@@ -215,7 +236,7 @@ impl Store {
                     .collect::<BTreeMap<_, _>>()
             };
             let theirs_closed = if bv.difference(tv).next().is_some() {
-                self.fork_closes(fork_g, e, a)?
+                theirs_closes(e, a)?
             } else {
                 BTreeMap::new()
             };
@@ -241,7 +262,13 @@ impl Store {
                 decisions.insert((e, a), Decision::Values(set));
             }
         }
-        let plan = plan_merge(&inputs, &decisions, td)?;
+        let plan = if mode == Mode::Atomic {
+            plan_merge(&inputs, &decisions, td)?
+        } else {
+            let entities = inputs.keys().map(|k| (*k, k.0)).collect();
+            select(&inputs, &decisions, &entities, &[], mode, td)?
+        };
+        out.held = plan.held;
         let fact = |e: i64, a: i64, k: &Vec<u8>, from: &str, to: Option<&String>, op| Fact {
             entity: e,
             attribute: a,

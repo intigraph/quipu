@@ -30,6 +30,7 @@
 use rusqlite::{OptionalExtension, params};
 
 use crate::error::{Error, Result};
+use crate::merge_core::selection::Mode;
 use crate::namespace::{QUIPU_FORK, QUIPU_FORK_TX, RDF_TYPE};
 use crate::types::{Fact, Op, Value};
 
@@ -342,7 +343,8 @@ impl Store {
     ) -> Result<(ForkInfo, Vec<crate::merge3::DecisionRecord>)> {
         let f = self.require_open_fork(name, "inspect")?;
         let (base, ours, theirs) = self.fork_sides(&f)?;
-        let merge = self.fork_merge(base, ours, theirs, None, f.g, None)?;
+        let closes = |e, a| self.fork_closes(f.g, e, a);
+        let merge = self.fork_merge(base, ours, theirs, None, &closes, Mode::Atomic, None)?;
         Ok((f, merge.conflicts))
     }
 
@@ -388,7 +390,7 @@ impl Store {
             .map(|v| v["promote_tx"].as_i64().unwrap_or(0)))
     }
 
-    fn fork_sides(&self, f: &ForkInfo) -> Result<(Vec<Fact>, Vec<Fact>, Vec<Fact>)> {
+    pub(super) fn fork_sides(&self, f: &ForkInfo) -> Result<(Vec<Fact>, Vec<Fact>, Vec<Fact>)> {
         let name = &f.name;
         let latest = self.latest_tx_id()?;
         if f.fork_tx < 0 || f.fork_tx > latest {
@@ -436,12 +438,14 @@ impl Store {
         let f = self.require_open_fork(name, "promote")?;
         let fork_g = f.g;
         let (base, ours, theirs) = self.fork_sides(&f)?;
+        let closes = |e, a| self.fork_closes(fork_g, e, a);
         let diff = self.fork_merge(
             base,
             ours,
             theirs,
             decided.map(|d| d.0),
-            fork_g,
+            &closes,
+            Mode::Atomic,
             Some(timestamp),
         )?;
         if !diff.conflicts.is_empty() {
