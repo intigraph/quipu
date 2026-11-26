@@ -113,6 +113,7 @@ impl Owner {
             check_deadline()?;
             snapshots.push(reader.conn.unchecked_transaction()?);
             Self::check_identity(&owner.route, reader)?;
+            super::graph_set::participant::check_read_fence(reader)?;
             captured.push(CapturedRead {
                 route: &owner.route,
                 catalog_revision: first.catalog.revision(),

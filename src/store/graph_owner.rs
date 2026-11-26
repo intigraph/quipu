@@ -457,6 +457,18 @@ impl Owner {
     /// run inside that read transaction; nested BEGIN operations are refused.
     /// No global writer, writer fallback or unbounded reader queue is acquired.
     pub fn read<T>(&self, query: impl FnOnce(&Store) -> Result<T>) -> Result<T> {
+        self.read_with(true, query)
+    }
+
+    /// Owner-internal admission read of graph METADATA (membership checks)
+    /// that must work while an unpublished participant batch fences data
+    /// reads, so a restarted owner can open and be recovered. Never serves
+    /// facts to a caller.
+    pub(super) fn read_metadata<T>(&self, query: impl FnOnce(&Store) -> Result<T>) -> Result<T> {
+        self.read_with(false, query)
+    }
+
+    fn read_with<T>(&self, fenced: bool, query: impl FnOnce(&Store) -> Result<T>) -> Result<T> {
         self.placement.verify()?;
         let start = self.next_reader.fetch_add(1, Ordering::Relaxed) % self.readers.len();
         for offset in 0..self.readers.len() {
@@ -464,6 +476,9 @@ impl Owner {
             if let Some(reader) = self.readers[index].try_lock() {
                 let snapshot = reader.conn.unchecked_transaction()?;
                 Self::check_identity(&self.route, &reader)?;
+                if fenced {
+                    graph_set::participant::check_read_fence(&reader)?;
+                }
                 let result = query(&reader)?;
                 snapshot.commit()?;
                 return Ok(result);
@@ -489,6 +504,7 @@ mod durable;
 mod graph_set;
 pub use graph_set::{
     GraphSetBatch, GraphSetDataset, GraphSetOwner, GraphSetRouter, SetTarget, mini_fork,
+    participant,
 };
 
 #[cfg(test)]

@@ -413,6 +413,7 @@ impl GraphSetOwner {
         let mut store = self.owner.writer.owned()?;
         self.owner.placement.verify()?;
         Owner::check_identity(self.owner.catalog_route(), &store)?;
+        super::participant::check_write_fence(&store)?;
         record(&mut store, &plan, request)
     }
 

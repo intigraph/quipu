@@ -56,6 +56,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // Host-local ownership enrollment is a fence, never portable authority.
     // Reconstructing it on another store would import an enrollment decision.
     ("ownership_handoff_enrollment", Disposition::Excluded),
+    // Participant-commit journals and intents (aegis-n0wc.5) are this file's
+    // local decision and fence state, bound to its store/epoch. Importing them
+    // would forge a COMMIT/PUBLISHED decision or a fence for another store.
+    ("participant_journal", Disposition::Excluded),
+    ("participant_intents", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection
