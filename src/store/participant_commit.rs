@@ -109,7 +109,7 @@ pub fn with_crash<T>(point: CrashPoint, work: impl FnOnce() -> T) -> T {
 
 fn crash(point: CrashPoint) -> Result<()> {
     #[cfg(test)]
-    if CRASH.with(|slot| slot.get()) == Some(point) {
+    if CRASH.with(std::cell::Cell::get) == Some(point) {
         CRASHED.with(|slot| slot.set(true));
         return Err(Error::PolicyDenied(format!(
             "injected participant crash at {point:?}"
@@ -122,7 +122,7 @@ fn crash(point: CrashPoint) -> Result<()> {
 /// True only after an injected crash: the simulated process skips cleanup.
 fn crashed() -> bool {
     #[cfg(test)]
-    return CRASHED.with(|slot| slot.get());
+    return CRASHED.with(std::cell::Cell::get);
     #[cfg(not(test))]
     false
 }
@@ -181,7 +181,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn unhex(text: &str) -> Result<Vec<u8>> {
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return Err(refuse("damaged intent payload"));
     }
     (0..text.len())
@@ -490,7 +490,7 @@ pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
         if existing.digest != digest {
             return Err(refuse("batch id names a different batch; nothing written"));
         }
-        return match reconcile(&order, &mut guards, &batch.batch_id, existing)? {
+        return match reconcile(&order, &mut guards, &batch.batch_id, &existing)? {
             Recovery::Published(vector) => Ok(vector),
             Recovery::Aborted => Err(refuse("batch was aborted; its id stays consumed")),
         };
@@ -506,7 +506,7 @@ pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
     }
     let members: Vec<_> = planned.iter().map(|(r, _)| r.clone()).collect();
     let home = members[0].clone();
-    let encoded = serde_json::to_string(&members).map_err(|e| refuse(e))?;
+    let encoded = serde_json::to_string(&members).map_err(refuse)?;
     durable(&mut guards[0], |store| {
         store.conn.execute(
             "INSERT INTO participant_journal(batch_id, batch_digest, members, state) \
@@ -564,7 +564,7 @@ pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
     crash(CrashPoint::AfterDecision)?;
     let existing = journal(&guards[0], &batch.batch_id)?
         .ok_or_else(|| refuse("home journal missing after decision"))?;
-    match reconcile(&order, &mut guards, &batch.batch_id, existing)? {
+    match reconcile(&order, &mut guards, &batch.batch_id, &existing)? {
         Recovery::Published(vector) => Ok(vector),
         Recovery::Aborted => Err(refuse("committed batch reconciled as aborted")),
     }
@@ -608,7 +608,7 @@ pub fn recover(owners: &[&GraphSetOwner], batch_id: &str) -> Result<Recovery> {
     }
     let existing = journal(&guards[0], batch_id)?
         .ok_or_else(|| refuse("home participant has no journal for this batch"))?;
-    reconcile(&order, &mut guards, batch_id, existing)
+    reconcile(&order, &mut guards, batch_id, &existing)
 }
 
 fn abort(guards: &mut [Guard<'_>], batch_id: &str) -> Result<()> {
@@ -637,7 +637,7 @@ fn reconcile(
     order: &[&GraphSetOwner],
     guards: &mut [Guard<'_>],
     batch_id: &str,
-    existing: JournalRow,
+    existing: &JournalRow,
 ) -> Result<Recovery> {
     let members: Vec<_> = order.iter().map(|owner| recorded(owner)).collect();
     if existing.members != members {
@@ -678,7 +678,7 @@ fn reconcile(
                             .ok_or_else(|| refuse("applied intent lacks heads"))?,
                     )
                     .map_err(|_| refuse("damaged intent heads"))?,
-                    "prepared" => apply(store, batch_id, &row, payload)?,
+                    "prepared" => apply(store, batch_id, &row, &payload)?,
                     _ => return Err(refuse("committed batch has an aborted intent")),
                 };
                 if row.state == "prepared" {
@@ -696,7 +696,7 @@ fn reconcile(
                 digest: existing.digest.clone(),
                 members: receipts,
             };
-            let encoded = serde_json::to_string(&vector).map_err(|e| refuse(e))?;
+            let encoded = serde_json::to_string(&vector).map_err(refuse)?;
             durable(&mut guards[0], |store| {
                 store.conn.execute(
                     "UPDATE participant_journal SET state='published', receipts=?2 \
@@ -730,7 +730,7 @@ fn apply(
     store: &mut Store,
     batch_id: &str,
     row: &IntentRow,
-    payload: Decoded,
+    payload: &Decoded,
 ) -> Result<Vec<(String, i64)>> {
     if store.latest_tx_id()? != row.expected_head {
         return Err(refuse(
@@ -764,7 +764,7 @@ fn apply(
                 .zip(txs)
                 .map(|((graph, _), (_, tx))| (graph.clone(), tx))
                 .collect();
-            let encoded = serde_json::to_string(&heads).map_err(|e| refuse(e))?;
+            let encoded = serde_json::to_string(&heads).map_err(refuse)?;
             let changed = store.conn.execute(
                 "UPDATE participant_intents SET state='applied', heads=?2 \
                  WHERE batch_id=?1 AND state='prepared'",

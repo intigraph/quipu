@@ -504,6 +504,7 @@ mod durable;
 mod graph_set;
 pub use graph_set::{
     GraphSetBatch, GraphSetDataset, GraphSetOwner, GraphSetRouter, SetTarget, mini_fork,
+    participant,
 };
 
 #[cfg(test)]
