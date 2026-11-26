@@ -438,6 +438,9 @@ pub mod local;
 #[path = "mini_quipu_merge.rs"]
 pub mod merge;
 
+#[path = "mini_quipu_retire.rs"]
+pub mod retire;
+
 #[cfg(test)]
 #[path = "mini_fork_tests.rs"]
 mod tests;
