@@ -122,6 +122,7 @@ stops being read.
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |
 | `ingest_pilot` | unset | One enrolled per-graph owner served at `/owner/knot` (`[quipu.ingest_pilot]`); unset is ordinary startup. Requires an `ownership-witness-s3` build; see below |
+| `graph_sets` | unset | Graph-set owners from a graph-set catalog (`[quipu.graph_sets]`); unset is ordinary startup. Enabled startup currently validates and then refuses; see below |
 
 ## Zero-downtime bearer rotation
 
@@ -187,6 +188,49 @@ quipu db attach --list --db my.db
 ```
 
 `quipu-server` prints the same list to stderr at startup.
+
+## Graph sets (several graphs per owner file)
+
+`[quipu.graph_sets]` names a graph-set catalog: several exact logical graphs
+that must share one owner file because one write spans them atomically. Leave it
+unset and startup is unchanged: no file is read.
+
+```toml
+[quipu.graph_sets]
+enabled = true
+catalog_file = "/etc/quipu/graph-sets.json"
+root = "/var/lib/quipu/owners"             # directory holding the owner files
+installed_policy = "policy-v1"             # must equal every route's policy
+memory_mib = 512
+```
+
+Every key is required and an unknown key refuses the config. `catalog_file` is
+JSON that no group or other user can write. Every member is an exact IRI; there
+is no prefix or pattern membership, so an open-ended family of graphs stays on
+the ordinary writer:
+
+```json
+{"version": 1, "revision": 7, "legacy_store_id": "<legacy store id>",
+ "max_graphs": 8,
+ "budget": {"max_owners": 1, "queued_per_owner": 1, "readers_per_owner": 1,
+            "max_queued": 1, "max_connections": 3},
+ "sets": [{"owner": {"graph": "https://example.org/app/data", "file_id": "app",
+                     "store_id": "<owner store id>", "log_epoch": "<epoch>",
+                     "generation": 3, "policy": "policy-v1"},
+           "graphs": ["https://example.org/app/data",
+                      "https://example.org/app/data#provenance"]}],
+ "legacy": {"participant": {"graph": "urn:quipu:graph:root", "file_id": "legacy",
+                            "store_id": "<legacy store id>", "log_epoch": "<epoch>",
+                            "generation": 1, "policy": "legacy-policy"},
+            "graphs": ["urn:quipu:graph:root"]}}
+```
+
+With `enabled = true` the server validates the catalog and refuses any graph,
+owner file or store lineage that `[quipu.ingest_pilot]` also claims. It then
+**exits**: graph-set owners open only through enrolled ownership, server
+startup does not open them yet, and it never falls back to an ordinary writable
+open. Do not enable this table on a served Quipu until a release says enrolled
+graph-set startup is installed.
 
 ## Ingest pilot (per-graph owner)
 

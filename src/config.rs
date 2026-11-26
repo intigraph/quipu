@@ -12,6 +12,8 @@ use serde::Deserialize;
 
 mod attachments;
 mod federation;
+mod graph_sets;
+pub use graph_sets::GraphSetsConfig;
 pub(crate) mod ingest_pilot;
 pub use ingest_pilot::IngestPilotConfig;
 mod query_capture;
@@ -643,6 +645,10 @@ pub struct QuipuConfig {
     /// None (default) is byte-identical startup; see [`IngestPilotConfig`].
     pub ingest_pilot: Option<IngestPilotConfig>,
 
+    /// `[quipu.graph_sets]` (aegis-n0wc.5): graph-set owners from a catalog.
+    /// None (default) is byte-identical startup; see [`GraphSetsConfig`].
+    pub graph_sets: Option<GraphSetsConfig>,
+
     /// Write-maintained current-state projections (aegis-tg5 F2), declared as
     /// `[[quipu.projections]]`. Empty by default: no projection table, no
     /// trigger, no change to any write.
@@ -707,6 +713,7 @@ impl Default for QuipuConfig {
             import_policy: ImportPolicyConfig::default(),
             attachments: Vec::new(),
             ingest_pilot: None,
+            graph_sets: None,
             current_projections: Vec::new(),
         }
     }

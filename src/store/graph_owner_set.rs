@@ -33,6 +33,10 @@ pub struct GraphSetOwner {
 mod dataset;
 pub use dataset::GraphSetDataset;
 
+#[path = "graph_set_router.rs"]
+mod router;
+pub use router::{GraphSetRouter, SetTarget};
+
 impl GraphSetOwner {
     fn check_hooks(store: &Store) -> Result<()> {
         if store.pending_embed.is_some()
@@ -70,8 +74,14 @@ impl GraphSetOwner {
             installed_policy,
             allocation,
         )?;
+        Self::check_members(&owner, &catalog, &canonical)?;
+        Ok(Self { owner, catalog })
+    }
+
+    /// Every configured member must already be a committed graph in the file.
+    fn check_members(owner: &Owner, catalog: &GraphSetCatalog, canonical: &str) -> Result<()> {
         owner.read(|store| {
-            for member in catalog.owner_graphs(&canonical)? {
+            for member in catalog.owner_graphs(canonical)? {
                 let id = store
                     .committed_graph_id(member)?
                     .ok_or_else(|| refused("graph-set member is absent or not committed"))?;
@@ -80,7 +90,44 @@ impl GraphSetOwner {
                 }
             }
             Ok(())
-        })?;
+        })
+    }
+
+    /// Open one routed set owner's EXISTING enrolled file through S1, the same
+    /// enrolled path as the ingest pilot: witness configuration is validated
+    /// and the policy pinned before credentials resolve; S1 then verifies the
+    /// inventory, marker, journal and live witness before an ownership pin.
+    /// `configure` must install the served writer policy; unqualified
+    /// embedding/reactive hooks then refuse. There is no fallback to an
+    /// ordinary open, enrollment or the legacy writer.
+    #[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+    pub fn open_enrolled(
+        catalog: Arc<GraphSetCatalog>,
+        graph: &str,
+        config: &crate::store::graph_router::EnrolledPilotConfig,
+        credentials: impl FnOnce() -> Result<(String, String)>,
+        configure: impl FnOnce(&mut Store) -> Result<()>,
+    ) -> Result<Self> {
+        let location = config.location()?;
+        let plan = catalog.plan_read(&[graph])?;
+        let route = plan[0].owner.clone();
+        if route.graph == crate::schema::ROOT_GRAPH_IRI {
+            return Err(refused("the legacy participant is not a graph-set owner"));
+        }
+        if config.installed_policy != route.policy {
+            return Err(refused("installed policy differs from graph-set catalog"));
+        }
+        let owner = config.open_owner(
+            location,
+            catalog.physical_pin(),
+            &route,
+            credentials,
+            |store| {
+                configure(store)?;
+                Self::check_hooks(store)
+            },
+        )?;
+        Self::check_members(&owner, &catalog, &route.graph)?;
         Ok(Self { owner, catalog })
     }
 

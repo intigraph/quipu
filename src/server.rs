@@ -43,6 +43,8 @@ mod fluents;
 mod graph_backfill;
 #[path = "server/graph_metrics.rs"]
 mod graph_metrics;
+#[path = "server/graph_sets_startup.rs"]
+mod graph_sets_startup;
 #[path = "server/graph_store.rs"]
 mod graph_store;
 #[path = "server/graph_store_compact.rs"]
@@ -431,6 +433,7 @@ async fn main() {
     }
 
     let attest_store = state.clone();
+    graph_sets_startup::check(&config);
     let app = knot_durable::mount_pilot(api_routes(), &config, &state);
     let app = protected_app(
         app,

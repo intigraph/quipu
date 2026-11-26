@@ -11,7 +11,7 @@ use crate::{Error, Result};
 
 mod catalog_file;
 mod graph_sets;
-pub use graph_sets::{GraphSet, GraphSetCatalog, OwnerSelection};
+pub use graph_sets::{GRAPH_SET_FILE_VERSION, GraphSet, GraphSetCatalog, OwnerSelection};
 
 /// Operator-supplied, immutable identity of one graph's native owner.
 #[derive(Debug, Clone, PartialEq, Eq)]

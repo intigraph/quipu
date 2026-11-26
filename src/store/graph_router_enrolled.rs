@@ -62,7 +62,7 @@ impl WitnessSource for ProfileSource {
 }
 
 impl EnrolledPilotConfig {
-    fn location(&self) -> Result<Location> {
+    pub(crate) fn location(&self) -> Result<Location> {
         if self.profile.is_empty()
             || self.profile.len() > 128
             || !self
@@ -79,6 +79,51 @@ impl EnrolledPilotConfig {
         }
         Location::new(&self.endpoint, &self.bucket, &self.region, &self.prefix)
             .ok_or_else(|| refused("invalid enrolled witness location"))
+    }
+
+    /// Shared S1 open of one exact catalog route's existing enrolled file:
+    /// trust anchor, lazy credentials, live witness source, then
+    /// `Owner::open_enrolled`. Callers validate `location` and the policy pin
+    /// first. No fallback to an ordinary open, enrollment or legacy exists.
+    pub(crate) fn open_owner(
+        &self,
+        location: Location,
+        catalog: Arc<Catalog>,
+        route: &crate::graph_catalog::Route,
+        credentials: impl FnOnce() -> Result<(String, String)>,
+        configure: impl FnOnce(&mut Store) -> Result<()>,
+    ) -> Result<Owner> {
+        let roots = match self.witness_ca_der.as_deref() {
+            Some(der) => Some(
+                S3Objects::trust_root(der)
+                    .ok_or_else(|| refused("invalid witness CA certificate"))?,
+            ),
+            None => None,
+        };
+        let (key, secret) = credentials()?;
+        let credentials = Credentials::new(key, secret)
+            .ok_or_else(|| refused("invalid enrolled witness credentials"))?;
+        let source = ProfileSource {
+            profile: self.profile.clone(),
+            store_id: route.store_id.clone(),
+            witness: ObjectWitness::attach(
+                route.store_id.clone(),
+                S3Objects::with_roots(location, credentials, self.timeout, roots),
+            ),
+        };
+        let startup = EnrolledStartup {
+            inventory: &self.inventory,
+            witness: &source,
+        };
+        Owner::open_enrolled(
+            catalog,
+            &self.root,
+            &route.graph,
+            &startup,
+            &self.installed_policy,
+            configure,
+            Some(self.allocation),
+        )
     }
 }
 
@@ -114,36 +159,12 @@ impl IngestPilot {
             if config.installed_policy != route.policy {
                 return Err(refused("installed policy differs from pilot catalog"));
             }
-            let roots = match config.witness_ca_der.as_deref() {
-                Some(der) => Some(
-                    S3Objects::trust_root(der)
-                        .ok_or_else(|| refused("invalid witness CA certificate"))?,
-                ),
-                None => None,
-            };
-            let (key, secret) = credentials()?;
-            let credentials = Credentials::new(key, secret)
-                .ok_or_else(|| refused("invalid enrolled witness credentials"))?;
-            let source = ProfileSource {
-                profile: config.profile.clone(),
-                store_id: route.store_id.clone(),
-                witness: ObjectWitness::attach(
-                    route.store_id.clone(),
-                    S3Objects::with_roots(location, credentials, config.timeout, roots),
-                ),
-            };
-            let startup = EnrolledStartup {
-                inventory: &config.inventory,
-                witness: &source,
-            };
-            Owner::open_enrolled(
+            config.open_owner(
+                location,
                 owner_catalog.clone(),
-                &config.root,
-                graph,
-                &startup,
-                &config.installed_policy,
+                route,
+                credentials,
                 configure,
-                Some(config.allocation),
             )
         })
     }

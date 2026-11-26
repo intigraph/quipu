@@ -406,6 +406,9 @@ fn routes_in_server_source() -> Vec<String> {
         // /stats off-writer tests (aegis-fclp): test-only, no routes.
         "server/stats_tests.rs",
         "server/graph_metrics.rs",
+        // [quipu.graph_sets] startup (aegis-n0wc.5): a startup check before
+        // any route is mounted, no routes.
+        "server/graph_sets_startup.rs",
         "server/handle.rs",
         "server/writer_timing.rs", // lock timing only, no routes
         "server/input_fields.rs",

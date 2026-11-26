@@ -12,27 +12,27 @@ use std::path::Path;
 
 /// The only accepted catalog file format version.
 pub const CATALOG_FILE_VERSION: u32 = 1;
-const MAX_BYTES: u64 = 64 * 1024;
+pub(super) const MAX_BYTES: u64 = 64 * 1024;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct FileRoute {
-    graph: String,
-    file_id: String,
-    store_id: String,
-    log_epoch: String,
-    generation: u64,
-    policy: String,
+pub(super) struct FileRoute {
+    pub(super) graph: String,
+    pub(super) file_id: String,
+    pub(super) store_id: String,
+    pub(super) log_epoch: String,
+    pub(super) generation: u64,
+    pub(super) policy: String,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct FileBudget {
-    max_owners: usize,
-    queued_per_owner: usize,
-    readers_per_owner: usize,
-    max_queued: usize,
-    max_connections: usize,
+pub(super) struct FileBudget {
+    pub(super) max_owners: usize,
+    pub(super) queued_per_owner: usize,
+    pub(super) readers_per_owner: usize,
+    pub(super) max_queued: usize,
+    pub(super) max_connections: usize,
 }
 
 #[derive(Deserialize)]

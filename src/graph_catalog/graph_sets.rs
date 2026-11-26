@@ -186,6 +186,40 @@ impl GraphSetCatalog {
         })
     }
 
+    /// Refuse any claim shared with another, separately configured catalog:
+    /// a logical graph routed by both, or one physical file or store lineage
+    /// named by both (canonical roots compared). The shared legacy store is
+    /// the one legitimate overlap and is not a routed claim. An unreadable
+    /// root refuses rather than assuming the files differ.
+    pub fn refuse_shared_claims(
+        &self,
+        root: &std::path::Path,
+        other: &Catalog,
+        other_root: &std::path::Path,
+    ) -> Result<()> {
+        let same_root = root
+            .canonicalize()
+            .map_err(|_| refuse("graph-set root cannot be resolved"))?
+            == other_root
+                .canonicalize()
+                .map_err(|_| refuse("other catalog root cannot be resolved"))?;
+        for theirs in other.routes() {
+            if self
+                .owner(&theirs.graph)
+                .is_some_and(|owner| owner.graph != crate::schema::ROOT_GRAPH_IRI)
+            {
+                return Err(refuse("a graph is claimed by two catalogs"));
+            }
+            for ours in self.physical.routes() {
+                if ours.store_id == theirs.store_id || (same_root && ours.file_id == theirs.file_id)
+                {
+                    return Err(refuse("a physical owner file is claimed by two catalogs"));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Group an already-authorized explicit read dataset by physical owner.
     /// Members in one file need one snapshot/fence, not independent captures.
     /// Unknown/duplicate members refuse; no implicit union or partial plan.
@@ -212,6 +246,9 @@ impl GraphSetCatalog {
             .collect())
     }
 }
+
+mod file;
+pub use file::GRAPH_SET_FILE_VERSION;
 
 #[cfg(test)]
 mod tests;
