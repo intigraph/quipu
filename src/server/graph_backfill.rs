@@ -2,7 +2,20 @@
 
 use super::SharedStore;
 use super::base::{AppError, blocking};
+use axum::Router;
 use axum::extract::State;
+use axum::routing::post;
+
+#[path = "refresh_vectors.rs"]
+pub(crate) mod refresh_vectors;
+
+/// Bounded embedding-maintenance routes: fill missing named-graph vectors, and
+/// refresh existing stale ones.
+pub(crate) fn routes() -> Router<SharedStore> {
+    Router::new()
+        .route("/embed_backfill_graph", post(embed_backfill_graph))
+        .route("/embed_refresh", post(refresh_vectors::embed_refresh))
+}
 use serde_json::{Value as JsonValue, json};
 
 /// Outcome of one bounded named-graph backfill call.

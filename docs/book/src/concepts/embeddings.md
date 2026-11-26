@@ -116,6 +116,12 @@ custom model paths keep their own recipe and the selected runtime bootstrap.
 Existing graph data can still use the explicit startup `--embed-backfill` or
 bounded `POST /embed_backfill_graph` operations when needed.
 
+When the text builder itself changes, vectors that already exist can be stale
+without any fact having changed. `POST /embed_refresh` re-embeds only those
+whose stored text differs from the rebuilt text, a bounded page per call with
+a resumable cursor, and dry-run by default so the affected count can be read
+before anything is written. See the REST reference for its body and response.
+
 ## Entity description text
 
 Native entity text includes the label and every distinct `rdfs:comment` from

@@ -104,6 +104,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/proposal/reject",
     "/embed_backfill",
     "/embed_backfill_graph",
+    "/embed_refresh",
     // aegis-5qmg3r: alignment. `apply` takes &mut Store, materialises
     // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
     // (a graphs-registry write, the same reason /overlay/create is here).

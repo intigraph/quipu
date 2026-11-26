@@ -1880,6 +1880,8 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
 
 #[path = "graph_backfill_temporal_tests.rs"]
 mod graph_backfill_temporal;
+#[path = "refresh_vectors_tests.rs"]
+mod refresh_vectors_tests;
 
 #[tokio::test]
 async fn request_deadline_reports_original_budget_as_http_408() {

@@ -14,6 +14,7 @@ use rusqlite::{OptionalExtension, params};
 use crate::error::Result;
 use crate::store::Store;
 
+mod refresh_cursor;
 mod retention;
 mod scoped;
 mod scoring;

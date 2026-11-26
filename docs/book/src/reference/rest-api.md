@@ -2203,6 +2203,34 @@ between them rather than draining a large graph in one pass. Entities that
 exist only in named graphs are embedded from their named-graph facts, and they
 are searchable with `quipu_search` `graph=<IRI>`; unscoped search stays ROOT.
 
+### `POST /embed_refresh`
+
+Re-embed EXISTING vectors whose stored text no longer matches what the current
+entity text builder produces, for example after a builder change such as
+keeping every comment of the newest comment transaction. Entities whose vector
+text already matches are left alone, and entities with no current vector are
+skipped (the backfill routes fill those). Body, one selection form:
+
+- `{"entities": ["<IRI>", ...]}` examines exactly these (at most 256; a longer
+  list is refused, not truncated). Unknown IRIs come back in
+  `unknown_entities`.
+- `{"after": N}` (default `0`) walks entities holding a current vector with an
+  id greater than `N`, in id order.
+
+`max_entities` (default and maximum 256) bounds the entities examined per
+call. `dry_run` **defaults to `true`**: the call reports `would_change`
+without embedding or writing anything. Pass `"dry_run": false` to re-embed;
+the response then reports `changed`. Both forms also return `examined`,
+`unchanged`, `missing_skipped`, `empty_skipped`, `stale_skipped` (text or
+vector changed during the call, left for a later call) and `next_cursor`
+(pass it as `after` to resume; `null` when the walk is done).
+
+A refresh supersedes rather than overwrites: the old vector row is closed and
+the new one is written, both stamped with the same ISO-8601 instant, so
+temporal search at an earlier time still sees the old text. Entity snapshots
+are taken under the writer lock in batches of 32, embedded outside it, and
+rechecked before apply, like `/embed_backfill_graph`. Pace repeated calls.
+
 ### `GET /preview/{iri}`
 
 Return a preview rendering of an entity by IRI.
