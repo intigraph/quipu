@@ -230,6 +230,42 @@ fact transaction retain request-level audit only. Library/CLI writes without an
 HTTP identity and copied historical transactions have null local authentication
 evidence; a foreign actor is not proof of possession of a local credential. End-to-end MCP attribution
 requires the proxy to select the corresponding downstream Quipu credential.
+
+### Read-side provenance object
+
+Each entry of `GET /transactions` and `POST /entity_history` (and the MCP
+`quipu_transactions` and `quipu_entity_history` tools) carries an additive
+`provenance` object beside the unchanged `authenticated` and `declared` keys.
+It is computed on read, never stored:
+
+```json
+"provenance": {
+  "effective": {
+    "agent":   {"value": "urn:crew:signer", "basis": "attested"},
+    "session": {"value": "binding-s1",      "basis": "attested"},
+    "harness": {"value": "claude",          "basis": "declared"}
+  },
+  "superseded": {"session": {"value": "forged-session", "basis": "declared"}},
+  "completeness": "complete",
+  "state": "observed"
+}
+```
+
+- On an `attested_session` transaction the effective agent is the verified
+  principal and the effective session is the binding session. A declared
+  `X-Quipu-Agent` or `X-Quipu-Session` on that transaction appears only under
+  `superseded`. A signed row written before the binding session was persisted
+  has no effective session.
+- On any other transaction, including bearer writes, every field is
+  `declared`. Harness, host and model are always declared.
+- `completeness` is the class `quipu_write_provenance_total` counted for the
+  same request (`complete`, `partial` or `absent`), computed by the same
+  classifier, or `unknown` when there is no declaration to read.
+- `state` is `observed` when a declaration row exists, `unknown-no-row` when
+  the transaction wrote none (an engine write, an import, or a write from
+  before declarations were retained), and `unknown-no-table` on a read-only
+  open of a store that predates the table. An unknown state is not an empty
+  declaration.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
 

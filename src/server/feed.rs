@@ -405,7 +405,8 @@ pub(crate) async fn transactions(
                 Ok(
                     json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor,
                     "source": t.source, "authenticated": store.transaction_auth(t.id)?,
-                    "declared": store.transaction_declarations(t.id)? }),
+                    "declared": store.transaction_declarations(t.id)?,
+                    "provenance": store.transaction_provenance(t.id)? }),
                 )
             })
             .collect::<quipu::Result<_>>()?;
