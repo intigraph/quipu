@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Bound ordinary PR runner jobs while merge-group jobs bypass that budget.
+"""Bound each PR's runner jobs while merge-group and main jobs bypass that budget.
+
+Each pull request gets its own four FIFO slots (quipu-pr-<number>-runner-N), so
+concurrent PRs run in parallel and one PR cannot take more than four runners at
+once. The earlier repo-wide slots (quipu-pr-runner-N, #1206) serialized every
+PR in the repository through four runners while hosted capacity sat idle; that
+form is refused.
 
 # arming: ci Pre-commit checks; agent-invoked through just ci-pr-budget check.
 """
@@ -21,8 +27,9 @@ class UniqueLoader(yaml.BaseLoader):
 
 def budget_slot(group, job):
     """Accept the closed scheduling contract, including a distinct non-PR key."""
-    prefix = "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-"
-    suffix = ("' || format('quipu-" + job + "-{0}-{1}-{2}-{3}', github.workflow, "
+    prefix = "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-"
+    suffix = ("', github.event.pull_request.number) || format('quipu-" + job
+              + "-{0}-{1}-{2}-{3}', github.workflow, "
               "github.run_id, github.run_attempt, strategy.job-index) }}")
     if not isinstance(group, str) or not group.startswith(prefix) or not group.endswith(suffix):
         return None
@@ -60,7 +67,7 @@ def audit(documents):
             policy = config.get("concurrency", {})
             slot = budget_slot(policy.get("group"), job)
             if slot is None:
-                errors.append(label + ": PR job must use one of four shared slots and a unique non-PR key")
+                errors.append(label + ": PR job must use one of its PR's four slots and a unique non-PR key")
             else:
                 slots.add(slot)
             if policy.get("queue") != "max":
@@ -99,7 +106,7 @@ def main():
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print(f"PASS {count} PR runner jobs share four FIFO slots; other events have distinct keys")
+    print(f"PASS {count} PR runner jobs use four FIFO slots per PR; other events have distinct keys")
     return 0
 
 
