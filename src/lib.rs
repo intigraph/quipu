@@ -58,6 +58,8 @@ mod merge_adapters;
 #[doc(hidden)]
 pub mod merge_benchmark;
 /// One merge write core: the merge spec's time, sequencing and report rules (aegis-karb.2).
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_carriage;
 mod merge_core;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod merge_ingress;

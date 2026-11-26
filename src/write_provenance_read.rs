@@ -179,7 +179,7 @@ fn disclose(provenance: &mut Value, disclosure: Disclosure) {
 
 impl crate::Store {
     /// The stored declaration row of `tx`, with whether there was one to read.
-    fn declaration_row(
+    pub(crate) fn declaration_row(
         &self,
         tx: i64,
     ) -> crate::Result<(Option<BTreeMap<String, String>>, ReadState)> {

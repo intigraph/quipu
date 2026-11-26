@@ -197,6 +197,36 @@ identity on the home transaction.
 - A published share has no transactions, so its carried provenance is
   `UNKNOWN`, not empty.
 
+**Implemented (P6, `src/merge_carriage.rs`).** The partial-merge receipt
+(`quipu-partial-merge/v1`) gains two additive fields; older receipts without
+them still load, and read as unknown rather than empty:
+
+```json
+"rows": [{"slot": ["<urn:e>", "urn:q"], "kind": "clean", "held": false,
+          "decision": null, "origin_txs": [7]}],
+"carried": {
+  "state": "observed",
+  "transactions": {
+    "7": {"actor": "writer", "source": "fork-edit", "state": "observed",
+          "declarations": {"agent": "…", "harness": "…", "host": "…",
+                           "session": "…", "model": "…"}}
+  }
+}
+```
+
+- `origin_txs` lists the fork transactions that asserted or closed a value
+  the row's plan writes. A list slot names none (its cells are separate
+  subjects), and a row with none omits the key.
+- `carried.transactions` is keyed by origin tx; each entry is the source's
+  `actor`, `source` and stored declarations verbatim, with the P3 read
+  `state` (`observed`, `unknown-no-row`, `unknown-no-table`), read through
+  the same declaration-row helper as `/transactions`.
+- A share merge records `"state": "unknown-no-transactions"` with no
+  entries. Carriage of an as-of share's carried rows waits on P5 (§5.2).
+- Carriage is read before the merge writes, from the source only. The
+  merge request's own headers and credential land on the home `receive` /
+  `decide` rows and nowhere in `carried`.
+
 ### 5.2 Share and pendant export
 
 | Artifact | Declarations carried |
