@@ -306,7 +306,8 @@ contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
 
 An owner file must be enrolled before `[quipu.ingest_pilot]` can start it.
 `quipu::store::enroll_pilot_owner` (an `ownership-witness-s3` build, Unix
-only) is the library entry point the `quipu pilot enroll` CLI wraps. It takes
+only) is the library entry point; the `quipu pilot enroll` CLI verb does not wrap it
+yet (see below). It takes
 the same `[quipu.ingest_pilot]` table, an existing Quipu database, a journal
 path and the owning principal. Without `execute` it is a dry run: a read-only
 preflight plus the planned authority, with no local or remote write.
@@ -329,6 +330,49 @@ witness profile differs from the configuration; the database path is a
 symlink or not a regular file; or its device/inode changes before the marker
 is written. Credentials are read only from `credentials_file` and never
 appear in the report or errors.
+
+### Pilot operator CLI
+
+A `quipu` binary built with `ownership-witness-s3` adds `quipu pilot`, a set
+of file-level operator verbs for rehearsing and performing the pilot's
+cutover. Each verb wraps an existing library call and adds no semantics. None
+of them contacts a server or reads an environment variable. A default build
+has no `pilot` verb and its help is unchanged.
+
+Every write verb is a **dry run unless `--execute`**. A dry run opens its file
+read-only, prints the plan and writes nothing. Every verb prints one JSON
+receipt. The receipt holds the target's `before` and `after` file identity:
+device, inode, length, mode, sha256 and the WAL sidecar's sha256. A refusal
+exits nonzero and leaves the target byte-identical.
+
+```bash
+quipu pilot catalog --write catalog.json --from input.json [--execute]  # 0600, never overwrites
+quipu pilot catalog --validate catalog.json   # refuses group/other-writable
+quipu pilot export-slice --db legacy.db --tag snapshot:KEY \
+    --graph urn:quipu:graph:root --out slice.json [--execute]
+quipu pilot import-slice --owner-file owner.db --in slice.json [--at TS] [--execute]
+quipu pilot fence --db legacy.db --graph IRI --revision N --generation N [--execute]
+quipu pilot fence --verify --db legacy.db     # read-only
+quipu pilot cutover --db legacy.db --tag snapshot:KEY --graph IRI \
+    --revision N --generation N [--at TS] [--execute]
+```
+
+- `catalog --write` validates its input with the same parser the server uses
+  and reads it back once written.
+- The slice file carries its tag, graph, exactly typed facts and
+  `multiset_sha256`, which is a sha256 over the library's sorted canonical
+  fact forms. `import-slice` recomputes it before it opens the owner file and
+  again after it writes, so a tampered slice is refused. It also refuses a
+  graph the owner has not committed, and a second import of the same tag.
+- `cutover` refuses unless the graph is fenced at exactly `--revision` and
+  `--generation`. A stale generation is refused.
+- Flags are an exact allow-list per verb, and secret-looking flags such as
+  `--secret-access-key` are refused before any file is opened.
+
+`pilot enroll` and `pilot reverse` are not implemented yet. Both are refused
+with "not implemented yet". Owner enrollment now has a library API
+(`quipu::store::enroll_pilot_owner`, above), so wrapping it in `pilot enroll`
+is a follow-up. Reverse reconciliation has no library API yet.
 
 ## Choosing a vector backend
 
