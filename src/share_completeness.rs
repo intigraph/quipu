@@ -186,6 +186,13 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("log_epoch", Disposition::Excluded),
     // Local sticky authority must not travel as a restored placement grant.
     ("ownership_enforcement", Disposition::Excluded),
+    // Mini-Quipu fork registry entries pin base cuts (store_id, log_epoch,
+    // local_tx) of THIS home copy. A reconstruction mints its own identity and
+    // epoch, so a carried entry would name a cut the copy never had and claim
+    // forks it never issued. The mini marker is bound to the same identity:
+    // a reconstruction is a new copy and must be re-forked, not inherit it.
+    ("mini_quipu_forks", Disposition::Excluded),
+    ("mini_quipu_marker", Disposition::Excluded),
     // A replica's cursor into ONE source's history (the shared applier,
     // aegis-s24.2). A share of the replica is a different copy with no cursor
     // of its own: carrying it would let the copy splice a feed it never
