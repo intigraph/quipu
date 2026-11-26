@@ -246,6 +246,22 @@ impl<B: Objects> ObjectWitness<B> {
     }
 }
 
+/// Enrollment genesis (aegis-4qv.2): the canonical key and bytes of a
+/// lineage's first ACTIVE record, the same encoding the conformance suite and
+/// the walk read. Only generation zero is a genesis; anything else is `None`.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn genesis_record(genesis: &Authority) -> Option<(String, Vec<u8>)> {
+    if genesis.generation != 0 || genesis.predecessor.is_some() {
+        return None;
+    }
+    let bytes = Entry::Active(genesis.clone()).bytes().ok()?;
+    Some((objects::name(Key::Active(0)), bytes))
+}
+
+/// Bound on one lineage listing, for enrollment preflight.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) const LINEAGE_LIST_LIMIT: usize = MAX_RECORDS;
+
 /// Canonical bytes of an assumed genesis record, for private fixtures that
 /// seed a backend from outside the witness. Not enrollment.
 #[cfg(test)]

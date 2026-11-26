@@ -20,7 +20,7 @@ const TRAILER: &str = "\nsha256:";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Database {
+pub(crate) struct Database {
     pub path: String,
     pub device: u64,
     pub inode: u64,
