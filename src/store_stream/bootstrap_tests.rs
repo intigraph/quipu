@@ -76,6 +76,7 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
             context_graphs: vec![],
             tx: None,
             expected_store_id: source.store_id().unwrap(),
+            destination: Default::default(),
         },
         folder.path(),
         &crate::asof_share::Limits {

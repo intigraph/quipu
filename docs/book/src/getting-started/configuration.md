@@ -202,9 +202,21 @@ catalog_file = "/etc/quipu/graph-sets.json"
 root = "/var/lib/quipu/owners"             # directory holding the owner files
 installed_policy = "policy-v1"             # must equal every route's policy
 memory_mib = 512
+inventory = "/var/lib/quipu/owners/inventory"   # S1 records for every owner file
+profile = "sets"
+endpoint = "https://witness.example.org"
+bucket = "witness"
+region = "us-east-1"
+timeout_secs = 5                           # 1..=30
+# witness_ca_file = "/etc/quipu/witness-ca.der"   # optional DER trust anchor
+credentials_file = "/etc/quipu/witness.json"      # owner-only (0600)
+
+[quipu.graph_sets.prefixes]                # one existing lineage per routed owner
+"https://example.org/app/data" = "lineage/app"
 ```
 
-Every key is required and an unknown key refuses the config. `catalog_file` is
+Every key except `witness_ca_file` is required and an unknown key refuses the
+config. `prefixes` must name exactly the routed owner graphs of the catalog. `catalog_file` is
 JSON that no group or other user can write. Every member is an exact IRI; there
 is no prefix or pattern membership, so an open-ended family of graphs stays on
 the ordinary writer:
@@ -226,11 +238,14 @@ the ordinary writer:
 ```
 
 With `enabled = true` the server validates the catalog and refuses any graph,
-owner file or store lineage that `[quipu.ingest_pilot]` also claims. It then
-**exits**: graph-set owners open only through enrolled ownership, server
-startup does not open them yet, and it never falls back to an ordinary writable
-open. Do not enable this table on a served Quipu until a release says enrolled
-graph-set startup is installed.
+owner file or store lineage that `[quipu.ingest_pilot]` also claims. Before any
+credential is read, the prefixes must match the routed owners and the legacy
+writer's fence must name exactly every routed member. Each owner file then
+opens through enrolled ownership (S1) against the live witness. **Any refusal
+exits the server** with one line; it never falls back to an ordinary writable
+open. This release admits the owners but mounts no HTTP route for them. A build
+without `ownership-witness-s3` exits with
+`graph_sets enabled but enrolled set-owner open is not available; refusing`.
 
 ## Ingest pilot (per-graph owner)
 

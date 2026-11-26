@@ -160,6 +160,81 @@ pub(crate) fn enforce_destination(
     }
 }
 
+/// Declared provenance keys that are operational, never carried outward.
+///
+/// A field rule, not a pattern: it does not depend on the identifier catalogue,
+/// which may be empty on a store (write-provenance-persistence §6).
+pub const OPERATIONAL_DECLARATIONS: [&str; 2] = ["host", "session"];
+
+/// Whether carried declarations must be scrubbed for `destination`.
+///
+/// Only an explicitly `Internal` destination keeps `host` and `session`; an
+/// `Audience` transfer leaves this store like an outward one does, so it is
+/// scrubbed too, unlike the regex exemption of [`ShareDestination::is_internal`].
+#[must_use]
+pub fn scrubs_declarations(destination: &ShareDestination) -> bool {
+    !matches!(destination, ShareDestination::Internal)
+}
+
+/// The keys a manifest records as `declarations_scrubbed` for `destination`,
+/// so a receiver can tell a scrubbed declaration from an undeclared one.
+#[must_use]
+pub fn declarations_scrubbed(destination: &ShareDestination) -> Vec<String> {
+    if scrubs_declarations(destination) {
+        OPERATIONAL_DECLARATIONS
+            .iter()
+            .map(|k| (*k).to_string())
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Remove `host` and `session` from one carried declaration, structurally and
+/// before serialization, unless `destination` is explicitly internal.
+///
+/// The ONE place the field rule is expressed, beside [`enforce_destination`],
+/// so a producer that carries declarations passes its destination here rather
+/// than branching itself. The regex scrub still applies to whatever remains.
+pub fn scrub_declarations(destination: &ShareDestination, declared: &mut BTreeMap<String, String>) {
+    if scrubs_declarations(destination) {
+        for key in OPERATIONAL_DECLARATIONS {
+            declared.remove(key);
+        }
+    }
+}
+
+/// The receiver half of the rule: a non-internal artifact carrying `host` or
+/// `session` in a declaration was not produced under it, and is refused rather
+/// than imported, the way a self-registered attestation is.
+///
+/// `declared` is one record's carried declaration object, if any.
+///
+/// # Errors
+/// [`Error::PolicyDenied`] naming the offending key.
+pub fn refuse_unscrubbed(internal: bool, declared: Option<&serde_json::Value>) -> Result<()> {
+    if internal {
+        return Ok(());
+    }
+    let Some(declared) = declared else {
+        return Ok(());
+    };
+    let Some(map) = declared.as_object() else {
+        return Err(Error::PolicyDenied(
+            "carried declarations must be a JSON object".into(),
+        ));
+    };
+    for key in OPERATIONAL_DECLARATIONS {
+        if map.contains_key(key) {
+            return Err(Error::PolicyDenied(format!(
+                "a non-internal artifact carries the operational declaration {key:?}; \
+                 its producer did not apply the outward scrub, so it is refused on import"
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 pub(crate) fn seed_test_catalogue(store: &mut Store) {
     let graph = store.overlay_create("urn:test:catalogue", 0).unwrap();

@@ -433,7 +433,7 @@ async fn main() {
     }
 
     let attest_store = state.clone();
-    graph_sets_startup::check(&config);
+    graph_sets_startup::start(&config, &state);
     let app = knot_durable::mount_pilot(api_routes(), &config, &state);
     let app = protected_app(
         app,

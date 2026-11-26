@@ -91,6 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         context_graphs: Vec::new(),
         tx: None,
         expected_store_id: store.store_id()?,
+        destination: Default::default(),
     };
     let limits = Limits {
         // Measure, do not abort: the targets are judged on the numbers.
