@@ -67,9 +67,10 @@ pub(super) fn reverse(rest: &[String]) -> Out {
     validate_reverse_catalogs(&current, &next, &plan).map_err(|e| e.to_string())?;
     let execute = flags.on("--execute");
     let before = json!({"legacy": identity(Path::new(&db)), "owner": identity(Path::new(&owner))});
-    // Held until the end of the run: no owner commit can land meanwhile.
+    // Held until the end of the run: no other process may hold the owner
+    // file open meanwhile, so no owner commit can land.
     let lock = lock_owner_file(&owner).map_err(|e| e.to_string())?;
-    let facts = open_ro(&owner)?
+    let facts = lock
         .export_routed_graph(plan.graph)
         .map_err(|e| e.to_string())?;
     let result = if execute {

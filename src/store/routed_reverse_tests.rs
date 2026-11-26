@@ -1,5 +1,5 @@
 use super::*;
-use crate::graph_catalog::{Budget, Route};
+use crate::graph_catalog::{Budget, Catalog, Route};
 use serde_json::json;
 
 const GRAPH: &str = "https://example.test/graphs/ingest";
@@ -74,7 +74,7 @@ fn round_trip_moves_every_accepted_write_back_to_legacy() {
     let lab = lab(3);
     let owner_before = bytes(&lab.owner);
     let lock = lock_owner_file(&lab.owner).unwrap();
-    let facts = owner_facts(&lab);
+    let facts = lock.export_routed_graph(GRAPH).unwrap();
     assert_eq!(facts.len(), 6, "3 moved + 3 accepted");
     let mut legacy = Store::open(&lab.legacy).unwrap();
     let receipt = legacy
@@ -218,8 +218,18 @@ fn an_open_owner_file_refuses_the_lock() {
         lock_owner_file(&lab.owner).is_err(),
         "a second holder refuses"
     );
+    assert!(
+        Store::open_read_only(&lab.owner)
+            .and_then(|s| s.export_routed_graph(GRAPH))
+            .is_err(),
+        "no second connection can read past the lock"
+    );
     drop(lock);
     let mut writer = Store::open(&lab.owner).unwrap();
+    assert!(
+        lock_owner_file(&lab.owner).is_err(),
+        "an idle open owner Store refuses"
+    );
     writer.conn.execute_batch("BEGIN IMMEDIATE").unwrap();
     assert!(
         lock_owner_file(&lab.owner).is_err(),
@@ -230,6 +240,74 @@ fn an_open_owner_file_refuses_the_lock() {
         &mut writer,
         &json!({"turtle": "<urn:rev:a> <urn:rev:n> \"1\" .", "graph": GRAPH}),
     );
+    drop(writer);
+    let owner_before = bytes(&lab.owner);
+    drop(lock_owner_file(&lab.owner).expect("a closed owner admits the lock"));
+    assert_eq!(bytes(&lab.owner), owner_before, "the lock writes nothing");
+}
+
+const HOLDER_ENV: &str = "QUIPU_REVERSE_IDLE_OWNER_DB";
+
+/// Child side: hold the owner file open in WAL mode, IDLE (no transaction,
+/// raw SQLite, no quipu writer lease), until the parent creates `<db>.stop`.
+#[test]
+#[ignore = "run only as the child process of a_second_process_holding_the_owner_idle_refuses"]
+fn idle_owner_holder_child() {
+    let Ok(db) = std::env::var(HOLDER_ENV) else {
+        return;
+    };
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let mode: String = conn
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal");
+    let _: i64 = conn
+        .query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get(0))
+        .unwrap();
+    assert!(conn.is_autocommit(), "the holder stays idle");
+    std::fs::write(format!("{db}.ready"), b"ready").unwrap();
+    let stop = std::path::PathBuf::from(format!("{db}.stop"));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    while !stop.exists() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn a_second_process_holding_the_owner_idle_refuses() {
+    use std::time::{Duration, Instant};
+    let lab = lab(1);
+    let ready = std::path::PathBuf::from(format!("{}.ready", lab.owner));
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "store::routed_reverse::tests::idle_owner_holder_child",
+            "--exact",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(HOLDER_ENV, &lab.owner)
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !ready.exists() {
+        assert!(Instant::now() < deadline, "holder child never became ready");
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "holder child exited early"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let refused = lock_owner_file(&lab.owner);
+    std::fs::write(format!("{}.stop", lab.owner), b"stop").unwrap();
+    assert!(child.wait().unwrap().success(), "holder child failed");
+    let Err(err) = refused else {
+        panic!("an idle second-process holder must refuse the lock");
+    };
+    assert!(err.to_string().contains("in use"), "{err}");
+    let lock = lock_owner_file(&lab.owner).expect("after the holder closes, the lock succeeds");
+    assert_eq!(lock.export_routed_graph(GRAPH).unwrap().len(), 4);
 }
 
 fn route(graph: &str, file_id: &str, generation: u64) -> Route {

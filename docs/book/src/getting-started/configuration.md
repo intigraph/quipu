@@ -407,8 +407,13 @@ the owner witness generation. The verb refuses unless:
   from it only by dropping that route;
 - the legacy file is fenced for the graph at exactly `(R, G)`, and its copy of
   the graph holds no current facts;
-- it can take the owner file's write lock without waiting. An owner that is
-  still running holds the file, so the reverse refuses.
+- it can hold the owner file exclusively without waiting: an exclusive lock on
+  the owner's writer lease (`<owner>.writer-lease`) and a SQLite
+  `locking_mode=EXCLUSIVE` lock, both kept for the whole run. Any other
+  process or connection that has the owner file open refuses the reverse,
+  including a running owner that is idle with no transaction in progress.
+  Stop the owner and every other client of the file first. Taking and
+  releasing the hold writes nothing to the owner file.
 
 With `--execute` it runs these steps. Each step is one SQLite transaction,
 recorded in the legacy table `routed_graph_reconcile`:

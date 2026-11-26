@@ -5,7 +5,7 @@
 //! procedure is offline and legacy-side only; it contacts no server and builds
 //! no witness handoff (owner witness retirement is aegis-4qv.4):
 //!
-//! 0. The caller holds the owner file's write lock ([`lock_owner_file`]) for
+//! 0. The caller holds the owner file exclusively ([`lock_owner_file`]) for
 //!    the whole run, legacy is fenced for the graph at exactly `(R, G)`, and
 //!    the operator-published catalog `R+1` routes this graph, and only this
 //!    graph, back to legacy ([`validate_reverse_catalogs`]).
@@ -24,7 +24,6 @@
 
 use super::routed_fence::{FENCE_TABLE, SOURCE_FENCE_TABLE};
 use super::{SliceFact, Store};
-use crate::graph_catalog::Catalog;
 use crate::types::{Op, Value};
 use crate::{Error, Result};
 use rusqlite::{OptionalExtension, params};
@@ -160,77 +159,9 @@ pub struct ReverseReceipt {
     pub witness_state: &'static str,
 }
 
-/// Refuse unless `next` is revision `R+1` of `current`, `current` routes
-/// `graph` to its owner at generation `G`, and `next` differs only by routing
-/// `graph` back to legacy (no route). The catalog file format has no
-/// generation for a legacy-served graph, so `G+1` is pinned in the legacy
-/// fence journal and the receipt.
-pub fn validate_reverse_catalogs(
-    current: &Catalog,
-    next: &Catalog,
-    plan: &ReversePlan<'_>,
-) -> Result<()> {
-    let (next_revision, _) = plan.next()?;
-    if current.revision() != plan.catalog_revision || next.revision() != next_revision {
-        return Err(refused(
-            "catalogs must be revisions R and R+1 of this reverse",
-        ));
-    }
-    if !current
-        .routes()
-        .any(|r| r.graph == plan.graph && r.generation == plan.generation)
-    {
-        return Err(refused(
-            "catalog R does not route the graph at generation G",
-        ));
-    }
-    if next.routes().any(|r| r.graph == plan.graph) {
-        return Err(refuse_next());
-    }
-    let others = |c: &Catalog| {
-        c.routes()
-            .filter(|r| r.graph != plan.graph)
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-    if others(current) != others(next)
-        || current.legacy_store_id() != next.legacy_store_id()
-        || current.legacy_participant() != next.legacy_participant()
-    {
-        return Err(refused("catalog R+1 changes something besides this graph"));
-    }
-    Ok(())
-}
-
-fn refuse_next() -> Error {
-    refused("catalog R+1 must route the graph back to legacy (no owner route)")
-}
-
-/// The owner file's write lock, held for the whole reverse. While it is held
-/// no other connection can commit to the owner file; dropping it releases it
-/// without writing anything.
-pub struct OwnerLock {
-    conn: rusqlite::Connection,
-}
-
-impl Drop for OwnerLock {
-    fn drop(&mut self) {
-        let _ = self.conn.execute_batch("ROLLBACK");
-    }
-}
-
-/// Take the owner file's write lock without waiting. A file held open for
-/// writing by any process (a running owner) refuses.
-pub fn lock_owner_file(path: &str) -> Result<OwnerLock> {
-    let conn = rusqlite::Connection::open_with_flags(
-        path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    conn.busy_timeout(std::time::Duration::ZERO)?;
-    conn.execute_batch("BEGIN IMMEDIATE")
-        .map_err(|_| refused("the owner file is in use; stop its owner before a reverse"))?;
-    Ok(OwnerLock { conn })
-}
+#[path = "routed_reverse_preflight.rs"]
+mod preflight;
+pub use preflight::{OwnerLock, lock_owner_file, validate_reverse_catalogs};
 
 impl Store {
     /// Every current fact of the named `graph` with its source tag
