@@ -56,6 +56,14 @@ impl Writer {
         }
     }
 
+    /// Non-blocking write access for bounded try-all participant admission.
+    pub(super) fn try_owned(&self) -> Result<Option<FairMutexGuard<'_, Store>>> {
+        match self {
+            Self::Owned(writer) => Ok(writer.try_lock()),
+            Self::Borrowed(_) => Err(refused("legacy read participant is read-only")),
+        }
+    }
+
     #[cfg(test)]
     pub(super) fn lock(&self) -> FairMutexGuard<'_, Store> {
         match self {
