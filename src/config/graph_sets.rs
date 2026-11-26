@@ -31,7 +31,26 @@ pub struct GraphSetsConfig {
     pub memory_mib: u64,
 }
 
+/// The one-line startup refusal for an enabled table whose catalog passed
+/// preflight: the server has no enrolled graph-set owner open to start.
+pub const STARTUP_REFUSAL: &str =
+    "graph_sets enabled but enrolled set-owner open is not available; refusing";
+
 impl GraphSetsConfig {
+    /// The reason server startup must refuse, as one line, or None when the
+    /// table is disabled (then nothing is read). A preflight refusal names its
+    /// own reason; a valid catalog gets [`STARTUP_REFUSAL`]. Never a fallback.
+    pub fn startup_refusal(&self, pilot: Option<&IngestPilotConfig>) -> Option<String> {
+        if !self.enabled {
+            return None;
+        }
+        let reason = match self.preflight(pilot) {
+            Err(e) => e.to_string(),
+            Ok(_) => STARTUP_REFUSAL.to_owned(),
+        };
+        Some(reason.replace(['\n', '\r'], " "))
+    }
+
     /// Load and validate the catalog, then refuse any claim shared with an
     /// enabled ingest pilot: the same logical graph, the same file or the
     /// same store lineage would give one graph two writers.

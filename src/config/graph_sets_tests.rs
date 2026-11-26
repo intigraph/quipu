@@ -214,3 +214,32 @@ fn a_graph_claimed_by_two_sets_or_a_policy_mismatch_refuses() {
     let err = refusal(cfg.preflight(None));
     assert!(err.to_string().contains("installed policy"), "{err}");
 }
+
+#[test]
+fn enabled_startup_refuses_in_one_line_naming_the_reason() {
+    // Valid catalog, no conflicting pilot: the fixed one-line refusal.
+    let (dir, cfg) = setup(
+        &set_doc(&[SET_GRAPH, SET_PROV], "app", "store-app"),
+        &pilot_doc(PILOT_GRAPH, "ingest", "store-ingest"),
+    );
+    let root = dir.path().canonicalize().unwrap();
+    let reason = cfg
+        .startup_refusal(Some(&pilot(&root, true, PILOT_GRAPH)))
+        .expect("enabled graph_sets must refuse startup");
+    assert_eq!(reason, STARTUP_REFUSAL);
+    assert_eq!(reason.lines().count(), 1);
+    assert!(reason.contains("graph_sets") && reason.contains("refusing"));
+
+    // A preflight refusal names its own reason, still on one line.
+    let mut bad = cfg.clone();
+    bad.installed_policy = "policy-v2".into();
+    let reason = bad.startup_refusal(None).unwrap();
+    assert!(reason.contains("installed policy"), "{reason}");
+    assert_eq!(reason.lines().count(), 1);
+
+    // Disabled: no refusal and nothing is read (the catalog path is absent).
+    let mut off = cfg;
+    off.enabled = false;
+    off.catalog_file = root.join("does-not-exist.json");
+    assert!(off.startup_refusal(None).is_none());
+}
