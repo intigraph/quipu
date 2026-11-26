@@ -57,6 +57,7 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "principal", TermIdKind::None),
     ("transaction_auth", "credential_id", TermIdKind::None),
     ("transaction_auth", "auth_class", TermIdKind::None),
+    ("transaction_auth", "attested_session", TermIdKind::None),
     // Native fluent type encoding and transaction-local writer permits.
     ("fluent_type_codes", "id", TermIdKind::Id),
     ("fluent_type_codes", "value", TermIdKind::RefBlob),

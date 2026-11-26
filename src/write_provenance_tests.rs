@@ -165,3 +165,61 @@ fn old_store_without_declaration_table_reports_unknown() {
         .unwrap();
     assert!(store.transaction_declarations(tx).unwrap().is_none());
 }
+
+// -- aegis-7tt P1: the write cap is the header contract ----------------------
+
+#[test]
+fn p1_a_128_char_printable_ascii_value_is_declared_and_stored() {
+    let max = "h".repeat(128);
+    let p = class([Some("a"), Some("cron"), Some(&max), None, None]);
+    assert_eq!(p.completeness, Completeness::Complete);
+    assert_eq!(p.declarations["host"], max);
+}
+
+#[test]
+fn p1_a_129_char_value_is_not_stored_and_counts_as_not_declared() {
+    let over = "h".repeat(129);
+    let p = class([Some("a"), Some("cron"), Some(&over), None, None]);
+    assert!(!p.declarations.contains_key("host"));
+    assert_eq!(p.missing, vec!["host"]);
+    assert_eq!(p.completeness, Completeness::Partial);
+    let mut store = crate::Store::open_in_memory().unwrap();
+    let tx = scoped(Some(Arc::new(p)), || {
+        store.transact(&[], "2026-01-01T00:00:00Z", None, None)
+    })
+    .unwrap();
+    let stored = store.transaction_declarations(tx).unwrap().unwrap();
+    assert!(!stored.contains_key("host"));
+}
+
+#[test]
+fn p1_non_printable_or_non_ascii_values_are_not_declared() {
+    for bad in ["h\u{e9}st", "h\tst", "h\u{7f}"] {
+        let p = class([None, None, Some(bad), None, None]);
+        assert!(!p.declarations.contains_key("host"), "{bad:?}");
+        assert_eq!(p.completeness, Completeness::Absent, "{bad:?}");
+    }
+}
+
+/// Mutant: capping READS as well as writes would hide rows already written
+/// under the old 1024-byte cap.
+#[test]
+fn p1_mutant_an_existing_1024_byte_row_still_reads() {
+    let store = crate::Store::open_in_memory().unwrap();
+    let mut store = store;
+    let tx = store
+        .transact(&[], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    let old = "x".repeat(1024);
+    store
+        .conn
+        .execute(
+            "INSERT INTO transaction_declarations (tx, declarations) VALUES (?1, ?2)",
+            rusqlite::params![tx, serde_json::json!({ "host": old }).to_string()],
+        )
+        .unwrap();
+    assert_eq!(
+        store.transaction_declarations(tx).unwrap().unwrap()["host"],
+        old
+    );
+}

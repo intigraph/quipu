@@ -233,13 +233,15 @@ pub(crate) fn record(conn: &Connection, tx_id: i64) -> crate::Result<()> {
                 settle_on(conn, pending, crate::time::epoch_secs())?;
             }
             conn.execute(
-                "INSERT INTO transaction_auth (tx, principal, credential_id, auth_class) \
-                 VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO transaction_auth \
+                 (tx, principal, credential_id, auth_class, attested_session) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
                     tx_id,
                     identity.principal,
                     identity.credential_id,
-                    identity.auth_class
+                    identity.auth_class,
+                    attested_session(identity)
                 ],
             )?;
         }
@@ -247,7 +249,58 @@ pub(crate) fn record(conn: &Connection, tx_id: i64) -> crate::Result<()> {
     })
 }
 
+/// The verified binding session, ONLY for an `attested_session` identity and
+/// only from its pending attestation: a header never supplies it.
+fn attested_session(identity: &Identity) -> Option<&str> {
+    (identity.auth_class == "attested_session")
+        .then(|| {
+            identity
+                .attestation
+                .0
+                .as_deref()
+                .map(|p| p.session.as_str())
+        })
+        .flatten()
+}
+
+/// Add the nullable `attested_session` column on a read-write open
+/// (aegis-7tt P2). Existing rows stay NULL: their session was never recorded,
+/// so it is unknown, and nothing back-fills it. Read-only opens skip this.
+pub(crate) fn migrate_attested_session(conn: &Connection) -> crate::Result<()> {
+    if !has_attested_session(conn)? {
+        conn.execute_batch("ALTER TABLE transaction_auth ADD COLUMN attested_session TEXT;")?;
+    }
+    Ok(())
+}
+
+fn has_attested_session(conn: &Connection) -> crate::Result<bool> {
+    Ok(conn
+        .prepare(
+            "SELECT 1 FROM pragma_table_info('transaction_auth', 'main') \
+             WHERE name = 'attested_session'",
+        )?
+        .exists([])?)
+}
+
 impl crate::Store {
+    /// The binding session a signed write's transaction was verified under.
+    /// `None` for bearer writes, unattributed writes, rows written before the
+    /// column existed, and a read-only open of a store that predates it.
+    pub fn transaction_attested_session(&self, tx_id: i64) -> crate::Result<Option<String>> {
+        if !has_attested_session(&self.conn)? {
+            return Ok(None);
+        }
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT attested_session FROM main.transaction_auth WHERE tx=?1",
+                [tx_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten())
+    }
+
     /// Read authenticated evidence, never substituting the declared actor.
     /// Historical and foreign copied transactions have no local credential proof.
     pub fn transaction_auth(&self, tx_id: i64) -> crate::Result<Option<Identity>> {
