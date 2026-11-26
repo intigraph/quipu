@@ -84,7 +84,7 @@ impl Store {
     /// Assert `slice` into `graph` under `source_tag`, preserving valid time.
     /// Refuses when that tag already owns current facts in `graph`, so a
     /// repeated import cannot double the slice. Returns the transaction id.
-    pub(crate) fn import_routed_slice(
+    pub fn import_routed_slice(
         &mut self,
         slice: &[SliceFact],
         source_tag: &str,
