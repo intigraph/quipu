@@ -97,6 +97,17 @@ pub fn with_crash<T>(point: CrashPoint, work: impl FnOnce() -> T) -> T {
 }
 
 fn crash(point: CrashPoint) -> Result<()> {
+    // A child test process armed by the parent reports here, then blocks
+    // holding every writer and lease until it is SIGKILLed (test only).
+    #[cfg(test)]
+    if std::env::var(kill_tests::KILL_ENV).ok().as_deref() == Some(&format!("{point:?}")) {
+        use std::io::Write;
+        println!("{}", kill_tests::MARKER);
+        let _ = std::io::stdout().flush();
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
     #[cfg(test)]
     if CRASH.with(std::cell::Cell::get) == Some(point) {
         CRASHED.with(|slot| slot.set(true));
@@ -553,3 +564,7 @@ fn release(guards: &mut [Guard<'_>], batch_id: &str) -> Result<()> {
 #[cfg(test)]
 #[path = "participant_commit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "participant_kill_tests.rs"]
+mod kill_tests;
