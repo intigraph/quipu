@@ -306,13 +306,24 @@ contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
 
 An owner file must be enrolled before `[quipu.ingest_pilot]` can start it.
 `quipu::store::enroll_pilot_owner` (an `ownership-witness-s3` build, Unix
-only) is the library entry point; the `quipu pilot enroll` CLI verb does not wrap it
-yet (see below). It takes
-the same `[quipu.ingest_pilot]` table, an existing Quipu database, a journal
-path and the owning principal. Without `execute` it is a dry run: a read-only
-preflight plus the planned authority, with no local or remote write.
+only) is the library entry point, and `quipu pilot enroll` wraps it:
 
-With `execute` it runs, in order: an owner-only intent file next to the
+```bash
+quipu pilot enroll --db owner.db --journal owner.journal --unit full-store \
+    --principal pilot-owner --witness-config pilot.toml [--execute]
+```
+
+`--witness-config` is a TOML file holding the same `[quipu.ingest_pilot]`
+table the server starts with (the table's keys at top level are accepted
+too). It must be a regular file that no group or other user can write, because
+it pins the witness endpoint, bucket and prefix. It holds no secret; the
+credentials come only from the owner-only `credentials_file` it names, and
+never from argv or the environment. Without `--execute` it is a dry run: a
+read-only preflight plus the planned authority, with no local or remote
+write. The receipt prints the planned (or executed) enrollment and the before
+and after identity of the database, journal and inventory.
+
+With `--execute` it runs, in order: an owner-only intent file next to the
 journal; witness genesis as one conditional create (`If-None-Match: *`) of
 `active/00` under the configured prefix; the Active journal; the owner-only
 inventory (`<journal>.inventory`); the database marker in one SQLite
@@ -369,10 +380,10 @@ quipu pilot cutover --db legacy.db --tag snapshot:KEY --graph IRI \
 - Flags are an exact allow-list per verb, and secret-looking flags such as
   `--secret-access-key` are refused before any file is opened.
 
-`pilot enroll` and `pilot reverse` are not implemented yet. Both are refused
-with "not implemented yet". Owner enrollment now has a library API
-(`quipu::store::enroll_pilot_owner`, above), so wrapping it in `pilot enroll`
-is a follow-up. Reverse reconciliation has no library API yet.
+`pilot enroll` is described under
+[Enrolling the pilot owner](#enrolling-the-pilot-owner). `pilot reverse` is not
+implemented yet and is refused with "not implemented yet", because reverse
+reconciliation has no library API yet.
 
 ## Choosing a vector backend
 
