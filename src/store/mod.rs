@@ -12,6 +12,7 @@ mod batches;
 pub mod changes;
 #[cfg(unix)]
 pub(crate) mod composition;
+pub mod composition_cut;
 pub mod conditional;
 pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
