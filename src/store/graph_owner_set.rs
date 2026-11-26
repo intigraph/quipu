@@ -33,6 +33,10 @@ pub struct GraphSetOwner {
 mod dataset;
 pub use dataset::GraphSetDataset;
 
+#[path = "graph_set_router.rs"]
+mod router;
+pub use router::{GraphSetRouter, SetTarget};
+
 impl GraphSetOwner {
     fn check_hooks(store: &Store) -> Result<()> {
         if store.pending_embed.is_some()
