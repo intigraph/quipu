@@ -414,7 +414,8 @@ fn h2a_a_routed_update_records_store_time_for_its_client() {
 #[test]
 fn h2a_the_owner_reports_held_only_when_it_held_its_writer() {
     let f = fx();
-    let Ok(Route::Owner(owner, members)) = super::route(Some(&f.router), &format!("{BASE}{CREATE}"))
+    let Ok(Route::Owner(owner, members)) =
+        super::route(Some(&f.router), &format!("{BASE}{CREATE}"))
     else {
         panic!("CREATE routes to the tracker owner");
     };
