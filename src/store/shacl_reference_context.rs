@@ -55,6 +55,49 @@ impl Store {
     }
 }
 
+impl Store {
+    /// Run `operation` with derived type triples as extra post-state SHACL
+    /// context (participant slice B). Context only: it is never written,
+    /// creates no focus, and can only satisfy a constraint, never add one.
+    /// Nested scopes and unwinding restore the previous context.
+    pub(crate) fn with_derived_type_context<T>(
+        &mut self,
+        triples: &[[String; 3]],
+        operation: impl FnOnce(&mut Self) -> Result<T>,
+    ) -> Result<T> {
+        if triples.is_empty() {
+            return operation(self);
+        }
+        let previous = self.derived_type_context.replace(triples.to_vec());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| operation(self)));
+        self.derived_type_context = previous;
+        match result {
+            Ok(result) => result,
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
+    }
+
+    /// Append the derived context as facts in this file's term space.
+    #[cfg(feature = "shacl")]
+    pub(crate) fn append_derived_type_context(&self, facts: &mut Vec<crate::Fact>) -> Result<bool> {
+        let Some(triples) = &self.derived_type_context else {
+            return Ok(false);
+        };
+        for [subject, predicate, object] in triples {
+            facts.push(crate::Fact {
+                entity: self.intern(subject)?,
+                attribute: self.intern(predicate)?,
+                value: crate::Value::Ref(self.intern(object)?),
+                tx: 0,
+                valid_from: String::new(),
+                valid_to: None,
+                op: crate::Op::Assert,
+            });
+        }
+        Ok(true)
+    }
+}
+
 #[cfg(all(test, feature = "shacl"))]
 mod tests {
     use super::*;

@@ -26,6 +26,14 @@ pub(super) const PINS: &str = "CREATE TABLE IF NOT EXISTS dependency_pins (\
     dependent_file_id TEXT NOT NULL, \
     PRIMARY KEY (graph, entity, type_iri, dependent_file_id))";
 
+/// Subclass-axiom pins (slice B): this file's record that a dependent file's
+/// sh:class satisfaction for `via` relied on "class rdfs:subClassOf parent"
+/// in graph. Released with `via`'s type pins.
+pub(super) const SUBCLASS_PINS: &str = "CREATE TABLE IF NOT EXISTS subclass_pins (\
+    graph TEXT NOT NULL, class TEXT NOT NULL, parent TEXT NOT NULL, via TEXT NOT NULL, \
+    dependent_file_id TEXT NOT NULL, \
+    PRIMARY KEY (graph, class, parent, via, dependent_file_id))";
+
 pub(super) fn table_exists(store: &Store, name: &str) -> Result<bool> {
     Ok(store.conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
@@ -94,11 +102,18 @@ pub(super) fn unhex(text: &str) -> Result<Vec<u8>> {
 pub(super) struct PinChanges {
     pub(super) add: Vec<super::deps::DependencyPin>,
     pub(super) release: Vec<(String, String)>,
+    /// Slice B: subclass-axiom pins this (source) file records.
+    pub(super) axioms: Vec<super::deps::SubclassPin>,
+    /// Slice B: derived type context this (member) file's apply is judged with.
+    pub(super) context: Vec<[String; 3]>,
 }
 
 impl PinChanges {
     fn is_empty(&self) -> bool {
-        self.add.is_empty() && self.release.is_empty()
+        self.add.is_empty()
+            && self.release.is_empty()
+            && self.axioms.is_empty()
+            && self.context.is_empty()
     }
 }
 
@@ -139,6 +154,18 @@ pub(super) fn encode_payload_with(batch: &GraphSetBatch, pins: &PinChanges) -> V
             .map(|p| serde_json::json!([p.graph, p.entity, p.type_iri, p.dependent_file_id]))
             .collect();
         value["pins"] = serde_json::json!({"add": add, "release": pins.release});
+        // Slice B keys appear only when used, so S4 payload bytes are unchanged.
+        if !pins.axioms.is_empty() {
+            value["pins"]["axioms"] = serde_json::json!(
+                pins.axioms
+                    .iter()
+                    .map(|a| [&a.graph, &a.class, &a.parent, &a.via, &a.dependent_file_id])
+                    .collect::<Vec<_>>()
+            );
+        }
+        if !pins.context.is_empty() {
+            value["pins"]["context"] = serde_json::json!(pins.context);
+        }
     }
     value.to_string().into_bytes()
 }
@@ -189,6 +216,29 @@ pub(super) fn decode_payload(bytes: &[u8]) -> Result<Decoded> {
         for row in changes["release"].as_array().ok_or_else(bad)? {
             pins.release.push((field(row, 0)?, field(row, 1)?));
         }
+        for row in changes
+            .get("axioms")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            pins.axioms.push(super::deps::SubclassPin {
+                graph: field(row, 0)?,
+                class: field(row, 1)?,
+                parent: field(row, 2)?,
+                via: field(row, 3)?,
+                dependent_file_id: field(row, 4)?,
+            });
+        }
+        for row in changes
+            .get("context")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            pins.context
+                .push([field(row, 0)?, field(row, 1)?, field(row, 2)?]);
+        }
     }
     Ok(Decoded {
         timestamp: text("timestamp").ok_or_else(bad)?,
@@ -235,6 +285,7 @@ pub(super) fn durable<T>(
         store.conn.execute_batch(JOURNAL)?;
         store.conn.execute_batch(INTENTS)?;
         store.conn.execute_batch(PINS)?;
+        store.conn.execute_batch(SUBCLASS_PINS)?;
         work(store)
     })
 }
@@ -404,4 +455,17 @@ pub(crate) fn home_published(
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(error) => Err(error.into()),
     }
+}
+
+/// The caller's verified, unsigned and unscoped principal.
+pub(super) fn principal() -> Result<crate::transaction_auth::Identity> {
+    let identity = crate::transaction_auth::current_identity()
+        .ok_or_else(|| refuse("a verified principal is required"))?;
+    if crate::transaction_auth::current_attestation().is_some() {
+        return Err(refuse("signed participant batches are not qualified"));
+    }
+    if crate::writer_scope::is_scoped_request() {
+        return Err(refuse("scoped participant batches are not qualified"));
+    }
+    Ok(identity)
 }

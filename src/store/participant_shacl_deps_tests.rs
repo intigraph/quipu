@@ -17,21 +17,25 @@ const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
 const ITEM: &str = "urn:item";
 const BLOCKED_ON: &str = "urn:p:blockedOn";
-const NAME: &str = "urn:p:name";
+const RELATES: &str = "urn:p:relates";
 const SHARED: &str = "urn:shared:action";
 const ACTION: &str = "urn:type:Action";
 const SUB_ACTION: &str = "urn:type:SubAction";
 const OTHER: &str = "urn:type:Other";
 const OTHER_SHARED: &str = "urn:shared:other-action";
 
-/// Alpha's pinned shapes: an Action's blockedOn values must be Actions, and
-/// any Other needs a name (the subset-only discriminator).
+/// Alpha's pinned shapes: an Action's blockedOn values must be Actions and
+/// its relates values Others, and an Other must be a blank node. Every Other
+/// here is an IRI, so a derived Other that became a focus would add a
+/// (judged) nodeKind violation: the subset-only discriminator. (sh:minCount
+/// would not do: required-value floors are outside the post-state lane.)
 const SHAPES: &str = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 <urn:shape:Action> a sh:NodeShape ; sh:targetClass <urn:type:Action> ;
-  sh:property [ sh:path <urn:p:blockedOn> ; sh:class <urn:type:Action> ] .
+  sh:property [ sh:path <urn:p:blockedOn> ; sh:class <urn:type:Action> ] ;
+  sh:property [ sh:path <urn:p:relates> ; sh:class <urn:type:Other> ] .
 <urn:shape:Other> a sh:NodeShape ; sh:targetClass <urn:type:Other> ;
-  sh:property [ sh:path <urn:p:name> ; sh:minCount 1 ] .
+  sh:nodeKind sh:BlankNode .
 "#;
 
 fn path(files: &Files, index: usize) -> std::path::PathBuf {
@@ -52,7 +56,7 @@ fn fixture_iris() -> Vec<String> {
         SUBCLASS_OF,
         ITEM,
         BLOCKED_ON,
-        NAME,
+        RELATES,
         SHARED,
         ACTION,
         SUB_ACTION,
@@ -132,11 +136,11 @@ fn triple(_files: &Files, index: usize, s: &str, p: &str, o: &str, op: Op) -> Da
 
 /// A batch for file `index` writing `datums` into graph `graph` (0 = data,
 /// 1 = provenance) and nothing into the other.
-fn graph_batch(files: &Files, index: usize, graph: usize, datums: Vec<Datum>) -> GraphSetBatch {
+fn graph_batch(files: &Files, index: usize, graph: usize, datums: &[Datum]) -> GraphSetBatch {
     let mut batch = batch(files, index, "unused");
     for (at, (_, rows)) in batch.graphs.iter_mut().enumerate() {
         *rows = if at == graph {
-            datums.clone()
+            datums.to_vec()
         } else {
             Vec::new()
         };
@@ -152,7 +156,7 @@ fn seed(files: &Files, index: usize, graph: usize, rows: &[(&str, &str, &str)]) 
         .collect();
     let owner = open(files, index);
     owner
-        .transact(&requests(index), &graph_batch(files, index, graph, datums))
+        .transact(&requests(index), &graph_batch(files, index, graph, &datums))
         .unwrap();
 }
 
@@ -178,7 +182,7 @@ fn alpha_member<'a>(
     Member {
         owner,
         requests: requests(0),
-        batch: graph_batch(files, 0, 0, datums),
+        batch: graph_batch(files, 0, 0, &datums),
     }
 }
 
@@ -235,7 +239,7 @@ fn retract(
                 files,
                 index,
                 graph,
-                vec![triple(files, index, s, p, o, Op::Retract)],
+                &[triple(files, index, s, p, o, Op::Retract)],
             ),
         )
         .map(|_| ())
@@ -334,24 +338,38 @@ fn b2_a_type_held_only_by_an_unenlisted_file_refuses_with_nothing_prepared() {
 fn b3_a_wrong_class_in_the_source_keeps_the_violation_and_prepares_nothing() {
     let temp = tempfile::tempdir().unwrap();
     let files = shacl_files(temp.path());
-    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, OTHER)]);
+    // SHARED is an Other, not an Action. OTHER_SHARED (an IRI Other)
+    // derives, so the refusal is judged WITH derived context: it must be
+    // exactly the one class violation, none added by the context.
+    seed(
+        &files,
+        2,
+        0,
+        &[(SHARED, RDF_TYPE, OTHER), (OTHER_SHARED, RDF_TYPE, OTHER)],
+    );
     let before = heads(&files);
     let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
     let batch = ParticipantBatch {
         batch_id: "batch-b3".into(),
         members: vec![
-            alpha_member(&files, &alpha, &[SHARED], &[]),
+            alpha_member(&files, &alpha, &[SHARED], &[(ITEM, RELATES, OTHER_SHARED)]),
             plain_member(&files, &beta, 1),
         ],
     };
     let error = as_writer(|| commit_derived(&batch, &[], &[&gamma])).unwrap_err();
-    assert!(error.to_string().contains(SHARED), "{error}");
+    let text = error.to_string();
+    assert!(text.contains("with derived types"), "{error}");
+    assert!(text.contains(" 1 violation"), "{error}");
+    assert!(
+        text.contains(SHARED) && !text.contains(&format!("{OTHER_SHARED} (")),
+        "{error}"
+    );
     assert_nothing_prepared(&files, [&alpha, &beta, &gamma], &before);
     assert!(dependency_pins(&gamma).unwrap().is_empty());
 }
 
 #[test]
-fn b4_more_derived_checks_than_the_bound_refuse_before_admission() {
+fn b4_more_derived_checks_than_the_bound_refuse_before_any_intent() {
     let temp = tempfile::tempdir().unwrap();
     let files = shacl_files(temp.path());
     let values = many();
@@ -379,8 +397,8 @@ fn b4_more_derived_checks_than_the_bound_refuse_before_admission() {
 fn b5_a_payload_that_conforms_alone_derives_nothing_and_the_context_adds_no_violation() {
     let temp = tempfile::tempdir().unwrap();
     let files = shacl_files(temp.path());
-    // Gamma also says SHARED is an Other with no name. Were that type pulled
-    // in as context it would make SHARED an Other focus and add a minCount
+    // Gamma also says SHARED is an (IRI) Other. Were that type pulled in as
+    // context it would make SHARED an Other focus and add a nodeKind
     // violation: repair is subset-only, so it must not.
     seed(
         &files,
@@ -401,27 +419,28 @@ fn b5_a_payload_that_conforms_alone_derives_nothing_and_the_context_adds_no_viol
     assert!(dependency_pins(&gamma).unwrap().is_empty());
     drop(batch);
     drop((alpha, beta, gamma));
-    // Derivation in progress (value typed only remotely) with the same extra
-    // Other type in the source: the derived context still adds no violation.
-    let other = OTHER_SHARED;
-    seed(
-        &files,
-        2,
-        1,
-        &[(other, RDF_TYPE, ACTION), (other, RDF_TYPE, OTHER)],
-    );
-    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    // The value derives an IRI Other: as context it satisfies sh:class
+    // and must add no nodeKind violation, on the incremental path (alpha's
+    // graph now has history) and on the new-graph path (a fresh fixture).
+    derives_an_iri_other(&files, "batch-b5-incremental");
+    let fresh = tempfile::tempdir().unwrap();
+    derives_an_iri_other(&shacl_files(fresh.path()), "batch-b5-new-graph");
+}
+
+fn derives_an_iri_other(files: &Files, batch_id: &str) {
+    seed(files, 2, 1, &[(OTHER_SHARED, RDF_TYPE, OTHER)]);
+    let (alpha, beta, gamma) = (open_shacl(files, 0), open(files, 1), open(files, 2));
     let batch = ParticipantBatch {
-        batch_id: "batch-b5-derived".into(),
+        batch_id: batch_id.into(),
         members: vec![
-            alpha_member(&files, &alpha, &[other], &[]),
-            plain_member(&files, &beta, 1),
+            alpha_member(files, &alpha, &[], &[(ITEM, RELATES, OTHER_SHARED)]),
+            plain_member(files, &beta, 1),
         ],
     };
     as_writer(|| commit_derived(&batch, &[], &[&gamma])).unwrap();
     assert_eq!(
         dependency_pins(&gamma).unwrap(),
-        [type_pin(provenance(2), other, ACTION, "alpha")]
+        [type_pin(provenance(2), OTHER_SHARED, OTHER, "alpha")]
     );
 }
 

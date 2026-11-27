@@ -12,8 +12,12 @@
 //! unless it is a participant batch that enlists every pinning file with a
 //! [`ReferenceAbsence`] check proving that file no longer references E; those
 //! pins are then dropped in the same apply. Pins stay until such a release (a
-//! dependent dropping its reference does not by itself unpin). Not provided:
-//! SHACL-derived dependencies, unbounded or global constraints.
+//! dependent dropping its reference does not by itself unpin).
+//!
+//! Slice B derives dependencies from a member's own sh:class shapes (see
+//! `participant_derive.rs`); a subclass axiom it relies on is pinned as a
+//! [`SubclassPin`] with the same removal guard. Not provided: unbounded or
+//! global constraints.
 use super::*;
 
 /// The most dependency checks one batch may declare.
@@ -52,6 +56,45 @@ pub struct DependencyPin {
     pub entity: String,
     pub type_iri: String,
     pub dependent_file_id: String,
+}
+
+/// A durable record, in a source file, that `dependent_file_id` committed a
+/// batch whose sh:class satisfaction for `via` relied on "`class`
+/// rdfs:subClassOf `parent`" in `graph` (slice B).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SubclassPin {
+    pub graph: String,
+    pub class: String,
+    pub parent: String,
+    pub via: String,
+    pub dependent_file_id: String,
+}
+
+pub(super) const SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+
+/// Every subclass-axiom pin this owner's file holds, sorted.
+pub fn subclass_pins(owner: &GraphSetOwner) -> Result<Vec<SubclassPin>> {
+    owner.owner.read(read_subclass_pins)
+}
+
+fn read_subclass_pins(store: &Store) -> Result<Vec<SubclassPin>> {
+    if !table_exists(store, "subclass_pins")? {
+        return Ok(Vec::new());
+    }
+    let mut stmt = store.conn.prepare(
+        "SELECT graph, class, parent, via, dependent_file_id FROM subclass_pins \
+         ORDER BY graph, class, parent, via, dependent_file_id",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(SubclassPin {
+            graph: row.get(0)?,
+            class: row.get(1)?,
+            parent: row.get(2)?,
+            via: row.get(3)?,
+            dependent_file_id: row.get(4)?,
+        })
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// Every pin this owner's file holds, sorted.
@@ -362,6 +405,7 @@ pub(super) fn check_pinned_removals(
     graphs: &[(String, Vec<crate::store::Datum>)],
     release: &[(String, String)],
 ) -> Result<()> {
+    check_pinned_axioms(store, graphs, release)?;
     let pins = read_pins(store)?;
     if pins.is_empty() {
         return Ok(());
@@ -401,6 +445,52 @@ pub(super) fn check_pinned_removals(
     Ok(())
 }
 
+/// Slice B: the same guard for pinned subclass axioms (released with `via`).
+fn check_pinned_axioms(
+    store: &Store,
+    graphs: &[(String, Vec<crate::store::Datum>)],
+    release: &[(String, String)],
+) -> Result<()> {
+    let pins = read_subclass_pins(store)?;
+    let Some(subclass) = (!pins.is_empty())
+        .then(|| store.lookup(SUBCLASS_OF))
+        .transpose()?
+        .flatten()
+    else {
+        return Ok(());
+    };
+    for pin in &pins {
+        if release
+            .iter()
+            .any(|(e, f)| *e == pin.via && *f == pin.dependent_file_id)
+        {
+            continue;
+        }
+        let (Some(class), Some(parent)) = (store.lookup(&pin.class)?, store.lookup(&pin.parent)?)
+        else {
+            continue;
+        };
+        let removes = graphs
+            .iter()
+            .filter(|(graph, _)| *graph == pin.graph)
+            .flat_map(|(_, datums)| datums)
+            .any(|d| {
+                d.entity == class
+                    && d.attribute == subclass
+                    && matches!(d.value, crate::types::Value::Ref(id) if id == parent)
+                    && (d.op == crate::types::Op::Retract || d.valid_to.is_some())
+            });
+        if removes {
+            return Err(refuse(format!(
+                "axiom {} subClassOf {} in {} is pinned by dependent file {} (for {}); change \
+                 it in a participant batch that enlists that file with a reference-absence check",
+                pin.class, pin.parent, pin.graph, pin.dependent_file_id, pin.via
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Apply one intent's pin changes inside its apply transaction.
 pub(super) fn apply_pins(store: &Store, pins: &PinChanges) -> Result<()> {
     for pin in &pins.add {
@@ -410,9 +500,26 @@ pub(super) fn apply_pins(store: &Store, pins: &PinChanges) -> Result<()> {
             rusqlite::params![pin.graph, pin.entity, pin.type_iri, pin.dependent_file_id],
         )?;
     }
+    for pin in &pins.axioms {
+        store.conn.execute(
+            "INSERT OR IGNORE INTO subclass_pins(graph, class, parent, via, dependent_file_id) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                pin.graph,
+                pin.class,
+                pin.parent,
+                pin.via,
+                pin.dependent_file_id
+            ],
+        )?;
+    }
     for (entity, file) in &pins.release {
         store.conn.execute(
             "DELETE FROM dependency_pins WHERE entity = ?1 AND dependent_file_id = ?2",
+            rusqlite::params![entity, file],
+        )?;
+        store.conn.execute(
+            "DELETE FROM subclass_pins WHERE via = ?1 AND dependent_file_id = ?2",
             rusqlite::params![entity, file],
         )?;
     }

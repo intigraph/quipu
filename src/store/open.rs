@@ -621,6 +621,7 @@ impl Store {
             projection_defs: Vec::new(),
             write_shapes: None,
             write_reference_graphs: None,
+            derived_type_context: None,
             poststate_profile: PoststateProfile::default(),
             validator_observation: std::cell::RefCell::new(None),
             #[cfg(feature = "owl")]

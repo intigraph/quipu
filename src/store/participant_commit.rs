@@ -42,9 +42,12 @@ use crash_points::{crash, crashed};
 #[path = "participant_deps.rs"]
 mod deps;
 pub use deps::{
-    DependencyPin, MAX_DEPENDENCY_CHECKS, ReferenceAbsence, TypeDependency, Validation,
-    dependency_pins,
+    DependencyPin, MAX_DEPENDENCY_CHECKS, ReferenceAbsence, SubclassPin, TypeDependency,
+    Validation, dependency_pins, subclass_pins,
 };
+
+#[path = "participant_derive.rs"]
+mod derive;
 
 /// One participant: an owner, its ordinary routed requests and its exact
 /// native delta (term IDs local to that owner's file).
@@ -145,18 +148,6 @@ fn canonical<'a>(owners: &[&'a GraphSetOwner]) -> Result<Vec<&'a GraphSetOwner>>
     Ok(sorted)
 }
 
-fn principal() -> Result<crate::transaction_auth::Identity> {
-    let identity = crate::transaction_auth::current_identity()
-        .ok_or_else(|| refuse("a verified principal is required"))?;
-    if crate::transaction_auth::current_attestation().is_some() {
-        return Err(refuse("signed participant batches are not qualified"));
-    }
-    if crate::writer_scope::is_scoped_request() {
-        return Err(refuse("scoped participant batches are not qualified"));
-    }
-    Ok(identity)
-}
-
 /// Execute one batch, or return its original receipt vector on retry.
 ///
 /// The caller's verified principal (an owned identity scope) is bound into the
@@ -175,6 +166,18 @@ pub fn commit_validated(
     batch: &ParticipantBatch<'_>,
     validations: &[Validation<'_>],
 ) -> Result<ReceiptVector> {
+    commit_derived(batch, validations, &[])
+}
+
+/// [`commit_validated`] with SHACL-derived type dependencies (slice B):
+/// `sources` are owners enlisted only as type sources for members' `sh:class`
+/// values, admitted and fenced like validation participants. Their file ids
+/// are bound into the digest; what was derived travels in the intents.
+pub fn commit_derived(
+    batch: &ParticipantBatch<'_>,
+    validations: &[Validation<'_>],
+    sources: &[&GraphSetOwner],
+) -> Result<ReceiptVector> {
     let identity = principal()?;
     if batch.batch_id.is_empty() {
         return Err(refuse("empty batch id"));
@@ -183,44 +186,25 @@ pub fn commit_validated(
         return Err(refuse("a participant batch spans at least two files"));
     }
     deps::check_bounds(validations)?;
-    let is_member =
-        |owner: &GraphSetOwner| batch.members.iter().any(|m| std::ptr::eq(m.owner, owner));
-    if validations
-        .iter()
-        .any(|v| is_member(v.owner) && !v.checks.is_empty())
-    {
-        return Err(refuse(
-            "duplicate participant: a member cannot validate a type dependency",
-        ));
-    }
-    let owners: Vec<_> = (batch.members.iter().map(|m| m.owner))
-        .chain(
-            validations
-                .iter()
-                .map(|v| v.owner)
-                .filter(|owner| !is_member(owner)),
-        )
-        .collect();
+    let owners = derive::participants(&batch.members, validations, sources)?;
     let order = canonical(&owners)?;
     // Validate every member against its own owner before any fence.
-    let pin_plan = deps::plan_pins(&batch.members, validations);
+    let mut pin_plan = deps::plan_pins(&batch.members, validations);
     let mut planned = Vec::with_capacity(order.len());
     for owner in &order {
         let pins = pin_plan
             .get(&owner.owner.catalog_route().file_id)
             .cloned()
             .unwrap_or_default();
-        let payload = match batch.members.iter().find(|m| std::ptr::eq(m.owner, *owner)) {
-            Some(member) => {
-                owner.check_batch(&member.requests, &member.batch)?;
-                encode_payload_with(&member.batch, &pins)
-            }
-            None => deps::empty_payload(owner, &pins),
-        };
-        planned.push((recorded(owner), payload));
+        if let Some(member) = batch.members.iter().find(|m| std::ptr::eq(m.owner, *owner)) {
+            owner.check_batch(&member.requests, &member.batch)?;
+        }
+        planned.push((
+            recorded(owner),
+            derive::payload(owner, &batch.members, &pins),
+        ));
     }
-    let digest = sha256(
-        serde_json::json!({
+    let mut bound = serde_json::json!({
             "contract": CONTRACT,
             "batch_id": batch.batch_id,
             "principal": identity.principal,
@@ -234,10 +218,9 @@ pub fn commit_validated(
                 "payload": sha256(payload),
             })).collect::<Vec<_>>(),
             "validations": deps::describe(validations),
-        })
-        .to_string()
-        .as_bytes(),
-    );
+    });
+    derive::bind_sources(&mut bound, sources);
+    let digest = sha256(bound.to_string().as_bytes());
     let (_admissions, mut guards) = admit_all(&order)?;
     if let Some(existing) = journal(&guards[0], &batch.batch_id)? {
         if existing.digest != digest {
@@ -259,6 +242,18 @@ pub fn commit_validated(
     }
     deps::check_satisfied(&order, &guards, validations, &batch.members)?;
     deps::check_member_removals(&order, &guards, &batch.members, &pin_plan)?;
+    derive::prepare_members(
+        &order,
+        &mut guards,
+        &batch.members,
+        validations,
+        sources,
+        &mut pin_plan,
+    )?;
+    for ((_, payload), owner) in planned.iter_mut().zip(&order) {
+        let pins = pin_plan.get(&owner.owner.catalog_route().file_id);
+        *payload = derive::payload(owner, &batch.members, &pins.cloned().unwrap_or_default());
+    }
     let members: Vec<_> = planned.iter().map(|(r, _)| r.clone()).collect();
     let home = members[0].clone();
     let encoded = serde_json::to_string(&members).map_err(refuse)?;
@@ -323,19 +318,6 @@ pub fn commit_validated(
         Recovery::Published(vector) => Ok(vector),
         Recovery::Aborted => Err(refuse("committed batch reconciled as aborted")),
     }
-}
-
-/// [`commit_validated`] with SHACL-derived type dependencies (slice B):
-/// `sources` are owners enlisted ONLY as type sources for members' `sh:class`
-/// values. Default-off: with no sources nothing is derived.
-/// SLICE B WIP: sources are not yet consulted (rows-first stub).
-pub fn commit_derived(
-    batch: &ParticipantBatch<'_>,
-    validations: &[Validation<'_>],
-    sources: &[&GraphSetOwner],
-) -> Result<ReceiptVector> {
-    let _ = sources;
-    commit_validated(batch, validations)
 }
 
 /// Reconcile one batch after restart from durable state only (no caller
@@ -521,12 +503,14 @@ fn apply(
             .execute_batch("SAVEPOINT quipu_participant_apply")?;
         let outcome = (|| {
             let graphs_before = graphs_digest(store)?;
-            let txs = store.transact_graph_batches_tx(
-                &native,
-                &payload.timestamp,
-                payload.actor.as_deref(),
-                payload.source.as_deref(),
-            )?;
+            let txs = store.with_derived_type_context(&payload.pins.context, |store| {
+                store.transact_graph_batches_tx(
+                    &native,
+                    &payload.timestamp,
+                    payload.actor.as_deref(),
+                    payload.source.as_deref(),
+                )
+            })?;
             // The composed reader copies graph rows without a cut bound
             // (Phase 3 S3), which is sound only because a participant apply
             // writes facts and never graph rows. Enforce it, in this txn.

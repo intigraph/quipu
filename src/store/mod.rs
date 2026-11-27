@@ -224,6 +224,10 @@ pub struct Store {
     pub(crate) write_shapes: Option<String>,
     /// Explicit referenced-type dataset for one destination and operation.
     pub(crate) write_reference_graphs: Option<(i64, Vec<i64>)>,
+    /// Exact (subject, predicate, object) IRIs a participant batch derived
+    /// from enlisted type sources (aegis-n0wc.5 slice B): extra post-state
+    /// SHACL context for one operation, never facts and never focuses.
+    pub(crate) derived_type_context: Option<Vec<[String; 3]>>,
     /// Time spent in the post-state SHACL write gate since the last
     /// [`Store::take_poststate_profile`] (aegis-wlf0). Accumulated, never read
     /// by the gate itself, so it cannot change a write decision.
