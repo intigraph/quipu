@@ -28,6 +28,7 @@ pub mod agents;
 pub(crate) mod attestation;
 mod histogram;
 pub mod inflight;
+pub mod operations;
 mod search;
 use histogram::Hist;
 pub(crate) mod refusals;
@@ -155,6 +156,8 @@ pub struct Metrics {
     policy: Mutex<BTreeMap<String, u64>>,
     /// `/query` by declared agent (aegis-ufw); bounded, no task/endpoint dimension.
     agent_queries: agents::AgentQueryMetrics,
+    /// `/query` by declared operation (aegis-hg6); bounded allowlist, no task/endpoint dimension.
+    operation_queries: operations::OperationQueryMetrics,
     /// (client, task, endpoint template) -> (request count, summed seconds).
     clients: Mutex<BTreeMap<ClientTaskEndpoint, RequestObservation>>,
     /// Per-caller tails, sharing the counter's bounded identity but not its task dimension.
@@ -259,6 +262,11 @@ impl Metrics {
     /// Count a completed `/query` by its DECLARED agent (aegis-ufw); see [`agents`].
     pub fn observe_agent_query(&self, client: &str, ep: &str, agent: Option<&str>, secs: f64) {
         self.agent_queries.observe(client, ep, agent, secs);
+    }
+
+    /// Count a completed `/query` by its DECLARED operation (aegis-hg6); see [`operations`].
+    pub fn observe_operation_query(&self, client: &str, ep: &str, op: &'static str, secs: f64) {
+        self.operation_queries.observe(client, ep, op, secs);
     }
 
     /// Attribute one request's TIME to a caller (aegis-ma1hy).
@@ -424,6 +432,7 @@ impl Metrics {
         self.vector_retention.render(&mut out);
         self.write_provenance.render(&mut out);
         self.agent_queries.render(&mut out);
+        self.operation_queries.render(&mut out);
 
         out.push_str(
             "# HELP quipu_http_auth_refusals_total HTTP 401 responses by bounded client, route template and method.\n\

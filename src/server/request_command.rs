@@ -5,7 +5,9 @@
 //! no particular client or value a meaning in source: each client owns its own
 //! label vocabulary, and a deployment may name labels in its own configuration
 //! (`heavy_read_operations`). Cardinality is bounded generically by
-//! `declared_label_limit`. Never authorization, never a metric label.
+//! `declared_label_limit`. Never authorization, and never a metric label here:
+//! the only metric use of `x-quipu-operation` is the separate server-owned
+//! allowlist in [`quipu::metrics::operations`] (aegis-hg6).
 
 use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -19,6 +21,8 @@ pub(super) const OVERFLOW: &str = "_overflow";
 pub(super) struct CommandContext {
     source: Option<String>,
     operation: Option<String>,
+    /// Bounded `/query` metric label for the operation (aegis-hg6).
+    metric_operation: Option<&'static str>,
 }
 
 /// Distinct labels admitted to the log per field, for this process's lifetime.
@@ -67,6 +71,12 @@ impl CommandContext {
         self.operation.as_deref()
     }
 
+    /// The allowlisted metric label; a default context is `unlabelled`.
+    pub(super) fn metric_operation(&self) -> &'static str {
+        self.metric_operation
+            .unwrap_or(quipu::metrics::operations::UNLABELLED)
+    }
+
     pub(super) fn from_headers(headers: &axum::http::HeaderMap) -> Self {
         // Exactly one well-formed value, or UNKNOWN. A repeated header is
         // ambiguous and never resolved by picking one.
@@ -82,6 +92,12 @@ impl CommandContext {
         Self {
             source: one("x-quipu-source").map(str::to_owned),
             operation: one("x-quipu-operation").map(str::to_owned),
+            metric_operation: Some(quipu::metrics::operations::operation_label(
+                headers
+                    .get_all("x-quipu-operation")
+                    .iter()
+                    .map(axum::http::HeaderValue::as_bytes),
+            )),
         }
     }
 

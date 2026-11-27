@@ -168,3 +168,41 @@ fn response_and_cancellation_preserve_the_same_command_context() {
         assert!(!metrics.render(0, 0, 0, None).contains("st-stop_policy"));
     }
 }
+
+#[test]
+fn query_completion_counts_its_declared_operation_once_even_when_cancelled() {
+    for cancelled in [false, true] {
+        let metrics = quipu::metrics::Metrics::default();
+        let counters = Cancellations::default();
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        let mut guard = completion(&metrics, &counters, logs.clone());
+        guard.endpoint = "/query".into();
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("x-quipu-operation", "change-follow".parse().unwrap());
+        guard.command_context =
+            super::super::request_command::CommandContext::from_headers(&headers);
+        if !cancelled {
+            guard.finish(
+                200,
+                quipu::request_usage::AuthOutcome::NotRequired,
+                None,
+                false,
+            );
+        }
+        drop(guard);
+        let text = metrics.render(0, 0, 0, None);
+        assert!(text.contains(
+            "quipu_http_operation_query_requests_total{client=\"test-client\",operation=\"change-follow\"} 1\n"
+        ), "{text}");
+        assert!(!text.contains("operation=\"unlabelled\""), "{text}");
+    }
+    // A completion with no declaration is counted, as `unlabelled`.
+    let metrics = quipu::metrics::Metrics::default();
+    let counters = Cancellations::default();
+    let mut guard = completion(&metrics, &counters, Arc::new(Mutex::new(Vec::new())));
+    guard.endpoint = "/query".into();
+    drop(guard);
+    assert!(metrics.render(0, 0, 0, None).contains(
+        "quipu_http_operation_query_requests_total{client=\"test-client\",operation=\"unlabelled\"} 1\n"
+    ));
+}
