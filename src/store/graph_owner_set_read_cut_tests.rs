@@ -406,6 +406,24 @@ fn an_unselected_home_without_a_decision_or_with_another_identity_refuses() {
 }
 
 #[test]
+fn an_unselected_home_file_id_that_is_not_a_plain_name_refuses() {
+    // The recorded home file id becomes a path. Anything that could leave the
+    // participants' directory refuses before any file is opened.
+    for bad in ["../alpha", "sub/alpha", "..", ""] {
+        let cut = crashed_at(CrashPoint::AfterApply(1));
+        rusqlite::Connection::open(cut.root.join("beta.db"))
+            .unwrap()
+            .execute("UPDATE participant_intents SET home_file_id = ?1", [bad])
+            .unwrap();
+        let error = seen(&cut, &[B_DATA]).unwrap_err();
+        assert!(
+            error.to_string().contains("plain file name"),
+            "{bad:?}: {error}"
+        );
+    }
+}
+
+#[test]
 fn a_participant_apply_that_changes_graph_rows_refuses_and_applies_nothing() {
     // The composed reader copies graph rows without a cut bound, so a
     // participant apply must never change them. Force one (a trigger that

@@ -179,6 +179,11 @@ impl Owner {
     }
 
     /// This file's publication cut, decided by its batch's home journal.
+    ///
+    /// Limit: terms interned by an applied-but-unpublished batch stay
+    /// resolvable through the attached file's `terms` table. No fact at or
+    /// below the cut references them, so they never appear in an answer; a
+    /// reader can only observe that an IRI is interned, not any statement.
     fn published_head(
         owner: &Self,
         read: &CapturedRead<'_>,
@@ -198,12 +203,22 @@ impl Owner {
             Some(home) => home_published(&home.store.conn, &intent)?,
             None if decided.contains_key(&intent.batch_id) => decided[&intent.batch_id],
             None => {
+                // Self-written, but it becomes a path: refuse anything that
+                // could leave the participants' directory.
+                let file_id = &intent.home_file_id;
+                if file_id.is_empty()
+                    || file_id == "."
+                    || file_id == ".."
+                    || file_id.contains(['/', '\\', '\0'])
+                {
+                    return Err(refused("home participant file id is not a plain file name"));
+                }
                 let path = owner
                     .placement
                     .path
                     .parent()
                     .ok_or_else(|| refused("participant file has no directory"))?
-                    .join(format!("{}.db", intent.home_file_id));
+                    .join(format!("{file_id}.db"));
                 if !path.is_file() {
                     return Err(refused(
                         "home participant unavailable; the old cut is not provable",
@@ -214,7 +229,11 @@ impl Owner {
                     rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
                         | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
                 )?;
-                let published = home_published(&conn, &intent)?;
+                // One read transaction: identity and journal state come from
+                // the same snapshot, not two implicit ones.
+                let snapshot = conn.unchecked_transaction()?;
+                let published = home_published(&snapshot, &intent)?;
+                snapshot.commit()?;
                 decided.insert(intent.batch_id.clone(), published);
                 published
             }
