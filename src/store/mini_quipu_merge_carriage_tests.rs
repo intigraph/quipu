@@ -87,7 +87,7 @@ fn merge_as_applier(p: &mut Pair, headers: [Option<&str>; 5]) -> MergeBack {
 fn receipt_of(back: MergeBack) -> MergeReceipt {
     match back {
         MergeBack::Merged(r) | MergeBack::AlreadyApplied(r) => r,
-        other => panic!("expected a merge, got {other:?}"),
+        other @ MergeBack::Conflicts(_) => panic!("expected a merge, got {other:?}"),
     }
 }
 
