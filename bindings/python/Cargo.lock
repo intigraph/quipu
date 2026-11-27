@@ -1789,7 +1789,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.19.5"
+version = "0.19.6"
 dependencies = [
  "base64 0.22.1",
  "bigdecimal",
@@ -1834,7 +1834,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-kg"
-version = "0.19.5"
+version = "0.19.6"
 dependencies = [
  "pyo3",
  "quipu-ai",

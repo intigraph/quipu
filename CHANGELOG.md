@@ -43,6 +43,8 @@ are generated from the versioned release records.
 - *(store)* Later mini merges plan against the mini's merged head (#1363)([db9ed7d](https://github.com/scbrown/quipu/commit/db9ed7db7f66e0983a7030463211275078146d4d))
 - *(store)* Mini-Quipu M4, merges carry the writer's provenance (#1364)([203548c](https://github.com/scbrown/quipu/commit/203548c908ac9d0c1513b7cc7e6a1c3ac2d5e022))
 
+
+
 ### Documentation
 
 - *(readme)* One header image, current and planned capabilities (#1309)([dc44018](https://github.com/scbrown/quipu/commit/dc44018013bcc575e017b0d2e245923a9bdd573c))
@@ -56,6 +58,8 @@ are generated from the versioned release records.
 - *(pilot)* Enroll refuses a non-https witness endpoint startup would refuse (#1349)([46d6a3b](https://github.com/scbrown/quipu/commit/46d6a3bcf2a84a0e2743276fe72eef46d7c73843))
 - *(inferred)* Companion sourceKind tag writes the w3id term (#1353)([36b3090](https://github.com/scbrown/quipu/commit/36b3090c7631c703bed204576b2633d8993cd5b4))
 - *(server)* Size shed Retry-After by pool capacity, not free permits (#1367)([e3d2f52](https://github.com/scbrown/quipu/commit/e3d2f5293ddee91f7b549e99f4d11fdf2f3963b8))
+
+
 
 ### Testing
 
