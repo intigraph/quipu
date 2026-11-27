@@ -808,3 +808,6 @@ fn a_held_selected_writer_refuses_the_strict_read_and_an_unselected_one_does_not
     let after = run(&m, &BOTH, &query).unwrap();
     assert_eq!(values(&after, "v"), ["must-not-join"]);
 }
+
+#[path = "composition_cut_tests.rs"]
+mod cut;

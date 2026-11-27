@@ -12,6 +12,9 @@ mod batches;
 pub mod changes;
 #[cfg(unix)]
 pub(crate) mod composition;
+/// Composition-cut tokens; built on `graph_owner`'s captures, so unix only.
+#[cfg(unix)]
+pub mod composition_cut;
 pub mod conditional;
 pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]

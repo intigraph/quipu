@@ -451,3 +451,98 @@ fn a_participant_apply_that_changes_graph_rows_refuses_and_applies_nothing() {
         Err(error) => assert!(error.to_string().contains("home"), "{error}"),
     }
 }
+
+/// B4 x S3: capture a composition cut over the composed (publication-cut)
+/// reader and hand it, with the reads, to `check`.
+fn with_composed_cut<T>(
+    cut: &Cut,
+    graphs: &[&str],
+    check: impl FnOnce(&[CapturedRead<'_>], crate::store::composition_cut::CompositionCut) -> T,
+) -> T {
+    let mut out = None;
+    cut.dataset
+        .read_attached(graphs, deadline(), |reads, _checkout| {
+            let composition = crate::store::composition_cut::CompositionCut::capture(reads)?;
+            out = Some(check(reads, composition));
+            Ok(())
+        })
+        .unwrap();
+    out.unwrap()
+}
+
+#[test]
+fn a_composition_cut_names_the_published_head_never_an_unpublished_batch() {
+    // Both files applied the batch but its home has not published it: every
+    // composed reader sees the old cut, so the cursor must name the old cut.
+    let cut = crashed_at(CrashPoint::AfterApply(1));
+    let (old, applied) = with_composed_cut(&cut, &[A_DATA, B_DATA], |reads, composition| {
+        for read in reads {
+            assert!(
+                read.published_tx < read.local_tx,
+                "fixture: {} must hold a pending batch",
+                read.route.graph
+            );
+            let member = &composition.members()[&read.route.graph];
+            assert_eq!(member.local_tx, read.published_tx);
+        }
+        composition.admit(reads).unwrap();
+        assert!(composition.is_at_head(reads), "reads answer at the old cut");
+        // A cursor naming the applied (unpublished) head names writes no
+        // composed reader can see: it refuses, it is not "at head".
+        let mut value = serde_json::to_value(&composition).unwrap();
+        for read in reads {
+            value["members"][&read.route.graph]["local_tx"] = read.local_tx.into();
+        }
+        let ahead: crate::store::composition_cut::CompositionCut =
+            serde_json::from_value(value).unwrap();
+        let error = ahead.admit(reads).unwrap_err().to_string();
+        assert!(error.contains("ahead-of-head"), "{error}");
+        assert!(!ahead.is_at_head(reads));
+        (composition, ahead)
+    });
+    // Publishing moves the published head: the old cut is still admitted but
+    // is now behind head, and the applied coordinate becomes the head.
+    let (alpha, beta) = (owner(&cut, A_DATA), owner(&cut, B_DATA));
+    recover(&[alpha, beta], "batch-cut").unwrap();
+    with_composed_cut(&cut, &[A_DATA, B_DATA], |reads, composition| {
+        old.admit(reads).unwrap();
+        assert!(!old.is_at_head(reads));
+        applied.admit(reads).unwrap();
+        assert!(applied.is_at_head(reads));
+        assert_eq!(composition, applied);
+    });
+}
+
+#[test]
+fn admit_rechecks_shape_for_a_cut_that_skipped_from_token() {
+    let cut = fixture();
+    with_composed_cut(&cut, &[A_DATA, B_DATA], |reads, composition| {
+        let edit = |f: &dyn Fn(&mut serde_json::Value)| {
+            let mut value = serde_json::to_value(&composition).unwrap();
+            f(&mut value);
+            serde_json::from_value::<crate::store::composition_cut::CompositionCut>(value).unwrap()
+        };
+        let negative = edit(&|v| v["members"][A_DATA]["local_tx"] = (-1).into());
+        let error = negative.admit(reads).unwrap_err().to_string();
+        assert!(error.contains("negative local_tx"), "{error}");
+        let empty = edit(&|v| v["members"] = serde_json::json!({}));
+        let error = empty.admit(&[]).unwrap_err().to_string();
+        assert!(error.contains("(empty)"), "{error}");
+        let error = composition.admit(&[]).unwrap_err().to_string();
+        assert!(error.contains("(empty)"), "{error}");
+        let doubled: Vec<CapturedRead<'_>> = [&reads[0], &reads[0], &reads[1]]
+            .into_iter()
+            .map(|read| CapturedRead {
+                route: read.route,
+                catalog_revision: read.catalog_revision,
+                local_tx: read.local_tx,
+                published_tx: read.published_tx,
+                store: read.store,
+                legacy: read.legacy,
+            })
+            .collect();
+        let error = composition.admit(&doubled).unwrap_err().to_string();
+        assert!(error.contains("duplicate selected graph"), "{error}");
+        composition.admit(reads).unwrap();
+    });
+}
