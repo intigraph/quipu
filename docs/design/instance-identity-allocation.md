@@ -179,8 +179,13 @@ exits non-zero with a message naming the missing input when:
    valid UUID (deterministic classes cannot converge without it);
 6. the writer's bearer for the guarded write path is unset or empty. The writer
    never guesses identity headers or falls back to an unauthenticated route;
-7. the store's recorded install mode (below) disagrees with the configured
-   mode;
+7. the store's recorded install declaration (below) disagrees with the
+   configured identity inputs: `mode`, and `base` under `mode = "base"` or
+   `install_uuid` under `mode = "urn-uuid"`, each compared byte for byte.
+   Without this, an option-2 install whose configured `install_uuid` drifted
+   from the recorded one would pass every other refusal and silently mint
+   different UUIDs for the same deterministic key, breaking the convergence
+   of sections 3.3 and 4; a drifted `base` would do the same under option 1;
 8. the store holds **no** recorded install declaration. Allocation never
    creates the declaration implicitly; it is a precondition (below);
 9. the writer's scope entry is missing, its `visibility`/`audience` pair fails
@@ -196,7 +201,7 @@ configuration still recalls every stored record.
 ### Recorded install declaration
 
 Before any allocation, an operator records one declaration per install
-(mode, base or install UUID, visibility, timestamp, principal) in the
+(mode, base or install UUID, timestamp, principal) in the
 protected namespace registry graph `urn:quipu:graph:namespaces` through a
 local, explicit CLI apply step that **does not exist yet** (Quipu gap below).
 The current `quipu namespaces apply` (`src/entity_namespaces.rs` `apply`)
@@ -219,8 +224,9 @@ Only the per-scope entries of section 3.2 are namespace entries. Like
 **precondition**, not a side effect of the first write: a writer that finds
 no declaration refuses (refusal 8). Neither startup nor a writer ever writes
 it. Effective policy is
-config ∪ persisted, and disagreement refuses (the registry's existing rule),
-so dropping config cannot silently switch an install's identity mode.
+config ∪ persisted, and any disagreement in mode, base or install UUID
+refuses (refusal 7, mirroring the registry's existing rule), so neither
+dropping nor editing config can silently switch an install's identity.
 
 Quipu gaps to close in the implementation item (new code, not configuration):
 
@@ -234,7 +240,10 @@ Quipu gaps to close in the implementation item (new code, not configuration):
    unaffected; the declaration reader refuses more than one declaration
    subject, an unknown field, or a value that fails refusals 1–5. Read-back is
    exact: after apply, the declaration read returns the same mode and base
-   or install UUID byte for byte, or the apply reports failure.
+   or install UUID byte for byte, or the apply reports failure. Every
+   allocating writer reads this declaration before minting and applies
+   refusals 7 and 8 against it: absent refuses, and any byte difference in
+   mode, base or install UUID from the writer's configuration refuses.
 2. **URN-base entry kind.** The registry currently admits only HTTP(S) bases,
    while `namespace::require_base_ns` already admits `urn:`. Option 2 needs a
    registry entry kind with no base prefix (`mode = "urn-uuid"`,
@@ -246,7 +255,8 @@ Quipu gaps to close in the implementation item (new code, not configuration):
    (option 1), or carries that scope's allocation fact (option 2), is
    admitted only for that scope's owner principal; any other principal
    refuses with no write. The same check refuses a private-record scope
-   (section 3.1) declared public, at apply time and again at write time.
+   (section 3.1) declared public, at apply time and again at write time,
+   and refuses at apply any scope named `legacy-alias` (reserved, section 3.1).
    Today the registry checks types and graphs only; this admission and policy
    check is new code, and acceptance 4 tests it.
 
@@ -263,6 +273,11 @@ visibility, audience)*; a principal allocates only inside its own scope.
 | `shuttle` | shuttle exporter | run, workflow, event | install-chosen |
 | `shantytown` | shantytown gate writer | gate verdict, gate approval, GitHub entity mirror | install-chosen |
 | `camayoc` | `cy` record writer | memory record, topic | **private-record:** `private`, audience `org:<id>` or `personal:<id>` |
+
+The scope name `legacy-alias` is **reserved** and may never be registered as
+a scope: it is the first segment of the migration alias input (section 4),
+so reserving it keeps the alias and new-mint UUIDv5 input domains disjoint.
+Declaring a scope with that name refuses at apply.
 
 *Install-chosen* means the operator sets the pair on the scope entry, subject
 to the registry's test. *Private-record* scopes may never be public on any
@@ -361,7 +376,9 @@ converges on the alias target instead of minting a second `urn:uuid`:
 - **Random class:** no writer re-emits a random entity under its old key, so
   convergence by recomputation does not apply. The alias target is
   `UUIDv5(install_uuid, "legacy-alias\n<legacy IRI>")`, a separate input
-  domain that cannot equal any new-mint input. Re-running the migration
+  domain that cannot equal any new-mint input, because `legacy-alias` is a
+  reserved scope name (section 3.1) and every new-mint input begins with a
+  registered scope. Re-running the migration
   reads back the existing alias by the legacy IRI before writing, so it is
   idempotent.
 
@@ -430,7 +447,11 @@ it is option C in the ASK below, and it still requires a recorded
    refuses; a scope entry overlapping another scope entry or another install's
    namespace refuses; an install declaration that carries a base prefix
    (i.e. was written as a namespace entry) is refused; mode disagreeing with the
-   recorded declaration refuses; no recorded declaration refuses; a principal
+   recorded declaration refuses; on an option-2 install, a configured
+   `install_uuid` differing from the recorded one refuses with no write, and
+   on an option-1 install a configured `base` differing from the recorded one
+   refuses with no write; a scope named `legacy-alias` refuses at apply; no
+   recorded declaration refuses; a principal
    writing into another scope refuses; a private-record scope (`camayoc`)
    declared `visibility = "public"` or `audience = "public"` refuses at apply
    and at write; a `#`-terminated base refuses.
