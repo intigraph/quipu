@@ -205,6 +205,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // the reference set is meaningless without the identity it belongs to.
     ("mini_quipu_identity", Disposition::Excluded),
     ("mini_quipu_references", Disposition::Excluded),
+    // The home's merge-back receipts (R7 retry: merge id -> original tx ids),
+    // keyed to registry entries that are themselves Excluded. A reconstruction
+    // has new tx ids and no registry; importing a receipt must never answer a
+    // retry as already-applied.
+    ("mini_quipu_merges", Disposition::Excluded),
     // A replica's cursor into ONE source's history (the shared applier,
     // aegis-s24.2). A share of the replica is a different copy with no cursor
     // of its own: carrying it would let the copy splice a feed it never

@@ -188,9 +188,9 @@ jobs:
           grep -Fx 'test store::graph_router::tests::enrolled::tls::enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::enabled_startup_admits_two_enrolled_set_files_and_each_commits_while_the_other_is_held ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::one_unenrolled_set_file_refuses_the_whole_startup_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
-      # aegis-2g7f, aegis-6kf: mini-Quipu M1 registry entry and M2 materialize (docs/design/mini-quipu.md).
+      # aegis-2g7f, aegis-6kf, aegis-abt: mini-Quipu M1 registry entry, M2 materialize and M3 merge back (docs/design/mini-quipu.md).
       # Named-test proofs keep this step from passing on zero tests.
-      - name: Mini-Quipu fork registry entry, materialize and refusals X1-X6, X8
+      - name: Mini-Quipu fork registry entry, materialize, merge back and refusals
         if: runner.os == 'Linux'
         env:
           CARGO_BUILD_JOBS: 2
@@ -213,6 +213,18 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::x6_reference_write_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::x8_home_cursor_locally_and_local_cursor_at_home_refuse_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::a_home_refusal_leaves_no_file_and_no_entry ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::oracle_cases_plan_byte_identically_for_a_same_store_fork_and_a_mini_quipu ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::partial_modes_hold_the_conflict_and_apply_the_rest ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::sabotage_share_merge_inputs_fail_the_identical_plan_check ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::foreign_epoch_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::base_unavailable_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::base_mismatch_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::atomic_conflict_writes_nothing ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::r7_retry_reports_already_applied_and_the_base_advances ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::a_second_merge_after_a_written_one_refuses_naming_the_earlier_merge ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::the_same_input_under_another_mode_is_not_already_applied ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::different_resolutions_never_share_an_r7_key ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::a_decided_conflict_merge_refuses_by_name_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
       # classifier. P4: host and session are redacted, never omitted, for a
       # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.

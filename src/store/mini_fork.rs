@@ -160,6 +160,10 @@ pub struct MiniForkEntry {
     pub base_digest: String,
     /// Registry timestamp.
     pub created_at: String,
+    /// The mini-Quipu head `local_tx` the base was last advanced with by a
+    /// merge back (M3, design §2.3); `None` until the first merge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged_head: Option<i64>,
 }
 
 struct Plan<'a> {
@@ -372,6 +376,7 @@ fn record(store: &mut Store, plan: &Plan<'_>, request: &MiniForkRequest) -> Resu
             shapes_hash: shapes_hash(store, cut)?,
             base_digest: base_digest(&journals)?,
             created_at: request.created_at.clone(),
+            merged_head: None,
         };
         store.conn.execute(
             "INSERT INTO mini_quipu_forks (name, store_id, status, entry) VALUES (?1, ?2, 'open', ?3)",
@@ -466,6 +471,9 @@ pub use base::{base_digest, member_journal};
 
 #[path = "mini_quipu_local.rs"]
 pub mod local;
+
+#[path = "mini_quipu_merge.rs"]
+pub mod merge;
 
 #[cfg(test)]
 #[path = "mini_fork_tests.rs"]

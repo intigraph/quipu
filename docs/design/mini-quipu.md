@@ -168,11 +168,24 @@ unchanged:
    merge units follow §6 of the oracle. A held slot is not received.
 
 Retry needs no new journal (B6). Merging the same input again with the same
-decisions reports `already-applied` with the original transaction IDs (R7). If
-a reply is lost, the caller reads back by merge id, which is the existing
-read-back UNKNOWN contract, before it tries again.
+mode and resolutions reports `already-applied` with the original transaction
+IDs (R7). If a reply is lost, the caller reads back by merge id, which is the
+existing read-back UNKNOWN contract, before it tries again.
 
-Several merges from one mini-Quipu are allowed. After a merge, the registry
+**M3 limits (sattler ruling on #1318, 2026-11-27): both fail closed, nothing written.**
+
+- *Decided conflict merges refuse* (`decided-bounded-base`). Deciding a conflict
+  closes a value, and advancing the base over that bounded interval is not
+  supported yet, so the whole merge rolls back. R7 is therefore proven for
+  undecided merges only. Bounded base intervals are the next aegis-abt slice.
+- *A second merge after a merge that wrote refuses* (`second-merge`, naming the
+  earlier merge id). Advancing the base to the home head folds in home-only
+  changes the mini never saw and keeps held slots at ours, so a later merge
+  would land the mini's stale values as one-sided changes. Re-fork from
+  current home. This departs from the next paragraph as an INTERIM, pending a
+  recorded design ruling on later merges.
+
+Several merges from one mini-Quipu are allowed (see the interim limit above). After a merge, the registry
 entry's base advances to that merge's home `decide` (or `receive`)
 coordinate, paired with the mini-Quipu head that was merged. The next merge is
 then three-way against that new base. This is the same rule as a later apply
