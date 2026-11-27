@@ -512,3 +512,81 @@ async fn s2_a_policy_path_swapped_onto_a_data_inode_never_answers() {
     let (status, _, body) = read(&app, ask_title()).await;
     assert_ne!(status, StatusCode::OK, "{body}");
 }
+
+/// S5 (time-of-check/time-of-use): authority that changes AFTER the cut
+/// opened and the query ran, but BEFORE the recheck, refuses the read. The
+/// barrier runs at exactly that point, synchronously; no sleeps. The positive
+/// control is the same barrier changing nothing.
+#[tokio::test]
+async fn s5_authority_changed_between_open_and_recheck_refuses_the_read() {
+    let f = fx();
+    f.write(CREATE);
+    let barrier_app = |barrier: Arc<dyn Fn() + Send + Sync>| {
+        routes_with_recheck_barrier(
+            f.router,
+            f.files.clone(),
+            f.config.clone(),
+            f.admission.clone(),
+            barrier,
+        )
+        .unwrap()
+    };
+    let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    // Positive control: the barrier runs and changes nothing -> 200.
+    let counted = ran.clone();
+    let control = barrier_app(Arc::new(move || {
+        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }));
+    let (status, _, body) = read(&control, ask_title()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["boolean"], true);
+    assert_eq!(
+        ran.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "barrier ran"
+    );
+    // Registry credential removed at the barrier -> refused, no answer body.
+    let registry = f.config.registry.clone();
+    let counted = ran.clone();
+    let unregistered = barrier_app(Arc::new(move || {
+        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        fs::write(&registry, r#"{"version":1,"credentials":[]}"#).unwrap();
+    }));
+    let (status, _, body) = read(&unregistered, ask_title()).await;
+    assert_eq!(
+        ran.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "barrier ran"
+    );
+    assert_ne!(status, StatusCode::OK, "{body}");
+    assert!(body.get("boolean").is_none(), "no answer escaped: {body}");
+    fs::write(&f.config.registry, registry_body()).unwrap();
+    assert_eq!(
+        read(&control, ask_title()).await.0,
+        StatusCode::OK,
+        "restored"
+    );
+    // Grant revoked at the barrier -> refused, no answer body.
+    let path = f.config.policy.policy_path.clone();
+    let revoked = std::sync::Mutex::new(Some(f.grant));
+    let counted = ran.clone();
+    let revoking = barrier_app(Arc::new(move || {
+        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Some(mut grant) = revoked.lock().unwrap().take() {
+            grant.revision = 2;
+            grant.revoked = true;
+            OwnerReadPolicy::open(&path, "urn:owner")
+                .unwrap()
+                .apply(&grant, "revoke at the recheck barrier")
+                .unwrap();
+        }
+    }));
+    let (status, _, body) = read(&revoking, ask_title()).await;
+    assert_eq!(
+        ran.load(std::sync::atomic::Ordering::SeqCst),
+        4,
+        "barrier ran"
+    );
+    assert_ne!(status, StatusCode::OK, "{body}");
+    assert!(body.get("boolean").is_none(), "no answer escaped: {body}");
+}

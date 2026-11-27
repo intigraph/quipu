@@ -58,6 +58,10 @@ struct Serving {
     files: Arc<Vec<PathBuf>>,
     config: ReadConfig,
     admission: ComposedReadAdmission,
+    /// Test barrier run after evaluation and BEFORE the policy/identity
+    /// recheck, so a test can change authority at exactly that point.
+    #[cfg(test)]
+    before_recheck: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 #[derive(Deserialize)]
@@ -88,6 +92,31 @@ pub(crate) fn routes(
     config: ReadConfig,
     admission: ComposedReadAdmission,
 ) -> Result<Router, AppError> {
+    mount(router, files, config, admission, |serving| serving)
+}
+
+/// [`routes`] with a barrier between evaluation and the recheck (tests only).
+#[cfg(test)]
+fn routes_with_recheck_barrier(
+    router: &'static GraphSetRouter,
+    files: Vec<PathBuf>,
+    config: ReadConfig,
+    admission: ComposedReadAdmission,
+    barrier: Arc<dyn Fn() + Send + Sync>,
+) -> Result<Router, AppError> {
+    mount(router, files, config, admission, |mut serving| {
+        serving.before_recheck = Some(barrier);
+        serving
+    })
+}
+
+fn mount(
+    router: &'static GraphSetRouter,
+    files: Vec<PathBuf>,
+    config: ReadConfig,
+    admission: ComposedReadAdmission,
+    finish: impl FnOnce(Serving) -> Serving,
+) -> Result<Router, AppError> {
     if config.timeout.is_zero() || config.timeout > Duration::from_secs(30) {
         return Err(refuse("bounded graph-set read timeout required"));
     }
@@ -97,12 +126,14 @@ pub(crate) fn routes(
     Ok(Router::new()
         .route("/graph-sets/query", post(query))
         .layer(axum::extract::DefaultBodyLimit::max(131_072))
-        .with_state(Serving {
+        .with_state(finish(Serving {
             router,
             files: Arc::new(files),
             config,
             admission,
-        }))
+            #[cfg(test)]
+            before_recheck: None,
+        })))
 }
 
 fn refuse(message: &str) -> AppError {
@@ -214,6 +245,10 @@ async fn query(
                 }
                 let view = authorized.open_composed_cut(reads, permit, now, deadline)?;
                 let output = view.query(&input.query, false, now)?;
+                #[cfg(test)]
+                if let Some(barrier) = &serving.before_recheck {
+                    barrier();
+                }
                 separate_policy_files(&serving.files, &serving.config)?;
                 let current = serving.config.policy.open_policy()?.snapshot()?;
                 let who = identity(&serving.config.registry, &header, &evidence)?;
