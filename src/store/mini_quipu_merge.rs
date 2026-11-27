@@ -104,6 +104,12 @@ pub enum MergeRefusal {
     /// keeps any held slot at ours), so a second merge would land the mini's
     /// stale values as one-sided changes. Re-fork from current home.
     SecondMerge,
+    /// A decided merge closes a value, and advancing the base over that
+    /// bounded interval is not supported yet (next aegis-abt slice). The
+    /// whole merge rolls back: fail closed.
+    DecidedBoundedBase,
+    /// The caller's decisions hash already names different resolutions.
+    DecisionsHashReused,
 }
 
 impl MergeRefusal {
@@ -116,6 +122,8 @@ impl MergeRefusal {
             Self::BaseMismatch => "base-mismatch",
             Self::X4MovedOwner => "x4-multi-file",
             Self::SecondMerge => "second-merge",
+            Self::DecidedBoundedBase => "decided-bounded-base",
+            Self::DecisionsHashReused => "decisions-hash-reused",
         }
     }
 }
@@ -162,7 +170,9 @@ pub struct MergeReceipt {
 pub enum MergeBack {
     /// Written through the home write gate in one savepoint.
     Merged(MergeReceipt),
-    /// R7: the same input with the same decisions was merged before.
+    /// R7: the same input, mode and resolutions were merged before. Proven
+    /// for undecided merges only: a decided merge that closes a value
+    /// refuses (`decided-bounded-base`), so it never reaches R7.
     AlreadyApplied(MergeReceipt),
     /// Atomic mode and undecided conflicts. Nothing was written.
     Conflicts(Vec<DecisionRecord>),
@@ -175,13 +185,30 @@ pub enum MergeBack {
 mod plan;
 use plan::{open_theirs, plan_member};
 
-/// Steps 1, 2 and 4, reading only. Returns the mini file.
-fn admit(
-    home: &Store,
-    catalog: &GraphSetCatalog,
-    path: &Path,
-    entry: &MiniForkEntry,
-) -> Result<Store> {
+/// Step 4: every writable member is still on the recorded home owner and
+/// generation (X4).
+fn x4(catalog: &GraphSetCatalog, entry: &MiniForkEntry) -> Result<()> {
+    let selected: Vec<&str> = entry.writable.iter().map(String::as_str).collect();
+    let groups = catalog.plan_read(&selected).map_err(|_| {
+        refused(
+            MergeRefusal::X4MovedOwner,
+            "a writable member left the catalog",
+        )
+    })?;
+    if groups.len() != 1
+        || groups[0].owner.store_id != entry.base.store_id
+        || groups[0].owner.generation != entry.base.owner_generation
+    {
+        return Err(refused(
+            MergeRefusal::X4MovedOwner,
+            "writable members are no longer on the recorded home owner and generation",
+        ));
+    }
+    Ok(())
+}
+
+/// Steps 1 and 2, reading only. Returns the mini file.
+fn admit(home: &Store, path: &Path, entry: &MiniForkEntry) -> Result<Store> {
     let open: Option<String> = home
         .conn
         .query_row(
@@ -227,22 +254,6 @@ fn admit(
             "the rebuilt base differs from the recorded digest",
         ));
     }
-    let selected: Vec<&str> = entry.writable.iter().map(String::as_str).collect();
-    let groups = catalog.plan_read(&selected).map_err(|_| {
-        refused(
-            MergeRefusal::X4MovedOwner,
-            "a writable member left the catalog",
-        )
-    })?;
-    if groups.len() != 1
-        || groups[0].owner.store_id != entry.base.store_id
-        || groups[0].owner.generation != entry.base.owner_generation
-    {
-        return Err(refused(
-            MergeRefusal::X4MovedOwner,
-            "writable members are no longer on the recorded home owner and generation",
-        ));
-    }
     Ok(mini)
 }
 
@@ -254,7 +265,7 @@ fn merge(
 ) -> Result<MergeBack> {
     let entry = super::mini_fork_entry(home, req.name)?
         .ok_or_else(|| refused(MergeRefusal::RegistryClosed, "no such registry entry"))?;
-    let mini = admit(home, catalog, path, &entry)?;
+    let mini = admit(home, path, &entry)?;
     let incoming = format!(
         "{}@{}#{}",
         entry.store_id,
@@ -317,6 +328,8 @@ fn merge(
         // Step 3: current home write authority. The fence is checked here,
         // and every gate of the write pipeline binds `receive` and `decide`.
         home.ensure_ownership_writable()?;
+        // Step 4 after step 3 (design order): one home owner, current generation.
+        x4(catalog, &entry)?;
         home.conn.execute_batch(&format!("SAVEPOINT {SAVEPOINT}"))?;
         let key = [
             incoming.as_str(),
@@ -401,8 +414,34 @@ fn write(
             .push(tx);
         }
     }
-    advance(home, entry, &receipt, mini.latest_tx_id()?)?;
+    advance(home, entry, &receipt, mini.latest_tx_id()?).map_err(|error| {
+        if req.decided.is_some() {
+            refused(
+                MergeRefusal::DecidedBoundedBase,
+                &format!(
+                    "the decided merge closes a value and the base cannot advance over a \
+                     bounded interval yet ({error})"
+                ),
+            )
+        } else {
+            error
+        }
+    })?;
     home.conn.execute_batch(MERGES)?;
+    let taken: Option<String> = home
+        .conn
+        .query_row(
+            "SELECT resolved FROM mini_quipu_merges WHERE merge_id = ?1",
+            [merge_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if taken.is_some_and(|other| other != resolved) {
+        return Err(refused(
+            MergeRefusal::DecisionsHashReused,
+            "this decisions hash already named different resolutions",
+        ));
+    }
     home.conn.execute(
         "INSERT INTO mini_quipu_merges (merge_id, name, incoming, decisions, mode, resolved, \
          receipt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",

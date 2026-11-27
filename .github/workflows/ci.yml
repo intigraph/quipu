@@ -218,6 +218,10 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::base_mismatch_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::atomic_conflict_writes_nothing ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::r7_retry_reports_already_applied_and_the_base_advances ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::a_second_merge_after_a_written_one_refuses_naming_the_earlier_merge ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::the_same_input_under_another_mode_is_not_already_applied ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::different_resolutions_never_share_an_r7_key ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::a_decided_conflict_merge_refuses_by_name_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
       # classifier. P4: host and session are redacted, never omitted, for a
       # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.

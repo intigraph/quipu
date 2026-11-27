@@ -619,3 +619,41 @@ fn different_resolutions_never_share_an_r7_key() {
         super::resolved_digest(Some(&swapped))
     );
 }
+
+/// Review c0dd94 1 (sattler ruling: ship fail-closed): a decided conflict
+/// merge closes a value, the base cannot advance over that bounded interval
+/// yet, so the whole merge refuses by name and writes nothing.
+#[test]
+fn a_decided_conflict_merge_refuses_by_name_with_nothing_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let x = "urn:x";
+    let mut p = pair(
+        dir.path(),
+        &[a(x, ONE, "a", T0)],
+        &[r(x, ONE, "a"), a(x, ONE, "b", TO)],
+        &[r(x, ONE, "a"), a(x, ONE, "c", TT)],
+    );
+    let key = {
+        let st = &p.home.legacy;
+        (
+            st.lookup(x).unwrap().unwrap(),
+            st.lookup(ONE).unwrap().unwrap(),
+        )
+    };
+    let theirs = ForkResolutions::from([(key, vec![Value::Str("c".into())])]);
+    let req = MergeRequest {
+        decided: Some((&theirs, "decisions", "reviewer")),
+        ..request()
+    };
+    let (home0, mini0) = (footprint(&p.home.legacy), footprint(p.mini.store()));
+    let path = p.path.clone();
+    let err = merge_on_legacy(&p.home.catalog, &mut p.home.legacy, &path, &req).unwrap_err();
+    assert!(err.to_string().contains("decided-bounded-base"), "{err}");
+    assert!(err.to_string().contains("nothing was written"), "{err}");
+    assert_eq!(
+        footprint(&p.home.legacy),
+        home0,
+        "a refused decided merge wrote at home"
+    );
+    assert_eq!(footprint(p.mini.store()), mini0);
+}
