@@ -160,10 +160,47 @@ pub struct MiniForkEntry {
     pub base_digest: String,
     /// Registry timestamp.
     pub created_at: String,
-    /// The mini-Quipu head `local_tx` the base was last advanced with by a
-    /// merge back (M3, design §2.3); `None` until the first merge.
+    /// The mini-Quipu head `local_tx` of the last merge back that wrote at
+    /// home (design §2.3); `None` until then. A later merge of a NEW head
+    /// plans against the mini-Quipu's own state at this head.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merged_head: Option<i64>,
+    /// The last merge back that wrote at home, for later merges and for the
+    /// remainder of a partial merge (oracle §6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_merge: Option<LastMerge>,
+}
+
+/// What a later merge needs from the last merge that wrote at home.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LastMerge {
+    /// Its merge id; a later merge or a remainder names it.
+    pub merge_id: String,
+    /// Its incoming coordinate (`store_id@log_epoch#local_tx`).
+    pub incoming: String,
+    /// Slots it held back; a NEW incoming refuses while this is non-zero.
+    pub held: usize,
+    /// The base it planned against, which its remainder reuses.
+    pub base: MergeBase,
+    /// Digest of the mini-Quipu's live writable members at its head: the
+    /// base of the next merge of a new head.
+    pub head_digest: String,
+}
+
+/// The base a merge planned against.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub enum MergeBase {
+    /// The registry's home cut (`base`, `base_digest`).
+    Home,
+    /// The mini-Quipu's own state at a merged head, with its digest.
+    Mini {
+        /// Mini-Quipu `local_tx`.
+        head: i64,
+        /// [`live_digest`] at that head.
+        digest: String,
+    },
 }
 
 struct Plan<'a> {
@@ -377,6 +414,7 @@ fn record(store: &mut Store, plan: &Plan<'_>, request: &MiniForkRequest) -> Resu
             base_digest: base_digest(&journals)?,
             created_at: request.created_at.clone(),
             merged_head: None,
+            last_merge: None,
         };
         store.conn.execute(
             "INSERT INTO mini_quipu_forks (name, store_id, status, entry) VALUES (?1, ?2, 'open', ?3)",
@@ -467,7 +505,7 @@ impl GraphSetOwner {
 #[path = "mini_fork_base.rs"]
 mod base;
 use base::shapes_hash;
-pub use base::{base_digest, member_journal};
+pub use base::{base_digest, live_digest, member_journal};
 
 #[path = "mini_quipu_local.rs"]
 pub mod local;
