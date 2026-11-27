@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use parking_lot::FairMutex;
 #[path = "resolution_cache.rs"]
-mod resolution_cache;
+pub(crate) mod resolution_cache;
 #[path = "writer_timing.rs"]
 pub(crate) mod writer_timing;
 

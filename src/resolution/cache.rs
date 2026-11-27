@@ -1,5 +1,6 @@
 //! One shared label snapshot, maintained only from complete committed changes.
 use super::LabelIndex;
+use super::cache_counters::{self as count, Cleared, Lookup, Warm};
 use crate::{
     error::Result,
     namespace,
@@ -53,10 +54,12 @@ pub(crate) struct CachedLabels {
 /// Cold/stale requests use the original exact scan until the off-request warmer
 /// publishes a current snapshot. They never wait for or serve a stale snapshot.
 pub(super) fn get(store: &Store) -> Result<Arc<LabelIndex>> {
-    if !store.resolution_config.cache_labels || !store.attachments.is_empty() {
+    let why = if !store.resolution_config.cache_labels || !store.attachments.is_empty() {
         *store.resolution_cache.lock() = None;
+        Lookup::ScanDisabled
     } else if store.conn.is_autocommit() {
         let Ok(key) = Key::of(store) else {
+            count::lookup(Lookup::ScanKeyError);
             return Ok(Arc::new(LabelIndex::scan(store)?));
         };
         let resident = store
@@ -66,13 +69,21 @@ pub(super) fn get(store: &Store) -> Result<Arc<LabelIndex>> {
             .map(|c| (c.key.clone(), c.index.clone()));
         if let Some((cached, index)) = resident {
             if cached == key {
+                count::lookup(Lookup::Hit);
                 return Ok(index);
             }
             if let Some(index) = advance(store, &cached, &index, &key)? {
+                count::lookup(Lookup::CatchUp);
                 return Ok(index);
             }
+            Lookup::ScanUncertified
+        } else {
+            Lookup::ScanCold
         }
-    }
+    } else {
+        Lookup::ScanInTransaction
+    };
+    count::lookup(why);
     Ok(Arc::new(LabelIndex::scan(store)?))
 }
 
@@ -129,15 +140,18 @@ impl Store {
         if let Some((cached, index)) = resident
             && (cached == key || advance(self, &cached, &index, &key)?.is_some())
         {
+            count::warm(Warm::Current);
             return Ok(true);
         }
         let index = Arc::new(LabelIndex::scan(self)?);
         // A write between generation and scan must not stamp old labels with a
         // new transaction id. A failed publication simply leaves the scan path.
         if Key::of(self)? != key {
+            count::warm(Warm::Discarded);
             return Ok(false);
         }
         *self.resolution_cache.lock() = Some(CachedLabels { key, index });
+        count::warm(Warm::Published);
         Ok(true)
     }
 }
@@ -147,6 +161,7 @@ impl Store {
 pub(crate) fn maintain(store: &Store, effective: Option<&[Datum]>, tx: i64) {
     if let Err(error) = maintain_checked(store, effective, tx) {
         *store.resolution_cache.lock() = None;
+        count::cleared(Cleared::Error);
         eprintln!("resolution label cache invalidated: {error}");
     }
 }
@@ -162,10 +177,15 @@ fn maintain_checked(store: &Store, effective: Option<&[Datum]>, tx: i64) -> Resu
         };
         cached
     };
+    // From here the resident snapshot has been TAKEN: every early return
+    // leaves the shared cache empty until the warmer republishes, so each
+    // one is counted with its reason.
     let Some(effective) = effective else {
+        count::cleared(Cleared::UnknownEffects);
         return Ok(());
     };
     if !store.resolution_config.cache_labels || !store.conn.is_autocommit() {
+        count::cleared(Cleared::NotCacheable);
         return Ok(());
     }
     let before: i64 = store.conn.query_row(
@@ -180,10 +200,12 @@ fn maintain_checked(store: &Store, effective: Option<&[Datum]>, tx: i64) -> Resu
         || cached.key.attachments != key.attachments
         || cached.key.epoch != key.epoch
     {
+        count::cleared(Cleared::NotPredecessor);
         return Ok(());
     }
     let same_as = store.lookup_all(&format!("{}sameAs", namespace::OWL))?;
     if effective.iter().any(|d| same_as.contains(&d.attribute)) {
+        count::cleared(Cleared::SameAs);
         return Ok(());
     }
     let labels = store.lookup_all(&format!("{}label", namespace::RDFS))?;
