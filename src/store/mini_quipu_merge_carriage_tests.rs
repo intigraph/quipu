@@ -88,6 +88,8 @@ fn receipt_of(back: MergeBack) -> MergeReceipt {
     match back {
         MergeBack::Merged(r) | MergeBack::AlreadyApplied(r) => r,
         other @ MergeBack::Conflicts(_) => panic!("expected a merge, got {other:?}"),
+        #[cfg(feature = "shacl")]
+        other @ MergeBack::Refused(_) => panic!("expected a merge, got {other:?}"),
     }
 }
 
