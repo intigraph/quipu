@@ -171,11 +171,19 @@ pub(in super::super) fn replay<T>(
     }
 }
 
-/// After PUBLISHED and the fence release (dearing c71): verify each judged
-/// member against the shape BYTES its intent carried, and record when the
-/// current shapes differ. Never refuses and never re-fences: a failure can
-/// only mean a corrupt intent or a replay bug, so it is a loud, durable
-/// 'verify-failed' record (and a server-log line) while the member stays applied.
+/// After PUBLISHED (dearing c71): verify each judged member against the shape
+/// BYTES its intent carried, and record when the current shapes differ. Never
+/// refuses and never re-fences: a failure can only mean a corrupt intent or a
+/// replay bug, so it is a loud, durable 'verify-failed' record (and a
+/// server-log line) while the member stays applied. A pass is a durable
+/// 'verified' record, so every judged member ends with exactly one outcome.
+///
+/// Runs BEFORE the fence release (eph-review-0dd73c #1): the audit is the only
+/// check a judged member gets after COMMIT, and a crash before its outcome row
+/// must leave an applied intent behind so recovery is forced through the
+/// published arm, which calls [`audit_pending`]. Reads already see the new cut
+/// once the home journal is published, so holding the fences here costs no
+/// read visibility, and writes are excluded by the held writers anyway.
 pub(in super::super) fn audit(
     guards: &mut [Guard<'_>],
     batch_id: &str,
@@ -183,28 +191,98 @@ pub(in super::super) fn audit(
     intents: &[(IntentRow, Decoded)],
 ) {
     for ((store, (_, payload)), member) in guards.iter_mut().zip(intents).zip(members) {
-        let Some((judged, bytes)) = &payload.pins.shapes else {
+        audit_member(store, batch_id, member, payload);
+    }
+}
+
+/// Recovery of a PUBLISHED batch: audit every judged member that has no
+/// outcome row yet, from its durable intent alone. Idempotent: a member that
+/// already carries 'verified' or 'verify-failed' is not re-verified. An intent
+/// that cannot be read or no longer matches the home journal is itself a loud
+/// 'verify-failed' record; it never refuses the release.
+pub(in super::super) fn audit_pending(
+    guards: &mut [Guard<'_>],
+    batch_id: &str,
+    members: &[Recorded],
+    digest: &str,
+) {
+    for (index, (store, member)) in guards.iter_mut().zip(members).enumerate() {
+        if audited(store, batch_id) {
             continue;
-        };
-        let current = shapes_of(store)
-            .ok()
-            .flatten()
-            .map(|s| sha256(s.as_bytes()));
-        if current.as_ref() != Some(judged) {
-            let detail = format!(
-                "judged under {judged} (bytes carried), current {}",
-                current.as_deref().unwrap_or("none")
-            );
-            note(
-                store,
-                batch_id,
-                "shapes-delta",
-                judged,
-                current.as_deref(),
-                &detail,
-            );
         }
-        if let Err(problem) = verify(store, payload, judged, bytes) {
+        let decoded = match intent(store, batch_id) {
+            Ok(Some(row))
+                if row.batch_digest == digest
+                    && row.member == index as i64
+                    && row.digest
+                        == intent_digest(digest, index, row.expected_head, &row.payload) =>
+            {
+                decode_payload(&row.payload).map_err(|error| error.to_string())
+            }
+            Ok(Some(_)) => Err("intent no longer matches the home journal".into()),
+            Ok(None) => Err("published batch lacks this member's intent".into()),
+            Err(error) => Err(error.to_string()),
+        };
+        match decoded {
+            Ok(payload) => audit_member(store, batch_id, member, &payload),
+            Err(problem) => {
+                let detail = format!("member {}: {problem}; cannot audit", member.file_id);
+                eprintln!("quipu participant audit FAILED batch={batch_id} {detail}");
+                note(store, batch_id, "verify-failed", "unknown", None, &detail);
+            }
+        }
+    }
+}
+
+/// Whether this member already has an audit outcome for the batch. An
+/// unreadable answer counts as not audited: a repeat audit only rewrites rows.
+fn audited(store: &Store, batch_id: &str) -> bool {
+    store
+        .conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM participant_audit WHERE batch_id=?1 \
+             AND kind IN ('verified','verify-failed'))",
+            [batch_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(false)
+}
+
+fn audit_member(store: &mut Store, batch_id: &str, member: &Recorded, payload: &Decoded) {
+    let Some((judged, bytes)) = &payload.pins.shapes else {
+        return;
+    };
+    let current = shapes_of(store)
+        .ok()
+        .flatten()
+        .map(|s| sha256(s.as_bytes()));
+    if current.as_ref() != Some(judged) {
+        let detail = format!(
+            "judged under {judged} (bytes carried), current {}",
+            current.as_deref().unwrap_or("none")
+        );
+        note(
+            store,
+            batch_id,
+            "shapes-delta",
+            judged,
+            current.as_deref(),
+            &detail,
+        );
+    }
+    match verify(store, payload, judged, bytes) {
+        Ok(()) => note(
+            store,
+            batch_id,
+            "verified",
+            judged,
+            current.as_deref(),
+            &format!(
+                "member {}: verifies under the carried shapes",
+                member.file_id
+            ),
+        ),
+        Err(problem) => {
             let detail = format!("member {}: {problem}; stays applied", member.file_id);
             eprintln!("quipu participant audit FAILED batch={batch_id} {detail}");
             note(

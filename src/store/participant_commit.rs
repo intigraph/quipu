@@ -459,8 +459,8 @@ fn reconcile(
                 Ok(())
             })?;
             crash(CrashPoint::AfterPublish)?;
-            release(guards, batch_id)?;
             derive::audit(guards, batch_id, &members, &intents);
+            release(guards, batch_id)?;
             Ok(Recovery::Published(vector))
         }
         "published" => {
@@ -471,6 +471,7 @@ fn reconcile(
                     .ok_or_else(|| refuse("published journal lacks receipts"))?,
             )
             .map_err(|_| refuse("damaged published receipts"))?;
+            derive::audit_pending(guards, batch_id, &members, &existing.digest);
             release(guards, batch_id)?;
             Ok(Recovery::Published(vector))
         }

@@ -32,7 +32,7 @@ const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 mod replay;
 #[cfg(feature = "shacl")]
 use replay::budget;
-pub(super) use replay::{audit, recheck_shapes, replay};
+pub(super) use replay::{audit, audit_pending, recheck_shapes, replay};
 #[cfg(all(test, feature = "shacl"))]
 pub use replay::{
     with_before_decision, with_before_decision_on, with_prepare_budget, with_slow_dry_run,
@@ -185,6 +185,10 @@ pub(super) fn prepare_members(
                                 derived.insert((f.graph.clone(), f.triple.clone()));
                             }
                         }
+                        // The bound counts distinct checks (source reads), deduped
+                        // across members. Pins are per dependent file, so N members
+                        // deriving one triple write N pins for 1 check
+                        // (eph-review-0dd73c #3): each pin guards its own dependent.
                         let total = declared_count + derived.len();
                         if total > MAX_DEPENDENCY_CHECKS {
                             return Err(refuse(format!(
@@ -318,6 +322,15 @@ pub(super) fn dry_run(store: &mut Store, batch: &Delta<'_>, context: &[[String; 
 
 /// (value, class) for every current asserted reference the member writes on
 /// a predicate some `sh:class` constrains.
+///
+/// Deliberately conservative (eph-review-d2b162 #3, eph-review-0dd73c #2):
+/// this does not narrow to the (focus, value) pairs the refusing report
+/// names, nor skip values the member's own post-state already types. Every
+/// candidate a source can type is pinned, which can over-pin the source (a
+/// later retraction of that type is refused until the pin clears) and can
+/// reach [`MAX_DEPENDENCY_CHECKS`] sooner than strictly needed. Both failure
+/// modes refuse; neither admits an unverified write. Narrowing needs the
+/// validation report parsed per focus and is follow-up work.
 #[cfg(feature = "shacl")]
 fn candidates(
     store: &Store,

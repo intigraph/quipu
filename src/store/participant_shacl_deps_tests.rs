@@ -761,7 +761,7 @@ fn c1_post_a_recovery_after_a_reload_replays_releases_and_verifies_under_carried
     let rows = audit_rows(&files);
     assert_eq!(
         rows.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
-        ["shapes-delta"],
+        ["shapes-delta", "verified"],
         "{rows:?}"
     );
     assert!(rows[0].1.contains("bytes carried"), "{rows:?}");
@@ -808,6 +808,48 @@ fn c1_post_b_corrupt_carried_shapes_still_apply_release_and_raise_the_loud_recor
             .any(|(k, d)| k == "verify-failed" && d.contains("member alpha")),
         "{rows:?}"
     );
+}
+
+/// eph-review-0dd73c #1: the audit is the only check a judged member gets
+/// after COMMIT, so it must survive a crash once the journal says published.
+/// Crash at `AfterPublish` (before the audit and the release): recovery takes
+/// the published arm, which must audit the member before releasing it, and a
+/// second recovery must not audit it again.
+#[test]
+fn c1_post_c_a_crash_after_publish_still_audits_the_judged_member_on_recovery() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, ACTION)]);
+    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    let batch = b1_batch(&files, &alpha, &beta, "batch-c1-pub");
+    let error = as_writer(|| {
+        with_crash(CrashPoint::AfterPublish, || {
+            commit_derived(&batch, &[], &[&gamma])
+        })
+    })
+    .unwrap_err();
+    assert!(injected(&error), "{error}");
+    drop((alpha, beta, gamma));
+    assert!(
+        audit_rows(&files).is_empty(),
+        "the crash came before any audit"
+    );
+    assert_eq!(intent_state(&files, 0, "batch-c1-pub"), "applied");
+    let (alpha, beta, gamma) = recover_all(&files, "batch-c1-pub", open_shacl(&files, 0));
+    assert_eq!(counts(&alpha, 0).unwrap(), [2, 0]);
+    for index in 0..3 {
+        assert_eq!(intent_state(&files, index, "batch-c1-pub"), "published");
+    }
+    let rows = audit_rows(&files);
+    assert_eq!(
+        rows.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
+        ["verified"],
+        "{rows:?}"
+    );
+    // Idempotent: a repeat recovery finds the outcome row and re-verifies nothing.
+    drop((alpha, beta, gamma));
+    recover_all(&files, "batch-c1-pub", open_shacl(&files, 0));
+    assert_eq!(audit_rows(&files), rows);
 }
 
 #[test]
