@@ -19,7 +19,7 @@
 //! a companion, so a user minting `…#inferred` cannot forge entailments.
 //!
 //! Each companion is self-describing: it carries
-//! `<companion> aegis:sourceKind "inferred"` (the tag attaches at the GRAPH
+//! `<companion> camayoc:sourceKind "inferred"` (the tag attaches at the GRAPH
 //! level — tagging a derived triple's *subject* would mistag the subject,
 //! which may itself be observed) and a freshness note
 //! `<companion> quipu:derivedAsOfTx <n>`, the premise-side transaction head
@@ -43,8 +43,14 @@ pub const ROOT_INFERRED_GRAPH_IRI: &str = "urn:quipu:graph:root#inferred";
 pub const DERIVED_AS_OF_TX: &str = "http://quipu.local/graph#derivedAsOfTx";
 
 /// The epistemic-class tag camayoc's ingress discipline defines; carried by
-/// the companion graph node itself.
-pub const SOURCE_KIND: &str = "http://aegis.gastown.local/ontology/sourceKind";
+/// the companion graph node itself. The canonical w3id camayoc-core spelling
+/// is the only one written (aegis-m5s.3).
+pub const SOURCE_KIND: &str = "https://w3id.org/intigraph/camayoc/core/ns#sourceKind";
+
+/// FORMER-NAME ALIAS of [`SOURCE_KIND`], kept so a store tagged before the
+/// w3id rename still reads as tagged. Read, never written; old tags are not
+/// rewritten (m5s rules: no silent rewrite of stored data).
+pub const LEGACY_SOURCE_KIND: &str = "http://aegis.gastown.local/ontology/sourceKind";
 
 /// Source string for the plane's own bookkeeping writes (tag, freshness).
 pub const PLANE_SOURCE: &str = "quipu:inferred-plane";
@@ -129,17 +135,18 @@ impl Store {
 
     /// Intern (and, on first use, tag) the companion inferred graph for `g`.
     ///
-    /// First use writes the graph-level `aegis:sourceKind "inferred"` tag so
-    /// the companion is self-describing; subsequent calls are a lookup.
+    /// First use writes the graph-level `camayoc:sourceKind "inferred"` tag so
+    /// the companion is self-describing; subsequent calls are a lookup. A tag
+    /// under either spelling counts, so a pre-rename store is not re-tagged.
     pub fn ensure_companion_inferred_graph(&mut self, g: i64, timestamp: &str) -> Result<i64> {
         self.ensure_demotion_query(timestamp)?;
         let iri = self.companion_inferred_iri(g)?;
         let companion = self.intern(&iri)?;
         let kind_attr = self.intern(SOURCE_KIND)?;
-        let tagged = self
-            .current_facts_in_graph(companion)?
-            .iter()
-            .any(|f| f.entity == companion && f.attribute == kind_attr);
+        let legacy = self.lookup(LEGACY_SOURCE_KIND)?;
+        let tagged = self.current_facts_in_graph(companion)?.iter().any(|f| {
+            f.entity == companion && (f.attribute == kind_attr || Some(f.attribute) == legacy)
+        });
         if !tagged {
             self.transact_to_graph(
                 &[Datum {
@@ -506,3 +513,7 @@ ex:r a rule:Rule ; rule:id "R1" ;
         assert_eq!(moved_again, 0, "migration must be idempotent");
     }
 }
+
+#[cfg(test)]
+#[path = "inferred_namespace_tests.rs"]
+mod namespace_tests;
