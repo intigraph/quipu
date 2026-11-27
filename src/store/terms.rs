@@ -88,6 +88,15 @@ impl Default for TermCache {
 impl TermCache {
     /// Discard persistent mappings after an outer transaction rollback.
     /// The admission limit and transient query terms are unaffected.
+    /// Test only: the persistent IRI -> id entries, for staleness checks.
+    #[cfg(test)]
+    pub(crate) fn persistent_entries(&self) -> Vec<(String, i64)> {
+        self.iri_to_id
+            .iter()
+            .map(|(iri, id)| (iri.clone(), *id))
+            .collect()
+    }
+
     pub(crate) fn clear_persistent(&mut self) {
         self.id_to_iri.clear();
         self.iri_to_id.clear();

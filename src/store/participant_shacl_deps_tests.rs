@@ -662,6 +662,62 @@ fn c1_a_shapes_reload_between_prepare_and_the_decision_aborts_before_commit() {
     assert!(dependency_pins(&gamma).unwrap().is_empty());
 }
 
+/// Review 873d46 #1: an Ok dry run interns and caches the member's terms
+/// inside a savepoint it rolls back. When the batch then aborts before
+/// commit, nothing re-interns them, so a cached id would point at a freed
+/// row that the writer's next new term reuses.
+#[test]
+fn c1_a_an_aborted_batch_leaves_no_stale_term_id_in_the_member_writer() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    // A class only gamma has interned: alpha meets it only in the derived
+    // context of its rolled-back dry run.
+    const FOREIGN: &str = "urn:type:GammaOnlyAction";
+    let id = Store::open(path(&files, 2).to_str().unwrap())
+        .unwrap()
+        .intern(FOREIGN)
+        .unwrap();
+    TERMS.with(|t| t.borrow_mut()[2].insert(FOREIGN.into(), id));
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, FOREIGN)]);
+    seed(&files, 2, 1, &[(FOREIGN, SUBCLASS_OF, ACTION)]);
+    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    let batch = b1_batch(&files, &alpha, &beta, "batch-c1-terms");
+    as_writer(|| {
+        derive::with_before_decision(
+            |store| {
+                store
+                    .load_shapes("slice-b", REFUSING, "2026-01-02T00:00:00Z")
+                    .unwrap();
+            },
+            || commit_derived(&batch, &[], &[&gamma]),
+        )
+    })
+    .unwrap_err();
+    let raw = |iri: &str| -> Option<i64> {
+        let conn = rusqlite::Connection::open_with_flags(
+            path(&files, 0),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        rusqlite::OptionalExtension::optional(conn.query_row(
+            "SELECT id FROM terms WHERE iri=?1",
+            [iri],
+            |r| r.get(0),
+        ))
+        .unwrap()
+    };
+    let store = alpha.owner.writer.lock();
+    // Every id the writer's cache holds names its own row.
+    for (iri, id) in store.term_cache.borrow().persistent_entries() {
+        assert_eq!(raw(&iri), Some(id), "stale cached term {iri} -> {id}");
+    }
+    // A new term after the abort resolves to itself, and FOREIGN (seen only
+    // by the rolled-back dry run) is not aliased onto it.
+    let fresh = store.intern("urn:fresh:after-abort").unwrap();
+    assert_eq!(store.resolve(fresh).unwrap(), "urn:fresh:after-abort");
+    assert_eq!(store.lookup(FOREIGN).unwrap(), raw(FOREIGN));
+}
+
 /// Commit B1's batch with a crash right after the COMMIT decision.
 fn crashed_after_decision(files: &Files, id: &str) {
     seed(files, 2, 0, &[(SHARED, RDF_TYPE, ACTION)]);
@@ -850,6 +906,24 @@ fn c3a_a_pinned_axiom_refusal_explains_itself_and_the_owner_can_clear_it() {
         }],
     }];
     as_writer(|| commit_validated(&release, &validations)).unwrap();
+    // Review 873d46 #2: the post-release audit of a judged member whose
+    // batch retracts must not raise a false verify-failed. Alpha WAS judged
+    // (its intent carries shapes), so the audit replayed the retraction.
+    let payload: Vec<u8> = rusqlite::Connection::open_with_flags(
+        path(&files, 0),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap()
+    .query_row(
+        "SELECT payload FROM participant_intents WHERE batch_id='batch-c3a-release'",
+        [],
+        |r| r.get(0),
+    )
+    .unwrap();
+    let payload: Value = serde_json::from_slice(&payload).unwrap();
+    assert!(!payload["pins"]["shapes"].is_null(), "{payload}");
+    let rows = audit_rows(&files);
+    assert!(!rows.iter().any(|(k, _)| k == "verify-failed"), "{rows:?}");
     assert!(subclass_pins(&gamma).unwrap().is_empty());
     assert!(dependency_pins(&gamma).unwrap().is_empty());
 }

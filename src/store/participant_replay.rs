@@ -117,6 +117,12 @@ pub(super) fn test_delay() {
 /// is replayed WITHOUT re-running the write SHACL gate. The decision is final;
 /// a post-commit refusal would strand every participant (B0). Verification is
 /// the post-release [`audit`]. A member never judged applies unchanged.
+///
+/// Turning `validate_on_write` off for the apply also silences warn-policy
+/// shape REPORTING for the judged member (review 873d46 #3). That is
+/// deliberate: the PREPARE dry run already ran the full gate on this exact
+/// batch, and the audit re-validates it after release, so a warn finding is
+/// not lost, only not reported twice under the held fences.
 pub(in super::super) fn replay<T>(
     store: &mut Store,
     pins: &PinChanges,
@@ -184,6 +190,11 @@ pub(in super::super) fn audit(
     }
 }
 
+/// Re-judge the member's delta under the carried bytes. It runs on the
+/// already-applied post-state: re-asserting a current fact and re-retracting
+/// a retracted one are both no-ops for the gate, so a batch that retracts
+/// verifies like one that asserts (c3a's release row asserts no false
+/// 'verify-failed').
 fn verify(
     store: &mut Store,
     payload: &Decoded,

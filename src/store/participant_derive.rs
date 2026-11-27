@@ -303,8 +303,14 @@ pub(super) fn dry_run(store: &mut Store, batch: &Delta<'_>, context: &[[String; 
                 .transact_graph_batches_tx(&native, batch.timestamp, batch.actor, batch.source)
                 .map(|_| ())
         });
-        crate::store::release::rollback_release(&store.conn, "quipu_participant_dry_run")?;
+        let rolled_back =
+            crate::store::release::rollback_release(&store.conn, "quipu_participant_dry_run");
+        // Terms interned inside the savepoint (the derived context's foreign
+        // IRIs) are gone; a cached id would alias the next term to reuse the
+        // rowid. On the Ok path WriteScope never clears it for us.
+        store.term_cache.borrow_mut().clear_persistent();
         store.read_model.borrow_mut().clear();
+        rolled_back?;
         outcome
     })
 }
