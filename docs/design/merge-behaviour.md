@@ -93,7 +93,12 @@ apply them.
   `receive` transaction.
 - **R4 Cardinality from the shape.** `card: one` (maxCount 1) is decided as a
   whole slot. `card: many(n)` is a set: union, duplicates impossible, and a
-  conflict only when the merged set exceeds `n`. `card: many` with no bound
+  conflict only when the merged set exceeds `n`. That holds for a one-side
+  change too: when only the incoming side changed and it added values, a result
+  over `n` is `maxcount-exceeded` (aegis-mxd; found by aegis-karb.4 Arm A seed
+  1, where the planner took it clean and the write was then refused). An
+  incoming change that only removes values applies, since it cannot make the
+  slot worse, and a set over `n` that neither side touched is not a conflict. `card: many` with no bound
   never conflicts. `card: list` merges as one unit or as a sequence, never link
   by link (case C6).
 - **R5 No rewriting of ours.** A losing ours value is closed at the decision

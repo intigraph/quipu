@@ -62,7 +62,9 @@ pub(crate) enum Change {
     Convergent,
     /// Both sides changed differently; merged value by value, no conflict.
     Divergent,
-    /// Both sides changed differently and the cardinality refused the union.
+    /// The cardinality refused the merged set: both sides changed differently
+    /// and the union exceeds `n`, or only the incoming side changed and its
+    /// additions leave the slot over `n` (R4, aegis-mxd).
     MaxcountExceeded,
     /// `card: one`, base set, one side deleted while the other replaced.
     DeleteReplace,
@@ -191,7 +193,7 @@ pub(crate) fn plan_slot<V: Ord + Clone>(
         Change::Unchanged
     } else if tv == *bv {
         Change::Ours
-    } else if ov == *bv {
+    } else if ov == *bv && !conflict {
         Change::Theirs
     } else if ov == tv {
         Change::Convergent

@@ -53,8 +53,11 @@ fn an_over_bound_slot_neither_side_touched_is_not_a_conflict() {
 
 #[test]
 fn a_slot_only_one_side_changed_takes_that_side() {
-    let base = graph(&[(P_ONE, "\"base\"")]);
-    let theirs = graph(&[(P_ONE, "\"x\""), (P_ONE, "\"y\"")]);
+    // Within its bound, a one-side change is taken as is. An addition that
+    // leaves a bounded slot over `sh:maxCount` is held instead (R4, aegis-mxd;
+    // see share_merge_tests).
+    let base = graph(&[(P_ONE, "\"base\""), (P_MANY, "\"base\"")]);
+    let theirs = graph(&[(P_ONE, "\"x\""), (P_MANY, "\"x\""), (P_MANY, "\"y\"")]);
     let (merged, conflicts) = merge_graphs(&base, &base, &theirs, SHAPES).unwrap();
     assert!(conflicts.is_empty(), "{conflicts:?}");
     assert_eq!(merged, theirs);
