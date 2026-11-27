@@ -61,17 +61,23 @@ impl WitnessSource for ProfileSource {
     }
 }
 
+/// The witness profile name and endpoint rule enrolled startup enforces.
+/// `quipu pilot enroll` applies the same rule before any write (aegis-4qv.7),
+/// so an enrollment startup would refuse is refused at enrollment instead.
+pub(crate) fn admissible_witness_profile(profile: &str, endpoint: &str) -> bool {
+    !profile.is_empty()
+        && profile.len() <= 128
+        && profile
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_-.".contains(&b))
+        && endpoint.starts_with("https://")
+}
+
 impl EnrolledPilotConfig {
     pub(crate) fn location(&self) -> Result<Location> {
-        if self.profile.is_empty()
-            || self.profile.len() > 128
-            || !self
-                .profile
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"_-.".contains(&b))
+        if !admissible_witness_profile(&self.profile, &self.endpoint)
             || !self.root.is_absolute()
             || !self.inventory.is_absolute()
-            || !self.endpoint.starts_with("https://")
             || self.timeout.is_zero()
             || self.timeout > Duration::from_secs(30)
         {

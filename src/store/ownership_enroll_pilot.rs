@@ -45,6 +45,14 @@ pub fn enroll_pilot_owner(
     if config.timeout_secs == 0 || config.timeout_secs > 30 {
         return Err(refused("witness timeout must be 1..=30 seconds"));
     }
+    // Same rule as enrolled startup; refused before credentials, the witness
+    // or any local file is touched, in dry run and execute alike.
+    if !super::graph_router::admissible_witness_profile(&config.profile, &config.endpoint) {
+        return Err(refused(
+            "witness endpoint must be https:// and the profile a 1..=128 byte \
+             [A-Za-z0-9_.-] name; enrolled startup refuses anything else",
+        ));
+    }
     let location = Location::new(
         &config.endpoint,
         &config.bucket,

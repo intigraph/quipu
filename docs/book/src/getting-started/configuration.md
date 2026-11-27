@@ -320,7 +320,12 @@ table the server starts with (the table's keys at top level are accepted
 too). It must be a regular file that no group or other user can write, because
 it pins the witness endpoint, bucket and prefix. It holds no secret; the
 credentials come only from the owner-only `credentials_file` it names, and
-never from argv or the environment. Without `--execute` it is a dry run: a
+never from argv or the environment. The endpoint must be `https://` and the
+profile a 1 to 128 byte `[A-Za-z0-9_.-]` name, the same rule server startup
+enforces; anything else is refused, dry run or `--execute`, before any
+credential is read or file written, rather than enrolling an owner that startup
+would then refuse. For a private witness CA, name it with `witness_ca_file`.
+Without `--execute` it is a dry run: a
 read-only preflight plus the planned authority, with no local or remote
 write. The receipt prints the planned (or executed) enrollment and the before
 and after identity of the database, journal and inventory.

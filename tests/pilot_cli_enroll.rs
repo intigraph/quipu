@@ -2,6 +2,9 @@
 //! minimal create-only S3 stand-in: `PUT` requires `If-None-Match: *` and
 //! answers 412 for an existing key, so an overwrite is impossible. Every
 //! refusal must leave the database byte-identical and the witness unchanged.
+//! It is served over real verified TLS (a self-signed localhost certificate
+//! named by `witness_ca_file`), because enrolled startup accepts only an
+//! `https://` witness and enrollment refuses anything else (aegis-4qv.7).
 #![cfg(all(unix, feature = "shacl", feature = "ownership-witness-s3"))]
 
 use quipu::Store;
@@ -9,10 +12,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::sync::{Arc, Mutex};
 
 type Objects = Arc<Mutex<BTreeMap<String, Vec<u8>>>>;
@@ -20,7 +23,7 @@ type Objects = Arc<Mutex<BTreeMap<String, Vec<u8>>>>;
 /// Published AWS documentation example credentials (not a secret).
 const CREDENTIALS: &str = r#"{"access_key_id":"AKIAIOSFODNN7EXAMPLE","secret_access_key":"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}"#;
 
-fn respond(stream: &mut TcpStream, status: &str, headers: &str, body: &[u8]) {
+fn respond(stream: &mut impl Write, status: &str, headers: &str, body: &[u8]) {
     let head = format!(
         "HTTP/1.1 {status}\r\nconnection: close\r\ncontent-length: {}\r\n{headers}\r\n",
         body.len()
@@ -29,8 +32,8 @@ fn respond(stream: &mut TcpStream, status: &str, headers: &str, body: &[u8]) {
     let _ = stream.write_all(body);
 }
 
-fn serve(mut stream: TcpStream, objects: &Objects) {
-    let mut reader = BufReader::new(stream.try_clone().unwrap());
+fn serve(stream: impl Read + Write, objects: &Objects) {
+    let mut reader = BufReader::new(stream);
     let mut line = String::new();
     if reader.read_line(&mut line).is_err() {
         return;
@@ -59,21 +62,22 @@ fn serve(mut stream: TcpStream, objects: &Objects) {
         return;
     }
     let path = target.split('?').next().unwrap_or_default();
+    let stream = reader.get_mut();
     match (method.as_str(), path.strip_prefix("/witness/")) {
         ("PUT", Some(key)) => {
             if headers.get("if-none-match").map(String::as_str) != Some("*") {
-                return respond(&mut stream, "400 Bad Request", "", b"");
+                return respond(stream, "400 Bad Request", "", b"");
             }
             let mut objects = objects.lock().unwrap();
             if objects.contains_key(key) {
-                return respond(&mut stream, "412 Precondition Failed", "", b"");
+                return respond(stream, "412 Precondition Failed", "", b"");
             }
             objects.insert(key.to_owned(), body);
-            respond(&mut stream, "200 OK", "etag: \"v1\"\r\n", b"");
+            respond(stream, "200 OK", "etag: \"v1\"\r\n", b"");
         }
         ("GET", Some(key)) => match objects.lock().unwrap().get(key).cloned() {
-            Some(bytes) => respond(&mut stream, "200 OK", "etag: \"v1\"\r\n", &bytes),
-            None => respond(&mut stream, "404 Not Found", "", b""),
+            Some(bytes) => respond(stream, "200 OK", "etag: \"v1\"\r\n", &bytes),
+            None => respond(stream, "404 Not Found", "", b""),
         },
         ("GET", None) if path == "/witness" => {
             let mut xml = String::from(
@@ -83,25 +87,100 @@ fn serve(mut stream: TcpStream, objects: &Objects) {
                 xml.push_str(&format!("<Contents><Key>{key}</Key></Contents>"));
             }
             xml.push_str("</ListBucketResult>");
-            respond(&mut stream, "200 OK", "", xml.as_bytes());
+            respond(stream, "200 OK", "", xml.as_bytes());
         }
-        _ => respond(&mut stream, "405 Method Not Allowed", "", b""),
+        _ => respond(stream, "405 Method Not Allowed", "", b""),
     }
 }
 
-/// Start the stand-in; returns its `http://` origin and its object map.
-fn witness() -> (String, Objects) {
+/// A self-signed `127.0.0.1` certificate and key, both DER, made in `dir`.
+fn certificate(dir: &Path) -> (Vec<u8>, Vec<u8>) {
+    let (cert, key) = (dir.join("cert.pem"), dir.join("key.pem"));
+    let (cert_der, key_der) = (dir.join("cert.der"), dir.join("key.der"));
+    let run = |args: &[&str]| {
+        let status = Command::new("openssl")
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .expect("openssl TLS fixture");
+        assert!(status.success(), "openssl {args:?}");
+    };
+    let s = |p: &Path| p.to_str().unwrap().to_owned();
+    run(&[
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-days",
+        "1",
+        "-subj",
+        "/CN=localhost",
+        "-addext",
+        "basicConstraints=critical,CA:FALSE",
+        "-addext",
+        "subjectAltName=IP:127.0.0.1",
+        "-keyout",
+        &s(&key),
+        "-out",
+        &s(&cert),
+    ]);
+    run(&[
+        "x509",
+        "-in",
+        &s(&cert),
+        "-outform",
+        "DER",
+        "-out",
+        &s(&cert_der),
+    ]);
+    run(&[
+        "pkcs8",
+        "-topk8",
+        "-nocrypt",
+        "-in",
+        &s(&key),
+        "-outform",
+        "DER",
+        "-out",
+        &s(&key_der),
+    ]);
+    (
+        std::fs::read(cert_der).unwrap(),
+        std::fs::read(key_der).unwrap(),
+    )
+}
+
+/// Start the stand-in over TLS; returns its `https://` origin, its object map
+/// and the DER certificate to trust.
+fn witness(dir: &Path) -> (String, Objects, Vec<u8>) {
+    use ureq::rustls::{ServerConfig, ServerConnection, StreamOwned, pki_types::PrivateKeyDer};
+    let (cert, key) = certificate(dir);
+    let tls = Arc::new(
+        ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert.clone().into()], PrivateKeyDer::Pkcs8(key.into()))
+            .unwrap(),
+    );
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let endpoint = format!("https://{}", listener.local_addr().unwrap());
     let objects: Objects = Arc::default();
     let shared = objects.clone();
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
-            let objects = shared.clone();
-            std::thread::spawn(move || serve(stream, &objects));
+            let (objects, tls) = (shared.clone(), tls.clone());
+            std::thread::spawn(move || {
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+                let mut conn = StreamOwned::new(ServerConnection::new(tls).unwrap(), stream);
+                serve(&mut conn, &objects);
+                let _ = conn.flush();
+                conn.conn.send_close_notify();
+                let _ = conn.flush();
+            });
         }
     });
-    (endpoint, objects)
+    (endpoint, objects, cert)
 }
 
 struct Lab {
@@ -113,9 +192,12 @@ impl Lab {
     /// An owner database, owner-only credentials and a pilot config naming
     /// `endpoint` (a live stand-in unless `endpoint` is given explicitly).
     fn new(endpoint: Option<&str>) -> Self {
-        let (live, objects) = witness();
-        let endpoint = endpoint.unwrap_or(&live);
         let dir = tempfile::tempdir().unwrap();
+        let (live, objects, cert) = witness(dir.path());
+        let endpoint = endpoint.unwrap_or(&live);
+        let ca = dir.path().join("witness-ca.der");
+        std::fs::write(&ca, cert).unwrap();
+        std::fs::set_permissions(&ca, std::fs::Permissions::from_mode(0o600)).unwrap();
         drop(Store::open(dir.path().join("owner.db").to_str().unwrap()).unwrap());
         let creds = dir.path().join("credentials.json");
         std::fs::write(&creds, CREDENTIALS).unwrap();
@@ -136,8 +218,10 @@ installed_policy = "pilot-policy"
 credentials_file = "{}"
 catalog_file = "/r/c"
 memory_mib = 64
+witness_ca_file = "{}"
 "#,
-            creds.display()
+            creds.display(),
+            ca.display()
         );
         let path = dir.path().join("witness.toml");
         std::fs::write(&path, config).unwrap();
@@ -255,7 +339,7 @@ fn each_guard_refuses_and_leaves_everything_unchanged() {
 
 #[test]
 fn unreachable_witness_refuses_the_dry_run() {
-    let lab = Lab::new(Some("http://127.0.0.1:1"));
+    let lab = Lab::new(Some("https://127.0.0.1:1"));
     lab.refuses(&[], "witness");
     lab.refuses(&["--execute"], "witness");
     assert!(!lab.path("owner.journal").exists());
@@ -282,4 +366,16 @@ fn missing_principal_or_unknown_unit_refuses() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown authority unit"));
     assert!(lab.keys().is_empty());
+}
+
+/// aegis-4qv.7: enrolled startup refuses a non-https witness, so enrollment
+/// refuses it in dry run and execute before anything is written.
+#[test]
+fn http_witness_endpoint_refuses_before_any_write() {
+    let lab = Lab::new(Some("http://127.0.0.1:1"));
+    lab.refuses(&[], "must be https://");
+    lab.refuses(&["--execute"], "must be https://");
+    for file in ["owner.journal", "owner.inventory", "owner.enroll-intent"] {
+        assert!(!lab.path(file).exists(), "{file} not written");
+    }
 }

@@ -4,6 +4,7 @@
 use super::*;
 use crate::ownership_handoff_model::witness::s3::S3Objects;
 use crate::ownership_handoff_model::witness::s3_emulator::{EmuFault, Emulator};
+use crate::ownership_handoff_model::witness::s3_tls_bridge::TlsBridge;
 use std::os::unix::fs::PermissionsExt;
 
 const PROFILE: &str = "pilot-test-witness";
@@ -230,23 +231,32 @@ fn database_replaced_between_preflight_and_marker_is_refused() {
     assert_eq!(fs::read(&f.db).unwrap(), original, "no marker written");
 }
 
-#[test]
-fn pilot_entry_point_refuses_group_readable_credentials_and_dry_runs() {
-    let f = Fixture::new();
+/// Pilot witness config naming `endpoint`, the fixture's credentials file and
+/// (optionally) a trusted witness CA file.
+fn pilot_config(
+    f: &Fixture,
+    endpoint: &str,
+    ca: Option<&Path>,
+) -> crate::config::IngestPilotConfig {
     let creds = f.dir.path().join("credentials.json");
-    fs::write(
-        &creds,
-        br#"{"access_key_id":"AKIAIOSFODNN7EXAMPLE","secret_access_key":"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}"#,
-    )
-    .unwrap();
-    fs::set_permissions(&creds, fs::Permissions::from_mode(0o640)).unwrap();
-    let config: crate::config::IngestPilotConfig = toml::from_str(&format!(
+    if !creds.exists() {
+        fs::write(
+            &creds,
+            br#"{"access_key_id":"AKIAIOSFODNN7EXAMPLE","secret_access_key":"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}"#,
+        )
+        .unwrap();
+        fs::set_permissions(&creds, fs::Permissions::from_mode(0o640)).unwrap();
+    }
+    let ca = ca.map_or(String::new(), |p| {
+        format!("witness_ca_file = \"{}\"\n", p.display())
+    });
+    toml::from_str(&format!(
         r#"enabled = true
 graph = "urn:g"
 root = "/r"
 inventory = "/r/i"
 profile = "{PROFILE}"
-endpoint = "{}"
+endpoint = "{endpoint}"
 bucket = "witness"
 region = "us-east-1"
 prefix = "lineage/abc"
@@ -255,18 +265,50 @@ installed_policy = "pilot-policy"
 credentials_file = "{}"
 catalog_file = "/r/c"
 memory_mib = 64
-"#,
-        f.emulator.endpoint,
+{ca}"#,
         creds.display()
     ))
-    .unwrap();
-    let req = super::super::PilotEnroll {
+    .unwrap()
+}
+
+fn pilot_request(f: &Fixture, execute: bool) -> super::super::PilotEnroll<'_> {
+    super::super::PilotEnroll {
         db: &f.db,
         journal: &f.journal,
         unit: "full-store",
         principal: "pilot-owner",
-        execute: false,
-    };
+        execute,
+    }
+}
+
+/// aegis-4qv.7: enrolled startup refuses a non-https witness endpoint, so
+/// enrollment refuses it too, in dry run and execute, before any write.
+#[test]
+fn pilot_entry_point_refuses_http_endpoint_before_any_write() {
+    let f = Fixture::new();
+    let config = pilot_config(&f, &f.emulator.endpoint, None);
+    assert!(f.emulator.endpoint.starts_with("http://"));
+    let before = f.snapshot();
+    for execute in [false, true] {
+        let err = super::super::enroll_pilot_owner(&config, &pilot_request(&f, execute))
+            .expect_err("http endpoint refused");
+        assert!(err.to_string().contains("must be https://"), "{err}");
+        assert_eq!(f.snapshot(), before, "nothing written (execute={execute})");
+        assert!(!f.journal.exists() && !f.inventory().exists() && !f.intent().exists());
+        assert!(f.listing().is_empty(), "no witness object");
+    }
+}
+
+#[test]
+fn pilot_entry_point_refuses_group_readable_credentials_and_dry_runs() {
+    let f = Fixture::new();
+    let tls = TlsBridge::start(&f.emulator.endpoint);
+    let ca = f.dir.path().join("witness-ca.der");
+    fs::write(&ca, &tls.der).unwrap();
+    fs::set_permissions(&ca, fs::Permissions::from_mode(0o600)).unwrap();
+    let config = pilot_config(&f, &tls.endpoint, Some(&ca));
+    let creds = f.dir.path().join("credentials.json");
+    let req = pilot_request(&f, false);
     let err = super::super::enroll_pilot_owner(&config, &req).unwrap_err();
     assert!(err.to_string().contains("unsafe permissions"), "{err}");
     assert!(
@@ -277,11 +319,7 @@ memory_mib = 64
     let report = super::super::enroll_pilot_owner(&config, &req).unwrap();
     assert_eq!(report["mode"], "dry-run");
     assert!(f.listing().is_empty() && !f.journal.exists());
-    let execute = super::super::PilotEnroll {
-        execute: true,
-        ..req.clone()
-    };
-    let report = super::super::enroll_pilot_owner(&config, &execute).unwrap();
+    let report = super::super::enroll_pilot_owner(&config, &pilot_request(&f, true)).unwrap();
     assert_eq!(report["mode"], "executed");
     assert_eq!(report["receipt"]["witness_key"], "active/00");
 }
