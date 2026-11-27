@@ -36,6 +36,10 @@ END;
 CREATE TRIGGER IF NOT EXISTS mini_quipu_x6_update BEFORE UPDATE ON facts
 WHEN OLD.g IN (SELECT g FROM mini_quipu_references) BEGIN
     SELECT RAISE(ABORT, 'mini-quipu write refused (X6 read-only-reference-member)');
+END;
+CREATE TRIGGER IF NOT EXISTS mini_quipu_x6_delete BEFORE DELETE ON facts
+WHEN OLD.g IN (SELECT g FROM mini_quipu_references) BEGIN
+    SELECT RAISE(ABORT, 'mini-quipu write refused (X6 read-only-reference-member)');
 END;";
 
 /// The local refusals of this slice.
@@ -231,12 +235,15 @@ fn remove_file(path: &Path) {
 
 /// Create the fresh file, let `record` write the home registry entry under
 /// the file's own minted identity, then let `fill` copy at the cut. Any
-/// failure removes the new file; a home refusal (X1-X5) writes nothing.
+/// failure removes the new file; a home refusal (X1-X5) writes nothing. A
+/// failure after `record` also removes that entry through `forget`, so the
+/// fork name is free for a retry; if that removal fails, the error says so.
 fn materialize(
     path: &Path,
     spec: &MaterializeSpec,
     record: impl FnOnce(&MiniForkRequest) -> Result<MiniForkEntry>,
     fill: impl FnOnce(&mut Store, &MiniForkEntry) -> Result<()>,
+    forget: impl FnOnce(&MiniForkEntry) -> Result<()>,
 ) -> Result<MiniQuipu> {
     if path.exists() {
         return Err(invalid("the mini-Quipu path already exists"));
@@ -244,6 +251,7 @@ fn materialize(
     let path_str = path
         .to_str()
         .ok_or_else(|| invalid("the mini-Quipu path is not UTF-8"))?;
+    let mut recorded = None;
     let result = (|| {
         let mut store = Store::open(path_str)?;
         let request = MiniForkRequest {
@@ -254,13 +262,24 @@ fn materialize(
             created_at: spec.created_at.clone(),
         };
         let entry = record(&request)?;
+        recorded = Some(entry.clone());
         fill(&mut store, &entry)?;
         Ok(MiniQuipu { store, entry })
     })();
-    if result.is_err() {
-        remove_file(path);
+    let Err(error) = result else {
+        return result;
+    };
+    remove_file(path);
+    match recorded {
+        Some(entry) => match forget(&entry) {
+            Ok(()) => Err(error),
+            Err(cleanup) => Err(invalid(&format!(
+                "{error}; and its home registry entry {:?} could not be removed: {cleanup}",
+                entry.name
+            ))),
+        },
+        None => Err(error),
     }
-    result
 }
 
 /// Materialize a mini-Quipu whose writable members are on the legacy file.
@@ -276,6 +295,7 @@ pub fn materialize_on_legacy(
         spec,
         |request| super::record_on_legacy(catalog, &mut home.borrow_mut(), request),
         |dest, entry| fill(&home.borrow(), dest, entry),
+        |entry| super::forget_on_legacy(&mut home.borrow_mut(), entry),
     )
 }
 
@@ -288,6 +308,7 @@ impl super::GraphSetOwner {
             spec,
             |request| self.record_mini_fork(request),
             |dest, entry| self.owner.read(|home| fill(home, dest, entry)),
+            |entry| self.forget_mini_fork(entry),
         )
     }
 }

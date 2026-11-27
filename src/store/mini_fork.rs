@@ -386,6 +386,32 @@ fn record(store: &mut Store, plan: &Plan<'_>, request: &MiniForkRequest) -> Resu
     })
 }
 
+/// Remove the still-open registry entry of a fork whose file was never
+/// completed, so its name can be used again. Matches name AND minted store
+/// identity, so it can only remove the entry `record` just wrote for that file.
+fn forget(store: &mut Store, entry: &MiniForkEntry) -> Result<()> {
+    store.ownership_operation(|store| {
+        if !has_table(store, "mini_quipu_forks")? {
+            return Err(invalid("no registry entry to remove"));
+        }
+        let removed = store.conn.execute(
+            "DELETE FROM mini_quipu_forks WHERE name = ?1 AND store_id = ?2 AND status = 'open'",
+            rusqlite::params![entry.name, entry.store_id],
+        )?;
+        if removed != 1 {
+            return Err(invalid(
+                "the registry entry to remove is absent or not open",
+            ));
+        }
+        Ok(())
+    })
+}
+
+/// Remove an uncompleted fork's entry from the legacy file (see `forget`).
+pub fn forget_on_legacy(legacy: &mut Store, entry: &MiniForkEntry) -> Result<()> {
+    forget(legacy, entry)
+}
+
 /// Record a fork whose writable members are on the legacy file.
 pub fn record_on_legacy(
     catalog: &GraphSetCatalog,
@@ -414,6 +440,16 @@ impl GraphSetOwner {
         self.owner.placement.verify()?;
         Owner::check_identity(self.owner.catalog_route(), &store)?;
         record(&mut store, &plan, request)
+    }
+
+    /// Remove an uncompleted fork's entry through this owner's one writer
+    /// (see `forget`).
+    pub fn forget_mini_fork(&self, entry: &MiniForkEntry) -> Result<()> {
+        let _admission = self.owner.admit()?;
+        let mut store = self.owner.writer.owned()?;
+        self.owner.placement.verify()?;
+        Owner::check_identity(self.owner.catalog_route(), &store)?;
+        forget(&mut store, entry)
     }
 
     /// Read a registry entry back on a read-only connection.

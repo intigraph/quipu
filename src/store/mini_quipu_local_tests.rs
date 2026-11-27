@@ -208,6 +208,15 @@ fn x6_reference_write_refuses_with_nothing_written() {
         .unwrap_err();
     assert!(err.to_string().contains("X6"), "{err}");
     assert_eq!(footprint(mq.store()), before);
+    // Deletes are refused too: no maintenance path can drop a reference row.
+    let g = graph_id(mq.store(), ROOT_GRAPH_IRI).unwrap();
+    let err = mq
+        .store
+        .conn
+        .execute("DELETE FROM facts WHERE g = ?1", [g])
+        .unwrap_err();
+    assert!(err.to_string().contains("X6"), "{err}");
+    assert_eq!(footprint(mq.store()), before);
 }
 
 #[test]
@@ -256,5 +265,66 @@ fn a_home_refusal_leaves_no_file_and_no_entry() {
     assert!(err.contains("X4"), "{err}");
     assert!(!path.exists());
     assert_eq!(footprint(&home.legacy), before);
+    assert_eq!(super::super::mini_fork_count(&home.legacy).unwrap(), 0);
+}
+
+#[test]
+fn a_fill_failure_after_record_leaves_no_file_no_entry_and_frees_the_name() {
+    let mut home = home();
+    legacy_write(&mut home, ROOT_GRAPH_IRI, "reference-at-cut");
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mini.db");
+    let members = spec(&[(LEG, Writable), (ROOT_GRAPH_IRI, Reference)]);
+    let (catalog, legacy) = (&home.catalog, std::cell::RefCell::new(&mut home.legacy));
+    let err = materialize(
+        &path,
+        &members,
+        |request| super::super::record_on_legacy(catalog, &mut legacy.borrow_mut(), request),
+        |_dest, entry| {
+            // The entry exists at this point: the failure is after `record`.
+            assert!(
+                super::super::mini_fork_entry(&legacy.borrow(), &entry.name)
+                    .unwrap()
+                    .is_some()
+            );
+            Err(super::super::invalid("injected fill failure"))
+        },
+        |entry| super::super::forget_on_legacy(&mut legacy.borrow_mut(), entry),
+    )
+    .err()
+    .unwrap()
+    .to_string();
+    assert!(err.contains("injected fill failure"), "{err}");
+    assert!(!path.exists());
+    assert_eq!(super::super::mini_fork_count(&home.legacy).unwrap(), 0);
+    // The name was not consumed: a retry under it succeeds.
+    let mq = materialize_on_legacy(&home.catalog, &mut home.legacy, &members, &path).unwrap();
+    assert_eq!(mq.entry().name, "agent-a");
+    assert_eq!(super::super::mini_fork_count(&home.legacy).unwrap(), 1);
+}
+
+/// A blank-node subject never reaches `fill`: the base digest in `record`
+/// refuses an unskolemized row before any entry is written.
+#[test]
+fn a_blank_node_member_refuses_with_no_file_and_no_entry() {
+    let mut home = home();
+    let d = datum(&home.legacy, "_:b1", Value::Str("blank".into()));
+    let g = home.legacy.committed_graph_id(LEG).unwrap().unwrap();
+    home.legacy
+        .ownership_operation(|s| s.transact_graph_batches_tx(&[(g, vec![d])], LATER, None, None))
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mini.db");
+    let err = materialize_on_legacy(
+        &home.catalog,
+        &mut home.legacy,
+        &spec(&[(LEG, Writable)]),
+        &path,
+    )
+    .err()
+    .unwrap()
+    .to_string();
+    assert!(err.contains("skolemized"), "{err}");
+    assert!(!path.exists());
     assert_eq!(super::super::mini_fork_count(&home.legacy).unwrap(), 0);
 }
