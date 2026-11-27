@@ -269,6 +269,21 @@ pub(super) fn intent(store: &Store, batch_id: &str) -> Result<Option<IntentRow>>
     }
 }
 
+/// Digest of every `graphs` row: a participant apply must leave it unchanged.
+pub(super) fn graphs_digest(store: &Store) -> Result<String> {
+    let mut stmt = store.conn.prepare("SELECT * FROM graphs ORDER BY g")?;
+    let width = stmt.column_count();
+    let rows: Vec<String> = stmt
+        .query_map([], |row| {
+            (0..width)
+                .map(|i| Ok(format!("{:?}", row.get_ref(i)?)))
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map(|cells| cells.join("\u{1f}"))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(sha256(rows.join("\n").as_bytes()))
+}
+
 /// The applied-but-unpublished batch this file holds, if any: what a composed
 /// reader needs to pick this file's publication cut (Phase 3 S3).
 pub(crate) struct AppliedIntent {

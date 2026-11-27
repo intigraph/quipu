@@ -378,6 +378,9 @@ impl Checkout {
             .prepare("SELECT name FROM pragma_table_info('graphs', 'main')")?
             .query_map([], |r| r.get(0))?
             .collect::<std::result::Result<_, _>>()?;
+        // Graph rows carry no cut bound: a participant apply never changes
+        // them (enforced in participant_commit::apply), so the current rows
+        // are also the rows at any publication cut.
         store
             .conn
             .execute_batch("CREATE TEMP TABLE graphs AS SELECT * FROM main.graphs;")?;

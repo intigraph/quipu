@@ -270,17 +270,15 @@ fn seen(cut: &Cut, graphs: &[&str]) -> Result<Vec<(String, String)>> {
     let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
     let mut rows: Vec<_> = json["results"]["bindings"]
         .as_array()
-        .map(|rows| {
-            rows.iter()
-                .map(|row| {
-                    (
-                        row["g"]["value"].as_str().unwrap().to_owned(),
-                        row["v"]["value"].as_str().unwrap().to_owned(),
-                    )
-                })
-                .collect()
+        .into_iter()
+        .flatten()
+        .map(|row| {
+            (
+                row["g"]["value"].as_str().unwrap().to_owned(),
+                row["v"]["value"].as_str().unwrap().to_owned(),
+            )
         })
-        .unwrap_or_default();
+        .collect();
     rows.sort();
     Ok(rows)
 }
@@ -372,4 +370,66 @@ fn single_file_owner_reads_keep_refusing_an_unpublished_file() {
         .read(Store::latest_tx_id)
         .unwrap_err();
     assert!(error.to_string().contains("unpublished"), "{error}");
+}
+
+#[test]
+fn an_unselected_home_without_a_decision_or_with_another_identity_refuses() {
+    // beta selected alone, its batch applied in both files but unpublished;
+    // the home (alpha) is read from its file. Each damage makes the old cut
+    // unprovable, so the composed read refuses instead of guessing a cut.
+    let cases = [
+        ("DELETE FROM participant_journal", "no decision"),
+        ("DROP TABLE participant_journal", "no decision"),
+        (
+            "UPDATE store_identity SET store_id = 'urn:uuid:foreign-store' WHERE id = 1",
+            "identity differs",
+        ),
+        (
+            "UPDATE log_epoch SET epoch = 'urn:uuid:foreign-epoch' WHERE id = 1",
+            "identity differs",
+        ),
+    ];
+    for (damage, expected) in cases {
+        let cut = crashed_at(CrashPoint::AfterApply(1));
+        assert_eq!(
+            seen(&cut, &[B_DATA]).unwrap(),
+            vec![(B_DATA.into(), "old".into())],
+            "control before: {damage}"
+        );
+        rusqlite::Connection::open(cut.root.join("alpha.db"))
+            .unwrap()
+            .execute_batch(damage)
+            .unwrap();
+        let error = seen(&cut, &[B_DATA]).unwrap_err();
+        assert!(error.to_string().contains(expected), "{damage}: {error}");
+    }
+}
+
+#[test]
+fn a_participant_apply_that_changes_graph_rows_refuses_and_applies_nothing() {
+    // The composed reader copies graph rows without a cut bound, so a
+    // participant apply must never change them. Force one (a trigger that
+    // rewrites beta's graph row on any fact insert): the apply refuses inside
+    // its own transaction and no file shows the batch.
+    let cut = fixture();
+    rusqlite::Connection::open(cut.root.join("beta.db"))
+        .unwrap()
+        .execute_batch(
+            "CREATE TRIGGER rewrite_graph_row AFTER INSERT ON facts \
+             BEGIN UPDATE graphs SET created_at = created_at || 'x'; END;",
+        )
+        .unwrap();
+    let cut = restart(cut);
+    let error = as_writer(|| commit(&batch(&cut, "batch-graphs"))).unwrap_err();
+    assert!(error.to_string().contains("graph rows"), "{error}");
+    let cut = restart(cut);
+    let (alpha, beta) = (owner(&cut, A_DATA), owner(&cut, B_DATA));
+    // Committed batch: recovery keeps refusing on the same rows, never a
+    // partial publish; until then a composed read refuses or shows the old cut.
+    let error = recover(&[alpha, beta], "batch-graphs").unwrap_err();
+    assert!(error.to_string().contains("graph rows"), "{error}");
+    match seen(&cut, &[A_DATA, B_DATA]) {
+        Ok(rows) => assert_eq!(rows, both("old")),
+        Err(error) => assert!(error.to_string().contains("home"), "{error}"),
+    }
 }

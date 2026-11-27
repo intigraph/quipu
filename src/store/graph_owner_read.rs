@@ -52,8 +52,9 @@ impl Owner {
         Self::read_strict_inner(owners, deadline, false, under_fence, query)
     }
 
-    /// [`Self::read_strict_with`] when `cut` is false. With `cut` true, for a reader that honours publication cuts
-    /// (the composed ATTACH reader): a file holding an applied, unpublished
+    /// [`Self::read_strict_with`] when `cut` is false. With `cut` true, for a
+    /// reader that honours publication cuts (the composed ATTACH reader): a
+    /// file holding an applied, unpublished
     /// participant batch is captured, not refused, and its `published_tx` is
     /// the pre-batch head until the batch's home journal says PUBLISHED. A
     /// missing, foreign or undecided home refuses: the old cut is unprovable.
@@ -148,10 +149,14 @@ impl Owner {
         }
         if cut {
             // Every selected fence is held: no batch can change state now.
+            // An unselected home is read at most once per batch: recovery
+            // needs every participant fence, and this reader holds the
+            // selected ones, so that home's decision cannot move under us.
+            let mut decided = std::collections::HashMap::new();
             let heads = selected
                 .iter()
                 .zip(&captured)
-                .map(|(owner, read)| Self::published_head(owner, read, &captured))
+                .map(|(owner, read)| Self::published_head(owner, read, &captured, &mut decided))
                 .collect::<Result<Vec<_>>>()?;
             for (read, head) in captured.iter_mut().zip(heads) {
                 read.published_tx = head;
@@ -178,6 +183,7 @@ impl Owner {
         owner: &Self,
         read: &CapturedRead<'_>,
         all: &[CapturedRead<'_>],
+        decided: &mut std::collections::HashMap<String, Option<bool>>,
     ) -> Result<i64> {
         use super::graph_set::participant::{applied_intent, home_published};
         let Some(intent) = applied_intent(read.store)? else {
@@ -190,6 +196,7 @@ impl Owner {
         let published = match captured_home {
             // The home is selected too: read it in its own captured snapshot.
             Some(home) => home_published(&home.store.conn, &intent)?,
+            None if decided.contains_key(&intent.batch_id) => decided[&intent.batch_id],
             None => {
                 let path = owner
                     .placement
@@ -207,7 +214,9 @@ impl Owner {
                     rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
                         | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
                 )?;
-                home_published(&conn, &intent)?
+                let published = home_published(&conn, &intent)?;
+                decided.insert(intent.batch_id.clone(), published);
+                published
             }
         };
         match published {

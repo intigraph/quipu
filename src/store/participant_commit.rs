@@ -479,12 +479,21 @@ fn apply(
             .conn
             .execute_batch("SAVEPOINT quipu_participant_apply")?;
         let outcome = (|| {
+            let graphs_before = graphs_digest(store)?;
             let txs = store.transact_graph_batches_tx(
                 &native,
                 &payload.timestamp,
                 payload.actor.as_deref(),
                 payload.source.as_deref(),
             )?;
+            // The composed reader copies graph rows without a cut bound
+            // (Phase 3 S3), which is sound only because a participant apply
+            // writes facts and never graph rows. Enforce it, in this txn.
+            if graphs_digest(store)? != graphs_before {
+                return Err(refuse(
+                    "participant apply changed graph rows; nothing applied",
+                ));
+            }
             let heads: Vec<(String, i64)> = payload
                 .graphs
                 .iter()
