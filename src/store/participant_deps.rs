@@ -562,6 +562,13 @@ pub(super) fn check_member_removals(
     Ok(())
 }
 
+/// Whether this file records any dependency pin (a type or a subclass axiom).
+/// A write whose datums are only known after evaluation (a routed SPARQL
+/// update, aegis-n0wc.5 H1) cannot run the pin guard first, so it refuses here.
+pub(crate) fn has_dependency_pins(store: &Store) -> Result<bool> {
+    Ok(!read_pins(store)?.is_empty() || !read_subclass_pins(store)?.is_empty())
+}
+
 /// Ordinary writes into a file refuse to remove a type another file pinned
 /// (S4); only a participant release batch may (see [`commit_validated`]).
 pub(crate) fn check_pinned_write(

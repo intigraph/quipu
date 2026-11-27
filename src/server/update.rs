@@ -129,16 +129,19 @@ pub(crate) async fn update_post(
         .unwrap_or("localhost");
     let base = format!("http://{host}{}", uri.path());
     let client = super::query_usage::client(&headers);
-    let report = blocking(move || {
-        apply_update_reported(
-            &store,
-            &format!("BASE <{base}>\n{update}"),
-            &attribution,
-            &client,
-        )
-    })
-    .await?;
-    Ok(axum::Json(report).into_response())
+    let update = format!("BASE <{base}>\n{update}");
+    #[cfg(unix)]
+    let router = update_route::router();
+    #[cfg(not(unix))]
+    let router = None;
+    match blocking(move || update_route::dispatch(router, &store, &update, &attribution, &client))
+        .await?
+    {
+        update_route::Dispatched::Refused(message) => {
+            Ok((StatusCode::CONFLICT, message).into_response())
+        }
+        update_route::Dispatched::Report(report) => Ok(axum::Json(report).into_response()),
+    }
 }
 
 static UPDATES_SLICED: AtomicU64 = AtomicU64::new(0);
@@ -319,6 +322,7 @@ fn apply_locked(
     update: &str,
     attribution: &Attribution,
     times: &mut update_observe::UpdateTimes,
+    members: Option<&std::collections::BTreeSet<String>>,
 ) -> Result<Applied, AppError> {
     let mut phase = Instant::now();
     let mut lap = |slot: &mut f64| {
@@ -358,6 +362,9 @@ fn apply_locked(
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
     lap(&mut times.eval);
+    if let Some(members) = members {
+        update_route::check_members(before.symmetric_difference(&after), members)?;
+    }
     let (batches, txs) = update_commit::commit(
         store,
         before.difference(&after),
@@ -469,6 +476,8 @@ pub(crate) mod update_full;
 mod update_gates;
 #[path = "update_observe.rs"]
 mod update_observe;
+#[path = "update_route.rs"]
+pub(crate) mod update_route;
 
 #[cfg(test)]
 #[path = "update_bench.rs"]

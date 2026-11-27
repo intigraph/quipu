@@ -4,9 +4,10 @@
 //! byte-identical. Enabled in a Unix `ownership-witness-s3` build: the catalog
 //! is preflighted (including claims shared with `[quipu.ingest_pilot]`), then
 //! `GraphSetsConfig::admit_enrolled` verifies the legacy fence and opens every
-//! routed owner through S1. The admitted router lives for the process; this
-//! slice mounts no HTTP route. Any refusal exits with one line. Other builds
-//! exit with `STARTUP_REFUSAL`. There is never a plain-open fallback.
+//! routed owner through S1. The admitted router lives for the process and
+//! routes `/update` for its members (aegis-n0wc.5 H1, `update_route`). Any
+//! refusal exits with one line. Other builds exit with `STARTUP_REFUSAL`.
+//! There is never a plain-open fallback.
 use crate::SharedStore;
 
 fn fail(why: impl std::fmt::Display) -> ! {
@@ -37,9 +38,10 @@ pub(crate) fn start(config: &quipu::QuipuConfig, legacy: &SharedStore) {
         drop(writer);
         // Process-lifetime, like the served StoreHandle: the owners' leases
         // must outlive every request.
-        let _router: &'static _ = Box::leak(Box::new(router));
+        let router: &'static _ = Box::leak(Box::new(router));
+        crate::update::update_route::install(router).unwrap_or_else(|e| fail(e));
         eprintln!(
-            "graph sets ENABLED: {owners} enrolled owner(s) admitted at catalog revision {revision}; no HTTP route"
+            "graph sets ENABLED: {owners} enrolled owner(s) admitted at catalog revision {revision}; /update routes their members"
         );
     }
     #[cfg(not(all(unix, feature = "ownership-witness-s3")))]
