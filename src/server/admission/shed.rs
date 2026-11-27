@@ -119,6 +119,8 @@ pub(crate) fn sheddable(kind: &str) -> bool {
 
 /// Readers currently waiting for a permit (all sheddable kinds).
 static WAITING: AtomicUsize = AtomicUsize::new(0);
+/// Sheddable reads currently holding a permit and running (all kinds).
+static IN_SERVICE: AtomicUsize = AtomicUsize::new(0);
 /// Exponentially weighted mean read service time, in milliseconds.
 static SERVICE_EWMA_MS: AtomicU64 = AtomicU64::new(0);
 
@@ -138,6 +140,29 @@ impl Drop for Waiting {
     fn drop(&mut self) {
         WAITING.fetch_sub(1, Ordering::Relaxed);
     }
+}
+
+/// Held for the lifetime of a running sheddable read, so a refusal can size
+/// Retry-After by the pool's capacity rather than its (exhausted) free permits.
+pub(crate) struct InService;
+impl InService {
+    pub(crate) fn start() -> Self {
+        IN_SERVICE.fetch_add(1, Ordering::Relaxed);
+        Self
+    }
+}
+impl Drop for InService {
+    fn drop(&mut self) {
+        IN_SERVICE.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// The permits that drain the queue: those running plus those free. When a
+/// read is shed the free count is usually 0, so it alone is not the pool size.
+pub(crate) fn capacity(admission: &tokio::sync::Semaphore) -> usize {
+    IN_SERVICE
+        .load(Ordering::Relaxed)
+        .saturating_add(admission.available_permits())
 }
 
 /// Fold one completed read's service time into the mean (weight 1/8).
@@ -163,10 +188,18 @@ pub(crate) fn record_service(elapsed: std::time::Duration) {
 /// Seconds until a retry is likely to be admitted: the queue ahead drained at
 /// the measured service rate across the permits, clamped to [1, 30].
 pub(crate) fn retry_after_secs(permits: usize) -> u64 {
-    let ewma = SERVICE_EWMA_MS.load(Ordering::Relaxed).max(1);
-    let ahead = u64::try_from(WAITING.load(Ordering::Relaxed) + 1).unwrap_or(u64::MAX);
-    let permits = u64::try_from(permits.max(1)).unwrap_or(1);
-    let ms = ewma.saturating_mul(ahead) / permits;
+    retry_after_from(
+        SERVICE_EWMA_MS.load(Ordering::Relaxed),
+        WAITING.load(Ordering::Relaxed),
+        permits,
+    )
+}
+
+/// `ceil(ewma_ms x (waiting + 1) / capacity)` in seconds, clamped to [1, 30].
+pub(crate) fn retry_after_from(ewma_ms: u64, waiting: usize, capacity: usize) -> u64 {
+    let ahead = u64::try_from(waiting.saturating_add(1)).unwrap_or(u64::MAX);
+    let capacity = u64::try_from(capacity.max(1)).unwrap_or(1);
+    let ms = ewma_ms.max(1).saturating_mul(ahead) / capacity;
     ms.div_ceil(1000).clamp(1, 30)
 }
 
@@ -228,14 +261,13 @@ pub(crate) async fn acquire(
         return Ok(None);
     };
     let priority = current_priority();
-    let permits = admission.available_permits();
     if priority == ReadPriority::Background {
-        if permits <= policy.background_reserve {
+        if admission.available_permits() <= policy.background_reserve {
             return Err(shed(
                 ShedReason::BackgroundReserve,
                 priority,
                 started.elapsed(),
-                permits,
+                capacity(admission),
             ));
         }
         return match admission.try_acquire() {
@@ -244,7 +276,7 @@ pub(crate) async fn acquire(
                 ShedReason::BackgroundReserve,
                 priority,
                 started.elapsed(),
-                permits,
+                capacity(admission),
             )),
             Err(tokio::sync::TryAcquireError::Closed) => Err(closed()),
         };
@@ -263,7 +295,7 @@ pub(crate) async fn acquire(
             ShedReason::NormalWait,
             priority,
             started.elapsed(),
-            admission.available_permits().max(1),
+            capacity(admission),
         )),
     }
 }
