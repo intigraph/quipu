@@ -110,8 +110,10 @@ only while more than `read_background_reserve` permits are free, otherwise it
 is refused at once with 429. The header can only lower a request's priority;
 any other value, or a duplicated header, is treated as `normal`.
 
-`Retry-After` is estimated from the measured read service time and the number
-of waiting reads, clamped to 1–30 seconds. Shed counts appear on `/metrics` as
+`Retry-After` is estimated as the time for the reads queued ahead to drain:
+the measured mean read service time, times the waiting reads plus one, divided
+by the pool's capacity (reads running plus permits free), rounded up and
+clamped to 1–30 seconds. Shed counts appear on `/metrics` as
 `quipu_read_shed_total{reason}`.
 
 With read processes on and shedding armed, `all read processes are busy` is a

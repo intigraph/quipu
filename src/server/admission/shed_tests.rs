@@ -189,3 +189,22 @@ fn priority_header_can_only_lower_the_class() {
         "duplicates are ambiguous and never lower"
     );
 }
+
+#[test]
+fn retry_after_divides_by_pool_capacity_not_free_permits() {
+    // 2 s mean service, 3 waiting (4 ahead including this caller), 8 permits:
+    // the queue drains in 1 s. Dividing by the free permits (0 when shedding
+    // fires, treated as 1) would have advertised 8 s.
+    assert_eq!(super::shed::retry_after_from(2_000, 3, 8), 1);
+    assert_eq!(super::shed::retry_after_from(2_000, 3, 0), 8);
+    assert_eq!(super::shed::retry_after_from(0, 0, 4), 1, "floor is 1 s");
+    assert_eq!(super::shed::retry_after_from(60_000, 99, 1), 30, "cap");
+}
+
+#[test]
+fn saturated_pool_capacity_counts_running_reads() {
+    let exhausted = leaked(0);
+    let _running = super::shed::InService::start();
+    // Other tests may run reads concurrently; this one's read is counted.
+    assert!(super::shed::capacity(exhausted) >= 1);
+}

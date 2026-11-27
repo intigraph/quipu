@@ -45,6 +45,7 @@ where
         started,
         stamp,
         move || {
+            let _serving = super::shed::InService::start();
             let ran = std::time::Instant::now();
             let result = f();
             super::shed::record_service(ran.elapsed());
