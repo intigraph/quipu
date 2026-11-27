@@ -278,13 +278,14 @@ pub(super) fn keyword_response_in(
     };
     let results: Vec<_> = matches
         .into_iter()
-        .map(|hit| {
+        .enumerate()
+        .map(|(index, hit)| {
             let m = hit.matched;
             let iri = store.resolve(m.entity_id)?;
             let mut result = serde_json::json!({
                 "entity": prefixes.as_ref().map_or(iri.clone(), |p| p.compact(&iri)),
                 "text": m.text, "score": m.score, "bm25": -m.score,
-                "ranking_reason": "keyword", "source": "knowledge",
+                "ranking_reason": "keyword", "keyword_rank": index + 1, "source": "knowledge",
                 "valid_from": m.valid_from, "valid_to": m.valid_to,
                 "language": hit.language, "datatype":hit.datatype, "type_iri":hit.type_iri,
                 "plane": if hit.graph_id == 0 { "ROOT" } else { "named" }

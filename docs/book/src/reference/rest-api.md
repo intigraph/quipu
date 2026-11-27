@@ -1411,6 +1411,17 @@ diagnostic. `query_terms` and `fusion_rank_limit` accompany this rule so native
 MCP projection and outcome accounting validate the same evidence. Unknown
 admission rules remain UNKNOWN. Pure semantic admission keeps its cosine floor.
 
+Keyword-only results (`ranking: "keyword"`, for example `"mode": "keyword"`)
+use `context.admission: "keyword-ranked-terms/v1"` instead of reporting
+`similarity_unavailable`. An admitted row must have `ranking_reason:
+"keyword"`, a finite non-negative BM25-derived `score`, and `keyword_rank`
+from 1 through 20 (every keyword result now carries its 1-based
+`keyword_rank`). The subject, required-identifier and distinct-term rules are
+the same as for hybrid, and an uncorroborated top result still refuses the
+whole context. A BM25 score is never compared with the cosine floor. A keyword
+NO CONTEXT is still not evidence of absence: literal matching may miss a
+paraphrase.
+
 `ranking: "content"` is supported with hybrid fusion: content demotion applies
 to the semantic leg before fusion, and the keyword leg retains its BM25 scale.
 In automatic mode, content requests use hybrid only when hybrid is enabled,
