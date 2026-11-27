@@ -110,6 +110,7 @@ const CENSUS: &[&str] = &[
     "/owner/knot",
     "/owner/knot/seal",
     "/owner/knot/status",
+    "/owner/query",
     "/overlay/compose",
     "/overlay/create",
     "/overlay/write",

@@ -7,7 +7,7 @@ use quipu::read_authorization::{
 };
 
 fn read_request(input: &Value) -> Request<Body> {
-    Request::post("/query")
+    Request::post("/owner/query")
         .header("content-type", "application/json")
         .header("authorization", "Bearer private-fixture-token")
         .body(Body::from(input.to_string()))
