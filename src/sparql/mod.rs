@@ -54,6 +54,8 @@ mod bind_join;
 mod bind_join_tests;
 #[cfg(test)]
 mod constant_bind_join_tests;
+#[cfg(test)]
+mod point_read_bgp_tests;
 mod construct;
 mod count_cover;
 mod count_key;

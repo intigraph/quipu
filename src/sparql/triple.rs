@@ -66,9 +66,12 @@ pub fn eval_bgp(
     // measured as a 0.12ms -> 320ms regression. Two or more patterns is exactly
     // where the nested loop turns quadratic and the build pays for itself.
     // Type patterns retain the existing entailment-aware evaluator.
+    // A point read (every subject fixed) is index probes in SQL; building the
+    // model to answer it is a whole-graph scan (aegis-bqq6).
     let needs_type_entailment = patterns.iter().any(is_rdf_type_pattern);
     if patterns.len() >= 2
         && !needs_type_entailment
+        && !super::pattern_util::subject_anchored(patterns, seed)
         && crate::store::read_model::read_model_applicable(store, ctx)
     {
         let result = super::join::eval_bgp_hash_join(store, patterns, ctx, seed)?;

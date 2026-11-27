@@ -213,3 +213,19 @@ pub fn merge_bindings(a: &Bindings, b: &Bindings) -> Option<Bindings> {
     }
     Some(merged)
 }
+
+/// Every pattern's subject is fixed before evaluation: a constant IRI, or a
+/// variable the seed already binds (aegis-bqq6).
+///
+/// Such a BGP is a point read. Each pattern is one bound-subject index probe
+/// in SQL, so the nested loop answers it in well under a millisecond, while
+/// the read-model hash join first builds (or catches up) the graph's whole
+/// model — a full current-fact scan measured at 5-6 s on the seeds graph for
+/// `<item> status ?s . <item> priority ?p`, against 0.02 s for either alone.
+pub(super) fn subject_anchored(patterns: &[TriplePattern], seed: &Bindings) -> bool {
+    patterns.iter().all(|tp| match &tp.subject {
+        TermPattern::NamedNode(_) => true,
+        TermPattern::Variable(v) => seed.contains_key(v.as_str()),
+        _ => false,
+    })
+}
