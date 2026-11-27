@@ -176,7 +176,8 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
 
     // Optional `graph` param (quipu #36): scope the query's DEFAULT graph to a
     // single named graph, without writing a `FROM`/`GRAPH` clause. Backward
-    // compatible when omitted (ROOT default). An unknown IRI scopes to an empty
+    // compatible when omitted (ROOT default); the ROOT IRI itself means the
+    // same as omitting it (aegis-7209). An unknown IRI scopes to an empty
     // default graph (no rows) — never a silent fall-through to ROOT. A `FROM`
     // clause in the query text overrides this (see `apply_dataset`).
     // quipu #69: the `graph` param resolves a dataset name too, so `FROM
@@ -194,6 +195,10 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
         }
         (Some(name), None) => sparql::GraphScope::Default(vec![store.fork_graph_for_read(name)?]),
         (None, None) => sparql::GraphScope::default(),
+        // aegis-7209: ROOT has no named-graph id, so its well-known IRI must
+        // not fall through to `lookup` (which answered a confident empty).
+        // It means exactly what omitting `graph` means, as `FROM <root>` does.
+        (None, Some(crate::schema::ROOT_GRAPH_IRI)) => sparql::GraphScope::default(),
         (None, Some(iri)) if store.is_dataset(iri)? => {
             sparql::GraphScope::Default(store.dataset_member_ids(iri)?)
         }

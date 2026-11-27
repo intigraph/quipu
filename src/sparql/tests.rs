@@ -4708,3 +4708,52 @@ fn f79_iri_keyset_pages_do_not_skip_interned_subjects() {
     }
     assert_eq!(seen, ["urn:order:a", "urn:order:m", "urn:order:z"]);
 }
+
+// --- aegis-7209: the `graph` param names ROOT by its well-known IRI ---
+
+/// `graph: "urn:quipu:graph:root"` reads ROOT, exactly as omitting `graph`
+/// and as `FROM <urn:quipu:graph:root>` do. It used to resolve the IRI as an
+/// ordinary named graph and answer a confident empty (n=0, no refusal).
+#[test]
+fn the_graph_param_reads_root_by_its_well_known_iri() {
+    let mut store = Store::open_in_memory().unwrap();
+    crate::mcp::tool_knot(
+        &mut store,
+        &serde_json::json!({"turtle": "<urn:d:1> a <urn:t:Directive> . <urn:d:2> a <urn:t:Sub> . <urn:t:Sub> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <urn:t:Directive> ."}),
+    )
+    .unwrap();
+    store.graph_create("urn:g:declared").unwrap();
+    crate::mcp::tool_knot(
+        &mut store,
+        &serde_json::json!({"graph": "urn:g:declared", "turtle": "<urn:d:3> a <urn:t:Directive> ."}),
+    )
+    .unwrap();
+    // The ROOT IRI may also exist as an ordinary interned term (it does in
+    // production); that must not turn it into a named graph.
+    store.intern(crate::schema::ROOT_GRAPH_IRI).unwrap();
+    let count = |input: serde_json::Value| {
+        let out = crate::mcp::tool_query(&store, &input).unwrap();
+        (out["rows"][0]["n"].clone(), out.get("inference").is_some())
+    };
+    let query = "SELECT (COUNT(*) AS ?n) WHERE { ?s a <urn:t:Directive> }";
+    let omitted = count(serde_json::json!({"query": query}));
+    // Two Directives, one of them only by rdfs:subClassOf inference.
+    assert_eq!(omitted, (serde_json::json!(2), true));
+    assert_eq!(
+        count(serde_json::json!({"query": query, "graph": crate::schema::ROOT_GRAPH_IRI})),
+        omitted,
+        "graph=ROOT must answer exactly as an omitted graph"
+    );
+    let from =
+        "SELECT (COUNT(*) AS ?n) FROM <urn:quipu:graph:root> WHERE { ?s a <urn:t:Directive> }";
+    assert_eq!(count(serde_json::json!({"query": from})).0, 2);
+    // Named graphs and unknown graphs keep their meaning.
+    assert_eq!(
+        count(serde_json::json!({"query": query, "graph": "urn:g:declared"})).0,
+        1
+    );
+    assert_eq!(
+        count(serde_json::json!({"query": query, "graph": "urn:g:unknown"})).0,
+        0
+    );
+}
