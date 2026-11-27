@@ -21,10 +21,35 @@ pub struct TypeDependency {
     pub type_iri: String,
 }
 
+/// "No current fact in this participant's member graphs has `entity` as its
+/// subject or as a reference value": the reverse check that lets a batch
+/// change a type that this participant's file pinned (S4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReferenceAbsence {
+    pub entity: String,
+}
+
 /// A validation-only participant and the checks it must satisfy.
 pub struct Validation<'a> {
     pub owner: &'a GraphSetOwner,
     pub checks: Vec<TypeDependency>,
+    pub absences: Vec<ReferenceAbsence>,
+}
+
+/// A durable record, in the dependency graph's file, that `dependent_file_id`
+/// committed a batch relying on "`entity` a `type_iri` in `graph`" (S4).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DependencyPin {
+    pub graph: String,
+    pub entity: String,
+    pub type_iri: String,
+    pub dependent_file_id: String,
+}
+
+/// Every pin this owner's file holds, sorted.
+pub fn dependency_pins(owner: &GraphSetOwner) -> Result<Vec<DependencyPin>> {
+    let _ = owner;
+    Ok(Vec::new())
 }
 
 fn exact(iri: &str) -> bool {

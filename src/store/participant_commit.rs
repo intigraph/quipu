@@ -39,7 +39,10 @@ use crash_points::{crash, crashed};
 
 #[path = "participant_deps.rs"]
 mod deps;
-pub use deps::{MAX_DEPENDENCY_CHECKS, TypeDependency, Validation};
+pub use deps::{
+    DependencyPin, MAX_DEPENDENCY_CHECKS, ReferenceAbsence, TypeDependency, Validation,
+    dependency_pins,
+};
 
 /// One participant: an owner, its ordinary routed requests and its exact
 /// native delta (term IDs local to that owner's file).
@@ -551,3 +554,7 @@ mod kill_tests;
 #[cfg(test)]
 #[path = "participant_deps_tests.rs"]
 mod deps_tests;
+
+#[cfg(test)]
+#[path = "participant_pins_tests.rs"]
+mod pins_tests;
