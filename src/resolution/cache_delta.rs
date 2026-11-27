@@ -104,6 +104,13 @@ pub(super) fn rebuild(
         return Ok(index);
     }
     let mut ids: Vec<i64> = affected.iter().copied().collect();
+    // Intentional change from the old attached-only path: aliases are read on
+    // every rebuild, because a delta touches one alias while the identity's
+    // label rows may sit under another. A plain store that predates the alias
+    // table has no aliases, so an unpreparable query is treated as "none";
+    // only a composed store, which always carries the table, turns it into an
+    // error. `separate_process_reader_catches_up_from_the_delta` and the
+    // composed-store tests cover both shapes.
     let sql = format!(
         "SELECT alias_id FROM term_alias WHERE canonical_id IN ({})",
         id_list(&ids)
