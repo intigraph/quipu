@@ -20,7 +20,7 @@ thread_local! {
         const { std::cell::Cell::new(None) };
     static BUDGET: std::cell::Cell<Option<std::time::Duration>> =
         const { std::cell::Cell::new(None) };
-    static BEFORE_DECISION: std::cell::RefCell<Option<StoreHook>> =
+    static BEFORE_DECISION: std::cell::RefCell<Option<(Option<String>, StoreHook)>> =
         const { std::cell::RefCell::new(None) };
 }
 
@@ -59,33 +59,62 @@ pub fn with_before_decision<T>(
     change: impl FnOnce(&mut Store) + 'static,
     work: impl FnOnce() -> T,
 ) -> T {
-    BEFORE_DECISION.with(|slot| *slot.borrow_mut() = Some(Box::new(change)));
+    before_decision(None, Box::new(change), work)
+}
+
+/// Test only: [`with_before_decision`] on the member whose file is `file`,
+/// judged at PREPARE or not (eph-review-d2b162 #1).
+#[cfg(all(test, feature = "shacl"))]
+pub fn with_before_decision_on<T>(
+    file: &str,
+    change: impl FnOnce(&mut Store) + 'static,
+    work: impl FnOnce() -> T,
+) -> T {
+    before_decision(Some(file.to_owned()), Box::new(change), work)
+}
+
+#[cfg(all(test, feature = "shacl"))]
+fn before_decision<T>(file: Option<String>, hook: StoreHook, work: impl FnOnce() -> T) -> T {
+    BEFORE_DECISION.with(|slot| *slot.borrow_mut() = Some((file, hook)));
     let result = work();
     BEFORE_DECISION.with(|slot| *slot.borrow_mut() = None);
     result
 }
 
 /// Immediately before the COMMIT decision (intents prepared, nothing
-/// decided): every judged member must still be judged by exactly the shapes
-/// its PREPARE dry run used. A change refuses here, so the caller aborts every
-/// intent instead of meeting the change after COMMIT (malcolm C1).
+/// decided): every member must still carry exactly the write shapes its
+/// PREPARE saw: the same bytes for a judged member, and still none for a
+/// member that had none (eph-review-d2b162 #1: shapes loaded into an unjudged
+/// member would otherwise meet the full gate after COMMIT, the B0 strand). A
+/// change refuses here, so the caller aborts every intent instead of meeting
+/// the change after COMMIT (malcolm C1). Validation-only participants and
+/// type sources write no facts, so their shapes do not judge anything.
 pub(in super::super) fn recheck_shapes(
     order: &[&GraphSetOwner],
     guards: &mut [Guard<'_>],
     plan: &BTreeMap<String, PinChanges>,
+    members: &[Member<'_>],
 ) -> Result<()> {
     #[cfg(test)]
     let mut hook = BEFORE_DECISION.with(|slot| slot.borrow_mut().take());
     for (owner, store) in order.iter().zip(guards.iter_mut()) {
-        let file = &owner.owner.catalog_route().file_id;
-        let Some((expected, _)) = plan.get(file).and_then(|p| p.shapes.as_ref()) else {
+        if !members.iter().any(|m| std::ptr::eq(m.owner, *owner)) {
             continue;
-        };
+        }
+        let file = &owner.owner.catalog_route().file_id;
+        let expected = plan
+            .get(file)
+            .and_then(|p| p.shapes.as_ref())
+            .map(|(sha, _)| sha);
         #[cfg(test)]
-        if let Some(change) = hook.take() {
+        if hook.as_ref().is_some_and(|(target, _)| match target {
+            Some(target) => target == file,
+            None => expected.is_some(),
+        }) {
+            let (_, change) = hook.take().expect("checked");
             change(store);
         }
-        if shapes_of(store)?.map(|s| sha256(s.as_bytes())).as_ref() != Some(expected) {
+        if shapes_of(store)?.map(|s| sha256(s.as_bytes())).as_ref() != expected {
             return Err(refuse(format!(
                 "member {file}: write shapes changed between PREPARE and the decision; \
                  batch aborted before commit"

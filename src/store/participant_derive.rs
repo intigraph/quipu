@@ -34,7 +34,9 @@ mod replay;
 use replay::budget;
 pub(super) use replay::{audit, recheck_shapes, replay};
 #[cfg(all(test, feature = "shacl"))]
-pub use replay::{with_before_decision, with_prepare_budget, with_slow_dry_run};
+pub use replay::{
+    with_before_decision, with_before_decision_on, with_prepare_budget, with_slow_dry_run,
+};
 
 /// One derived triple, the source (index in canonical order) and graph it
 /// was read from.

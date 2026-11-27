@@ -173,6 +173,9 @@ pub fn commit_validated(
 /// `sources` are owners enlisted only as type sources for members' `sh:class`
 /// values, admitted and fenced like validation participants. Their file ids
 /// are bound into the digest; what was derived travels in the intents.
+/// The batch digest's per-member `payload` sha is of the payload BEFORE
+/// derivation; the stored intent payload adds pins, context and shapes, and
+/// its `intent_digest` binds those exact bytes (eph-review-d2b162 #2).
 pub fn commit_derived(
     batch: &ParticipantBatch<'_>,
     validations: &[Validation<'_>],
@@ -291,7 +294,7 @@ pub fn commit_derived(
             })?;
             crash(CrashPoint::AfterPrepare(index))?;
         }
-        derive::recheck_shapes(&order, &mut guards, &pin_plan)
+        derive::recheck_shapes(&order, &mut guards, &pin_plan, &batch.members)
     })();
     if let Err(error) = prepared {
         if !crashed() {

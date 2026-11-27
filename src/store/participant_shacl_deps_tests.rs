@@ -662,6 +662,56 @@ fn c1_a_shapes_reload_between_prepare_and_the_decision_aborts_before_commit() {
     assert!(dependency_pins(&gamma).unwrap().is_empty());
 }
 
+#[test]
+fn c1_shapes_loaded_into_an_unjudged_member_before_the_decision_abort_before_commit() {
+    // eph-review-d2b162 #1: beta has no write shapes at PREPARE, so it is not
+    // judged. Shapes refusing its batch, loaded before the decision, must
+    // abort every intent instead of refusing beta's APPLY after COMMIT.
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, ACTION)]);
+    let before = heads(&files);
+    let (alpha, beta, gamma) = (
+        open_shacl(&files, 0),
+        open_shacl(&files, 1),
+        open(&files, 2),
+    );
+    let typed = triple(&files, 1, ITEM, RDF_TYPE, ACTION, Op::Assert);
+    let batch = ParticipantBatch {
+        batch_id: "batch-c1-unjudged".into(),
+        members: vec![
+            alpha_member(&files, &alpha, &[SHARED], &[]),
+            Member {
+                owner: &beta,
+                requests: requests(1),
+                batch: graph_batch(&files, 1, 0, &[typed]),
+            },
+        ],
+    };
+    let beta_file = files.routes[1].file_id.clone();
+    let error = as_writer(|| {
+        derive::with_before_decision_on(
+            &beta_file,
+            |store| {
+                store
+                    .load_shapes("slice-b", REFUSING, "2026-01-02T00:00:00Z")
+                    .unwrap();
+            },
+            || commit_derived(&batch, &[], &[&gamma]),
+        )
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("before commit"), "{error}");
+    assert!(error.to_string().contains(&beta_file), "{error}");
+    assert_eq!(heads(&files)[0], before[0], "alpha wrote nothing");
+    assert_eq!(heads(&files)[2], before[2], "gamma wrote nothing");
+    assert_eq!(counts(&alpha, 0).unwrap(), [0, 0]);
+    assert_eq!(intent_state(&files, 0, "batch-c1-unjudged"), "aborted");
+    assert_eq!(intent_state(&files, 1, "batch-c1-unjudged"), "aborted");
+    local_write(&files, &gamma, 2, "after").unwrap();
+    assert!(dependency_pins(&gamma).unwrap().is_empty());
+}
+
 /// Commit B1's batch with a crash right after the COMMIT decision.
 fn crashed_after_decision(files: &Files, id: &str) {
     seed(files, 2, 0, &[(SHARED, RDF_TYPE, ACTION)]);
