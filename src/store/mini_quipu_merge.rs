@@ -168,6 +168,62 @@ pub struct MergeReceipt {
     pub decide_tx: Vec<i64>,
     /// Slots a partial mode held back.
     pub held: usize,
+    /// Per written slot, the mini-Quipu transactions that wrote its incoming
+    /// values (slice M4). Absent from a receipt written before M4.
+    #[serde(default)]
+    pub rows: Vec<MergeRow>,
+    /// The carried writer provenance, keyed by mini-Quipu transaction, read
+    /// from the file through the fork merge's carriage code (slice M4). It is
+    /// data about the origin, never the home transactions' identity. `None`
+    /// on a receipt written before M4: unknown, not empty.
+    #[serde(default)]
+    pub carried: Option<crate::merge_carriage::Carriage>,
+}
+
+/// One written slot of a mini-Quipu merge and its origin transactions.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MergeRow {
+    /// Member graph IRI.
+    pub graph: String,
+    /// `(<subject>, predicate)`, as in the partial-merge receipt.
+    pub slot: (String, String),
+    /// Mini-Quipu `local_tx` values that wrote this slot's incoming values.
+    pub origin_txs: Vec<i64>,
+}
+
+/// Slice M4: the origins and carried provenance of every slot the plans
+/// write, read from the mini-Quipu file before the home writes. Nothing here
+/// reads the merge request's headers or writes a row.
+fn carriage(
+    home: &Store,
+    mini: &Store,
+    plans: &[(i64, i64, String, crate::store::forks_merge::ForkMerge)],
+) -> Result<(Vec<MergeRow>, crate::merge_carriage::Carriage)> {
+    let mut rows = Vec::new();
+    let mut all = crate::merge_carriage::Carriage {
+        state: crate::merge_carriage::OBSERVED.into(),
+        transactions: std::collections::BTreeMap::new(),
+    };
+    for (_, mg, graph, plan) in plans {
+        let mut written: std::collections::BTreeMap<_, std::collections::BTreeSet<String>> =
+            std::collections::BTreeMap::new();
+        for d in plan.receive.iter().chain(&plan.decide) {
+            let slot = (
+                format!("<{}>", home.resolve(d.entity)?),
+                home.resolve(d.attribute)?,
+            );
+            let term = crate::rdf::value_to_term(home, &d.value)?.to_string();
+            written.entry(slot).or_default().insert(term);
+        }
+        let (origins, carried) = crate::merge_carriage::carry_source(mini, *mg, &written)?;
+        all.transactions.extend(carried.transactions);
+        rows.extend(origins.into_iter().map(|(slot, origin_txs)| MergeRow {
+            graph: graph.clone(),
+            slot,
+            origin_txs,
+        }));
+    }
+    Ok((rows, all))
 }
 
 /// The outcome of a merge back.
@@ -355,7 +411,7 @@ fn write(
     let cut = entry.base.local_tx;
     let mut plans = Vec::new();
     for graph in &entry.writable {
-        let (g, plan) = plan_member(
+        let (g, mg, plan) = plan_member(
             home,
             mini,
             graph,
@@ -371,8 +427,14 @@ fn write(
         if let Some(feedback) = gate(home, g, &plan)? {
             return Ok(MergeBack::Refused(feedback));
         }
-        plans.push((g, plan));
+        plans.push((g, mg, graph.clone(), plan));
     }
+    let (rows, carried) = carriage(home, mini, &plans)?;
+    let carried_digest = crate::share::sha256(
+        serde_json::to_string(&carried)
+            .map_err(|e| Error::Serialization(e.to_string()))?
+            .as_bytes(),
+    );
     let mut source = format!(
         "mini-quipu-merge:{};merge={merge_id};incoming={incoming}",
         req.name
@@ -384,15 +446,19 @@ fn write(
     if let Some(earlier) = at.after {
         source.push_str(&format!(";after={earlier}"));
     }
+    // Slice M4: the carried provenance by digest; the object is in the entry.
+    source.push_str(&format!(";carried={carried_digest}"));
     let mut receipt = MergeReceipt {
         merge_id: merge_id.to_owned(),
         incoming: incoming.to_owned(),
         receive_tx: Vec::new(),
         decide_tx: Vec::new(),
-        held: plans.iter().map(|(_, p)| p.held).sum(),
+        held: plans.iter().map(|(_, _, _, p)| p.held).sum(),
+        rows,
+        carried: Some(carried),
     };
     for (step, decide) in [("receive", false), ("decide", true)] {
-        for (g, plan) in &plans {
+        for (g, _, _, plan) in &plans {
             let datums = if decide { &plan.decide } else { &plan.receive };
             #[cfg(not(target_arch = "wasm32"))]
             crate::merge_plan_gate::datums(home, &[datums], None)?;

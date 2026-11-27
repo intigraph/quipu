@@ -87,7 +87,7 @@ pub(super) fn plan_member(
     resolved: Option<&ForkResolutions>,
     mode: Mode,
     td: Option<&str>,
-) -> Result<(i64, ForkMerge)> {
+) -> Result<(i64, i64, ForkMerge)> {
     let g = graph_of(home, graph)?.ok_or_else(|| invalid("a writable member is absent at home"))?;
     let mg =
         graph_of(mini, graph)?.ok_or_else(|| invalid("a writable member is absent locally"))?;
@@ -134,7 +134,7 @@ pub(super) fn plan_member(
         mode,
         td,
     )?;
-    Ok((g, merge))
+    Ok((g, mg, merge))
 }
 
 /// The mini-Quipu's live state at `head`, checked against `expected`.

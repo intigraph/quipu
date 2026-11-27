@@ -37,7 +37,7 @@ pub(crate) const UNKNOWN_NO_TRANSACTIONS: &str = "unknown-no-transactions";
 /// One origin transaction's carried provenance, verbatim from the source.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Carried {
+pub struct Carried {
     pub actor: Option<String>,
     pub source: Option<String>,
     /// The origin's stored declarations; `None` when `state` is unknown.
@@ -49,7 +49,7 @@ pub(crate) struct Carried {
 /// The receipt's `carried` object: per origin transaction, keyed by its id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Carriage {
+pub struct Carriage {
     pub state: String,
     pub transactions: BTreeMap<String, Carried>,
 }
@@ -74,7 +74,7 @@ fn slot_origins(
     store: &Store,
     fork_graph: i64,
     slot: &Slot,
-    terms: &BTreeSet<&str>,
+    terms: &BTreeSet<String>,
 ) -> Result<Vec<i64>> {
     let subject = slot.0.strip_prefix('<').and_then(|s| s.strip_suffix('>'));
     let (Some(Some(e)), Some(a)) = (
@@ -105,32 +105,55 @@ pub(crate) fn carry(
     store: &Store,
     prepared: &Prepared,
 ) -> Result<(BTreeMap<Slot, Vec<i64>>, Carriage)> {
-    let mut origins = BTreeMap::new();
     if prepared.request.path != Path::Fork {
         let carriage = Carriage {
             state: UNKNOWN_NO_TRANSACTIONS.into(),
             transactions: BTreeMap::new(),
         };
-        return Ok((origins, carriage));
+        return Ok((BTreeMap::new(), carriage));
     }
     let fork_graph = store.fork_graph_for_read(&prepared.request.input_id)?;
+    let written = prepared
+        .plan
+        .slots
+        .iter()
+        .map(|(slot, plan)| {
+            let terms = plan
+                .receive
+                .iter()
+                .chain(&plan.decide)
+                .filter_map(term_of)
+                .map(str::to_owned)
+                .collect();
+            (slot.clone(), terms)
+        })
+        .collect();
+    carry_source(store, fork_graph, &written)
+}
+
+/// The one carriage reader for every merge path: for each slot, the source
+/// transactions in `source_graph` that wrote one of the `terms` (rendered
+/// RDF terms) the plan writes, and each origin's carried provenance read from
+/// `source` verbatim. A fork reads its fork graph in the home store; a
+/// mini-Quipu (slice M4) reads its member graph in the mini-Quipu file. It
+/// writes nothing and never reads a request header.
+pub(crate) fn carry_source(
+    source: &Store,
+    source_graph: i64,
+    written: &BTreeMap<Slot, BTreeSet<String>>,
+) -> Result<(BTreeMap<Slot, Vec<i64>>, Carriage)> {
+    let mut origins = BTreeMap::new();
     let mut transactions = BTreeMap::new();
-    for (slot, plan) in &prepared.plan.slots {
-        let terms: BTreeSet<&str> = plan
-            .receive
-            .iter()
-            .chain(&plan.decide)
-            .filter_map(term_of)
-            .collect();
+    for (slot, terms) in written {
         if terms.is_empty() {
             continue;
         }
-        let txs = slot_origins(store, fork_graph, slot, &terms)?;
+        let txs = slot_origins(source, source_graph, slot, terms)?;
         for &tx in &txs {
-            if let std::collections::btree_map::Entry::Vacant(slot) =
+            if let std::collections::btree_map::Entry::Vacant(entry) =
                 transactions.entry(tx.to_string())
             {
-                slot.insert(carried(store, tx)?);
+                entry.insert(carried(source, tx)?);
             }
         }
         if !txs.is_empty() {

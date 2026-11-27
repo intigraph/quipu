@@ -236,6 +236,10 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::later::later_r11_a_multi_member_later_merge_keeps_home_only_changes_in_each_member ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::later::later_r12_a_remainder_decided_to_ours_clears_the_hold ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::later::later_r13_a_remainder_that_writes_nothing_releases_the_hold ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::carriage::m4_home_principal_is_the_applier_and_the_mini_writer_is_carried ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::carriage::m4_forged_merge_headers_change_no_carried_field ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::carriage::m4_carriage_survives_the_r7_retry_verbatim ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::carriage::m4_a_pre_m4_receipt_loads_with_carriage_unknown ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
       # classifier. P4: host and session are redacted, never omitted, for a
       # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.
