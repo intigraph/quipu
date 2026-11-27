@@ -105,12 +105,19 @@ impl CompositionCut {
     }
 
     /// Canonical bytes: JSON with every object's keys sorted, no whitespace.
+    /// Keys are sorted explicitly rather than by relying on `serde_json`'s map
+    /// type, which keeps insertion (struct-field) order if any crate in the
+    /// build enables its `preserve_order` feature.
     fn canonical(&self) -> Vec<u8> {
-        let value = serde_json::to_value(self).expect("a cut always serializes");
+        let value = sort_keys(serde_json::to_value(self).expect("a cut always serializes"));
         serde_json::to_vec(&value).expect("a JSON value always serializes")
     }
 
-    /// The cursor: sha256 (hex) of the canonical bytes.
+    /// The cursor: sha256 (hex) of the canonical bytes. The digest is unkeyed,
+    /// so it identifies a cut but does not authenticate one: anyone can mint a
+    /// valid cursor for any coordinate at or below a file's head. That is
+    /// harmless while nothing evaluates at a cut; a route that serves reads at
+    /// a cut (Phase 4) must not treat a cursor as proof of a prior read.
     pub fn digest(&self) -> String {
         hex::encode(Sha256::digest(self.canonical()))
     }
@@ -153,6 +160,13 @@ impl CompositionCut {
     /// Admit this cut for the reads a strict capture of the SAME selection
     /// just produced. Every member must be the same file lineage and epoch,
     /// the same owner pins and catalog, and no later than the file's head.
+    ///
+    /// Admission is NOT "read at the cut". A member BEHIND its file's head is
+    /// admitted, because the cut is still a valid position in that file, but
+    /// the captured `reads` answer at the head, not at the cut. A caller must
+    /// not serve those reads as the cut's answer unless every member is at
+    /// head ([`Self::is_at_head`]); answering an older cut needs historical
+    /// evaluation (vector mode), which does not exist yet.
     pub fn admit(&self, reads: &[CapturedRead<'_>]) -> Result<()> {
         if self.version != CUT_VERSION {
             return Err(refused("unsupported-version", self.version));
@@ -179,6 +193,32 @@ impl CompositionCut {
             }
         }
         Ok(())
+    }
+
+    /// True when every member's `local_tx` equals the head its read captured,
+    /// i.e. the captured reads answer exactly at this cut. Call after
+    /// [`Self::admit`] succeeded for the same `reads`.
+    pub fn is_at_head(&self, reads: &[CapturedRead<'_>]) -> bool {
+        reads.iter().all(|read| {
+            self.members
+                .get(&read.route.graph)
+                .is_some_and(|m| m.local_tx == read.local_tx)
+        })
+    }
+}
+
+/// Rebuild every JSON object with its keys in sorted order.
+fn sort_keys(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let sorted: BTreeMap<String, serde_json::Value> =
+                map.into_iter().map(|(k, v)| (k, sort_keys(v))).collect();
+            serde_json::Value::Object(sorted.into_iter().collect())
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(sort_keys).collect())
+        }
+        other => other,
     }
 }
 

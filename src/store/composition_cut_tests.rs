@@ -126,6 +126,46 @@ fn a_changed_generation_policy_or_catalog_refuses() {
 }
 
 #[test]
+fn the_canonical_bytes_are_pinned_with_sorted_keys() {
+    // Keys deliberately out of order on input; the token must carry them
+    // sorted at every level, independent of struct-field order.
+    let cut: CompositionCut = serde_json::from_value(serde_json::json!({
+        "version": 1,
+        "members": {"urn:g:b": {
+            "policy": "p1", "local_tx": 7, "store_id": "s1",
+            "log_epoch": "e1", "generation": 2
+        }},
+        "catalog_revision": 3
+    }))
+    .unwrap();
+    let want = r#"{"catalog_revision":3,"members":{"urn:g:b":{"generation":2,"local_tx":7,"log_epoch":"e1","policy":"p1","store_id":"s1"}},"version":1}"#;
+    let token = cut.to_token();
+    let body = base64::Engine::decode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        token.strip_prefix("qcut1.").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(String::from_utf8(body).unwrap(), want);
+    assert_eq!(CompositionCut::from_token(&token).unwrap(), cut);
+}
+
+#[test]
+fn a_cut_behind_head_is_admitted_but_not_at_head() {
+    let m = matrix();
+    with_cut(&m, &[REFS, APP], |reads, cut| {
+        assert!(cut.is_at_head(reads));
+        let tx = cut.members()[APP].local_tx;
+        assert!(tx > 0, "matrix APP file has committed transactions");
+        let behind = edit(&cut, |v| v["members"][APP]["local_tx"] = (tx - 1).into());
+        behind.admit(reads).unwrap();
+        assert!(
+            !behind.is_at_head(reads),
+            "reads answer at head, not at the cut"
+        );
+    });
+}
+
+#[test]
 fn a_cut_ahead_of_a_files_head_refuses() {
     let m = matrix();
     with_cut(&m, &[REFS, APP], |reads, cut| {
