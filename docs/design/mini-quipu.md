@@ -173,6 +173,7 @@ IDs (R7). If a reply is lost, the caller reads back by merge id, which is the
 existing read-back UNKNOWN contract, before it tries again.
 
 **M3 limits (sattler ruling on #1318, 2026-11-27): both fail closed, nothing written.**
+
 - *Decided conflict merges refuse* (`decided-bounded-base`). Deciding a conflict
   closes a value, and advancing the base over that bounded interval is not
   supported yet, so the whole merge rolls back. R7 is therefore proven for
