@@ -852,6 +852,13 @@ fn c3a_a_pinned_axiom_refusal_explains_itself_and_the_owner_can_clear_it() {
     as_writer(|| commit_validated(&release, &validations)).unwrap();
     assert!(subclass_pins(&gamma).unwrap().is_empty());
     assert!(dependency_pins(&gamma).unwrap().is_empty());
+    // eph-review-873d46 #2: alpha is a judged member whose batch retracts;
+    // the post-release audit must not record a false verify failure.
+    let audits = audit_rows(&files);
+    assert!(
+        !audits.iter().any(|(kind, _)| kind == "verify-failed"),
+        "{audits:?}"
+    );
 }
 
 #[test]
@@ -904,5 +911,70 @@ fn c3b_a_subclass_cycle_terminates_with_a_deterministic_chain_or_refusal() {
     assert_eq!(
         dependency_pins(&gamma).unwrap(),
         [type_pin(data(2), SHARED, CYCLE_A, "alpha")]
+    );
+}
+
+/// eph-review-873d46 #1: the PREPARE dry run interns foreign IRIs (the
+/// derived context's class) into the member file inside a rolled-back
+/// savepoint. When the batch then aborts, nothing re-interns them, so the
+/// writer's term cache must not keep the ids rollback freed: rowids are
+/// reused, and a stale entry would resolve a later term to the wrong IRI.
+#[test]
+#[cfg(feature = "ownership-witness-s3")] // the writer latch needs it
+fn the_member_writer_term_cache_matches_its_file_after_an_aborted_derived_batch() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    // b8's shape of source, through a subclass IRI only gamma holds (the
+    // fixture pre-interns its own vocabulary in every file).
+    const FOREIGN: &str = "urn:type:OnlyInGamma";
+    {
+        let gamma = Store::open(path(&files, 2).to_str().unwrap()).unwrap();
+        let id = gamma.intern(FOREIGN).unwrap();
+        TERMS.with(|t| t.borrow_mut()[2].insert(FOREIGN.to_owned(), id));
+    }
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, FOREIGN)]);
+    seed(&files, 2, 1, &[(FOREIGN, SUBCLASS_OF, ACTION)]);
+    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    let batch = b1_batch(&files, &alpha, &beta, "batch-cache");
+    // Alpha's dry run with the derived context succeeds; a shapes change
+    // before the decision then aborts every intent, so nothing is applied.
+    let error = as_writer(|| {
+        derive::with_before_decision(
+            |store| {
+                store
+                    .load_shapes("slice-b", REFUSING, "2026-01-02T00:00:00Z")
+                    .unwrap();
+            },
+            || commit_derived(&batch, &[], &[&gamma]),
+        )
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("before commit"), "{error}");
+    let truth = |store: &Store, iri: &str| -> Option<i64> {
+        store
+            .conn
+            .query_row("SELECT id FROM terms WHERE iri = ?1", [iri], |r| r.get(0))
+            .ok()
+    };
+    let w = alpha.hold_writer_for_test();
+    assert_eq!(
+        truth(&w, FOREIGN),
+        None,
+        "an aborted batch left the IRI in alpha"
+    );
+    for iri in [FOREIGN, SUBCLASS_OF] {
+        assert_eq!(
+            w.lookup(iri).unwrap(),
+            truth(&w, iri),
+            "stale cache for {iri}"
+        );
+    }
+    // A later new term takes the next rowid; the class IRI must not alias it.
+    let fresh = w.intern("urn:fresh:after-the-dry-run").unwrap();
+    assert_eq!(w.resolve(fresh).unwrap(), "urn:fresh:after-the-dry-run");
+    assert_ne!(
+        w.lookup(FOREIGN).unwrap(),
+        Some(fresh),
+        "a dry-run IRI aliases a new term"
     );
 }

@@ -117,6 +117,12 @@ pub(super) fn test_delay() {
 /// is replayed WITHOUT re-running the write SHACL gate. The decision is final;
 /// a post-commit refusal would strand every participant (B0). Verification is
 /// the post-release [`audit`]. A member never judged applies unchanged.
+///
+/// Turning `validate_on_write` off for the apply also silences warn-policy
+/// shape REPORTING for that member's write (eph-review-873d46 #3): the
+/// PREPARE dry run already ran both reject and warn policies on the exact
+/// batch, and the audit re-verifies under the carried bytes, so a judged
+/// member's warn results are those of its PREPARE judgement, not re-emitted.
 pub(in super::super) fn replay<T>(
     store: &mut Store,
     pins: &PinChanges,

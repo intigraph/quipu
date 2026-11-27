@@ -305,6 +305,11 @@ pub(super) fn dry_run(store: &mut Store, batch: &Delta<'_>, context: &[[String; 
         });
         crate::store::release::rollback_release(&store.conn, "quipu_participant_dry_run")?;
         store.read_model.borrow_mut().clear();
+        // The dry run interned terms (the derived context's foreign IRIs, any
+        // new datum term) that the rollback just freed; their rowids are
+        // reused, so cached ids would resolve a later term to the wrong IRI
+        // (eph-review-873d46). Same convention as WriteScope's rollback.
+        store.term_cache.borrow_mut().clear_persistent();
         outcome
     })
 }
