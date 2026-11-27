@@ -17,10 +17,15 @@ ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred>
 
 Within the companion, derived facts behave like any other fact — SPARQL,
 SHACL, time travel all work — their `source` tag traces to the rule that
-produced them, and the graph itself carries `aegis:sourceKind "inferred"` and
+produced them, and the graph itself carries
+`<https://w3id.org/intigraph/camayoc/core/ns#sourceKind> "inferred"` and
 a `quipu:derivedAsOfTx` freshness note (the premise-side transaction head the
 closure last reflected). The `#inferred` suffix is **reserved**: external
 writes to a companion are refused, so entailments cannot be forged by hand.
+Stores tagged before the w3id rename carry the former spelling
+`<http://aegis.gastown.local/ontology/sourceKind>`; Quipu still reads that
+tag and never rewrites it, so a reader that checks the companion's tag
+should accept both spellings.
 Pre-regime stores move their legacy-placed derivations across with
 `quipu db migrate-inferred`.
 

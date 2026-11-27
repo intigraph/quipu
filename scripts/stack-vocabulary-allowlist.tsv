@@ -116,7 +116,7 @@ src/store/events.rs	6
 src/store/events_tests.rs	18
 src/store/freeze.rs	1
 src/store/gate.rs	4
-src/store/inferred.rs	4
+src/store/inferred.rs	2
 src/store/mod.rs	5
 src/store/ops.rs	5
 src/store/overlays.rs	1
