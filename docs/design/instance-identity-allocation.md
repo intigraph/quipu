@@ -78,7 +78,7 @@ scheme**: existing values remain readable, new allocation moves to section 2.
 
 ## 2. Install configuration contract
 
-Every writer reads the same three inputs. Each repo maps them onto its own
+Every writer reads the same install-wide inputs. Each repo maps them onto its own
 config surface (quipu `[quipu.instance_identity]`, environment for Python
 tools); the *names* below are proposed for review, the *semantics* are the
 contract.
@@ -86,15 +86,41 @@ contract.
 | Input | Option 1 (resolvable base) | Option 2 (location-free) |
 | --- | --- | --- |
 | `mode` | `"base"` | `"urn-uuid"` |
-| `base` | absolute `https://` IRI ending in `/` (`http://` only when `visibility = "private"`), no query, credentials or fragment content | must be absent |
-| `visibility` | `"public"` or `"private"`, the registry's existing field and test: `public` requires `https://` and audience `public` (`src/entity_namespaces.rs` `Namespace::validate`) | not used |
+| `base` | absolute `https://` or `http://` IRI ending in `/`, no query, credentials or fragment content | must be absent |
 | `install_uuid` | not used | an RFC 9562 UUID chosen once per install; the UUIDv5 namespace for deterministic classes |
 
+**Visibility and audience are per scope, not per install.** The registry sets
+them on each namespace entry, and `Namespace::validate`
+(`src/entity_namespaces.rs`) requires `public == (audience == "public")` and
+admits `http://` only for a private entry. One install-wide value could not
+express a public gate-verdict scope beside a private memory scope under the
+same base. Each scope entry of section 3.2 therefore carries its own two
+fields, which are inputs to this contract:
+
+| Per-scope input | Values | Rule |
+| --- | --- | --- |
+| `visibility` | `"public"` or `"private"` | the registry's existing field; `public` requires an `https://` base |
+| `audience` | `"public"`, `"org:<id>"` or `"personal:<id>"` | the registry's existing field and syntax; `public` iff `visibility = "public"` |
+
+A private scope under an `https://` base is admitted (the registry's test
+forbids only *public* over `http://`), so a public authority can name private
+records without publishing them. Section 3.1 fixes which scopes must be
+private.
+
+**Base ends in `/` only: a deliberate tightening.** The registry admits bases
+ending in `/` or `#`. This contract admits only `/`, because the instance
+forms below append `{scope}/{class}/v1/{key}` path segments, and a `#` base
+would put the whole instance path in the fragment, which the registry's
+one-`#` rule and HTTP resolution both treat as non-addressable. A `#` base
+refuses (refusal 2) even though the registry would accept it as a
+vocabulary-style namespace.
+
 Proposed environment names for non-quipu writers: `INTIGRAPH_INSTANCE_MODE`,
-`INTIGRAPH_INSTANCE_BASE`, `INTIGRAPH_INSTANCE_VISIBILITY`,
-`INTIGRAPH_INSTANCE_UUID`. A per-tool override
-(e.g. `SHUTTLE_ENTITY_NS`) remains accepted only if it agrees with the shared
-value; disagreement refuses.
+`INTIGRAPH_INSTANCE_BASE`, `INTIGRAPH_INSTANCE_UUID`. Writers never take
+visibility or audience from the environment: they read their own scope
+entry's values from the registry, so a writer cannot widen its own audience. A
+per-tool override (e.g. `SHUTTLE_ENTITY_NS`) remains accepted only if it
+agrees with the shared value; disagreement refuses.
 
 ### Instance IRI forms
 
@@ -135,10 +161,9 @@ A writer that would allocate a new instance IRI refuses, writes nothing, and
 exits non-zero with a message naming the missing input when:
 
 1. `mode` is missing or not one of the two values;
-2. `mode = "base"` and `base` is missing, relative, has query/credentials/
-   fragment content, does not end in `/`, `visibility` is missing or not
-   `public`/`private`, or `visibility = "public"` and `base` is not `https://`
-   (the registry's existing test, so it is checkable by the same code);
+2. `mode = "base"` and `base` is missing, relative, not `http://` or
+   `https://`, has query/credentials/fragment content, or does not end in `/`
+   (a `#` base refuses: the tightening above);
 3. `mode = "base"` and `base` equals or lies under a **former-name** HTTP(S)
    base (`http://aegis.gastown.local/ontology/`,
    `https://camayoc.local/ontology/`). Former names are read aliases, never
@@ -157,7 +182,13 @@ exits non-zero with a message naming the missing input when:
 7. the store's recorded install mode (below) disagrees with the configured
    mode;
 8. the store holds **no** recorded install declaration. Allocation never
-   creates the declaration implicitly; it is a precondition (below).
+   creates the declaration implicitly; it is a precondition (below);
+9. the writer's scope entry is missing, its `visibility`/`audience` pair fails
+   the registry's test (`public` scope over `http://`, or `public` visibility
+   with a non-`public` audience or the reverse), or a scope that section 3.1
+   marks **private-record** is declared `visibility = "public"` or
+   `audience = "public"`. The last case is refused by the new scope-policy
+   check (Quipu gap 3), not by the registry, which would accept it.
 
 Reference reuse and reads never require these inputs: a reader with no
 configuration still recalls every stored record.
@@ -176,7 +207,8 @@ cannot carry it: it serializes only `Namespace` entries, as
 as a `Namespace` and errors on a mismatch. Writing the declaration on that
 predicate would therefore break every registry read.
 
-The declaration is a **distinct record kind** (proposed subject
+The declaration holds no visibility or audience: those belong to the scope
+entries. The declaration is a **distinct record kind** (proposed subject
 `<urn:quipu:instance-identity>`), **not** a `[[quipu.namespaces]]` entry with
 base `{base}`. It holds no prefix, mints nothing and does not take part in
 the namespace overlap test. Were it a namespace entry, the registry's two-way
@@ -201,27 +233,41 @@ Quipu gaps to close in the implementation item (new code, not configuration):
    keeps reading only `namespaceDeclaration`, so registry reads are
    unaffected; the declaration reader refuses more than one declaration
    subject, an unknown field, or a value that fails refusals 1–5. Read-back is
-   exact: after apply, the declaration read returns the same mode, base or
-   install UUID and visibility byte for byte, or the apply reports failure.
+   exact: after apply, the declaration read returns the same mode and base
+   or install UUID byte for byte, or the apply reports failure.
 2. **URN-base entry kind.** The registry currently admits only HTTP(S) bases,
    while `namespace::require_base_ns` already admits `urn:`. Option 2 needs a
    registry entry kind with no base prefix (`mode = "urn-uuid"`,
-   `install_uuid`, `types` allowlist) whose owner scope is enforced from
-   facts, not from IRI prefix.
+   `install_uuid`, `types` allowlist, and the same per-scope `visibility` and
+   `audience` fields and pairing test as a namespace entry) whose owner scope
+   is enforced from facts, not from IRI prefix.
+3. **Scope-owner write admission and scope policy.** On the guarded write
+   path, a write whose subject lies under a scope base `{base}{scope}/`
+   (option 1), or carries that scope's allocation fact (option 2), is
+   admitted only for that scope's owner principal; any other principal
+   refuses with no write. The same check refuses a private-record scope
+   (section 3.1) declared public, at apply time and again at write time.
+   Today the registry checks types and graphs only; this admission and policy
+   check is new code, and acceptance 4 tests it.
 
 ## 3. Owner key and scoped allocation
 
 ### 3.1 Scopes
 
-One owner scope per writer. A scope is the pair *(owner principal, allowed
-types)*; a principal allocates only inside its own scope.
+One owner scope per writer. A scope is *(owner principal, allowed types,
+visibility, audience)*; a principal allocates only inside its own scope.
 
-| Scope | Owner principal | Allocates |
-| --- | --- | --- |
-| `chaski` | chaski reaction runtime | firing, reaction, focus |
-| `shuttle` | shuttle exporter | run, workflow, event |
-| `shantytown` | shantytown gate writer | gate verdict, gate approval, GitHub entity mirror |
-| `camayoc` | `cy` record writer | memory record, topic |
+| Scope | Owner principal | Allocates | Visibility / audience |
+| --- | --- | --- | --- |
+| `chaski` | chaski reaction runtime | firing, reaction, focus | install-chosen |
+| `shuttle` | shuttle exporter | run, workflow, event | install-chosen |
+| `shantytown` | shantytown gate writer | gate verdict, gate approval, GitHub entity mirror | install-chosen |
+| `camayoc` | `cy` record writer | memory record, topic | **private-record:** `private`, audience `org:<id>` or `personal:<id>` |
+
+*Install-chosen* means the operator sets the pair on the scope entry, subject
+to the registry's test. *Private-record* scopes may never be public on any
+install, under either option (refusal 9). The `<id>` is the install's existing
+destination-binding audience id, not a new name minted here.
 
 The scope list is the proposed owner-key policy **for decision**; it is not
 enacted by this document. There is no general-operator mint: an operator who
@@ -231,10 +277,11 @@ stay human-loaded and keep their current identity (frozen bytes).
 ### 3.2 Enforcement
 
 - **Option 1:** the scope is a `[[quipu.namespaces]]` entry per writer, base
-  `{base}{scope}/`, with a `types` allowlist and opaque or key minting. The
-  guarded write path already refuses a mint outside the declared types and
-  graph. New: a write whose subject lies under a scope base is admitted only
-  for that scope's owner principal.
+  `{base}{scope}/`, with a `types` allowlist, opaque or key minting, and the
+  scope's own `visibility` and `audience`. The guarded write path already
+  refuses a mint outside the declared types and graph. New (Quipu gap 3): a
+  write whose subject lies under a scope base is admitted only for that
+  scope's owner principal.
 - **Option 2:** the IRI carries no scope, so each allocated record carries an
   allocation fact naming its scope and owner. The predicate is taken from the
   loaded w3id vocabulary (m5s.1 ownership ledger); **this design does not mint
@@ -384,11 +431,14 @@ it is option C in the ASK below, and it still requires a recorded
    namespace refuses; an install declaration that carries a base prefix
    (i.e. was written as a namespace entry) is refused; mode disagreeing with the
    recorded declaration refuses; no recorded declaration refuses; a principal
-   writing into another scope refuses.
-5. Positive overlap control: on an option-1 install, the install declaration
-   plus all four scope entries `{base}chaski/` … `{base}camayoc/` apply
-   together without an overlap refusal, and each writer then mints under its
-   own scope.
+   writing into another scope refuses; a private-record scope (`camayoc`)
+   declared `visibility = "public"` or `audience = "public"` refuses at apply
+   and at write; a `#`-terminated base refuses.
+5. Positive overlap and audience control: on an option-1 install with an
+   `https://` base, the install declaration plus all four scope entries
+   `{base}chaski/` … `{base}camayoc/` apply together without an overlap
+   refusal, with `shantytown` public and `camayoc` private under audience
+   `org:<id>` side by side, and each writer then mints under its own scope.
 6. Registry control: after the install declaration is applied, an ordinary
    `quipu namespaces` read still succeeds and lists only namespace entries
    (the declaration predicate is not parsed as a `Namespace`).
@@ -418,8 +468,10 @@ design does not pick it.
   against the m5s.1 ownership ledger. *For:* one public naming decision
   already accepted for infra; public HTTPS; no second authority. *Against:*
   the w3id route/resolver still needs its separate target proof and upstream
-  public-send step before it resolves; memory records under a public authority
-  need audience controls (`org:`/`personal:`) from the registry.
+  public-send step before it resolves; memory records under a public
+  authority are named publicly even though the `camayoc` scope entry is
+  private with an `org:`/`personal:` audience (section 3.1), so the w3id
+  route for that scope must not redirect to a public resolver.
 - **Option B:** a private, owner-controlled resolvable base on a domain Stiwi
   names. *For:* private records never sit under a public authority. *Against:*
   needs a new name; still must not be a hard-coded default in tool code.
