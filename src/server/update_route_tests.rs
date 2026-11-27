@@ -373,19 +373,19 @@ fn sabotage_an_r3_update_sent_to_legacy_writes_nothing_in_any_file() {
     assert_eq!(after, before);
 }
 
-/// Seconds held on `/update` by `client` (or the overflow bucket it may have
-/// been folded into), read from the rendered exposition.
-fn update_held(client: &str) -> f64 {
+/// Seconds held on `/update` by exactly `client`, read from the rendered
+/// exposition, or `None` when that client has no series of its own. The
+/// `other` overflow bucket is deliberately not counted: other tests in this
+/// process raise it, so counting it would let a dropped observation pass.
+fn update_held(client: &str) -> Option<f64> {
+    let series = format!("client=\"{client}\"");
     quipu::metrics::metrics()
         .render_with_graph_counts(None, None)
         .lines()
         .filter(|line| line.starts_with("quipu_store_held_seconds_total{"))
-        .filter(|line| line.contains("endpoint=\"/update\""))
-        .filter(|line| {
-            line.contains(&format!("client=\"{client}\"")) || line.contains("client=\"other\"")
-        })
+        .filter(|line| line.contains("endpoint=\"/update\"") && line.contains(&series))
         .filter_map(|line| line.rsplit(' ').next()?.parse::<f64>().ok())
-        .sum()
+        .reduce(|a, b| a + b)
 }
 
 /// H2a: a routed write records store time for its client like a legacy write
@@ -393,7 +393,7 @@ fn update_held(client: &str) -> f64 {
 #[test]
 fn h2a_a_routed_update_records_store_time_for_its_client() {
     let f = fx();
-    let before = update_held("h2a-routed");
+    let before = update_held("h2a-routed").unwrap_or(0.0);
     let created = dispatch(
         Some(&f.router),
         &f.legacy,
@@ -403,8 +403,10 @@ fn h2a_a_routed_update_records_store_time_for_its_client() {
     )
     .unwrap();
     assert_eq!(report(created)["owner"]["store_id"], f.tracker_id.as_str());
+    let after = update_held("h2a-routed")
+        .expect("the routed write must record a series for its own client, not fold or drop it");
     assert!(
-        update_held("h2a-routed") > before,
+        after > before,
         "the routed write held the owner's writer and must say so"
     );
 }
