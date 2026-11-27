@@ -257,3 +257,18 @@ Namespace migration of stored IRIs (aegis-kao.4 covers how code *obtains*
 namespaces, not renaming them); the other kao children; any change to the
 client tools' own internal formats beyond accepting Quipu's documented
 contracts.
+
+## Guard (kao.12)
+
+`scripts/check-stack-vocabulary.py` runs in CI before pre-commit. It refuses
+any new line under `src/` that names a stack client or component:
+`shantytown`, `tambo`, `chaski`, `shuttle`, `rikuy`, `bobbin`, `yupana`,
+`hank`, `desire-path`, the `seeds.local` host, or code that spawns the `st`,
+`sd` or `cy` binaries. It also refuses the stack vocabulary (`aegis`,
+`camayoc`, `gastown`) it already refused before this wave. Plain `seeds` is
+not matched, because personalised-PageRank seeds are a graph term.
+
+Lines that predate the guard are grandfathered per file in
+`scripts/stack-vocabulary-allowlist.tsv`. That file is a ratchet: a count may
+only fall, and `--write` refuses to raise one. Removing a coupling (kao.1 to
+kao.11) lowers a count. Adding one makes CI fail.

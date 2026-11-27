@@ -5,6 +5,15 @@ Quipu core names no vocabulary of the stack that runs on it: no deployment
 namespace, hostname or vocabulary-pack term list in src/. Vocabularies are
 data a store loads (see src/term_vocabulary.rs).
 
+Nor does it name the stack's CLIENTS (aegis-kao, Stiwi 2026-11-20: "Quipu
+should not be coupled to the stack, but the opposite"). The dependency runs
+stack -> Quipu, never Quipu -> stack: no client name in request handling,
+allowlists, metrics labels, default paths or spawned commands. Client
+specifics live in the client or in deployment configuration and data.
+Plain "seeds" is NOT matched, because personalised PageRank seeds are a graph
+term; the seeds deployment host (seeds.local) and spawning the `sd`/`st`
+binaries are.
+
 Literals that predate this guard are listed, per file, with the number of
 matching lines in scripts/stack-vocabulary-allowlist.tsv. The allowlist is a
 ratchet:
@@ -31,7 +40,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-PATTERN = re.compile(r"aegis|camayoc|gastown", re.IGNORECASE)
+PATTERN = re.compile(
+    r"aegis|camayoc|gastown"
+    # Stack clients and components (aegis-kao.12).
+    r"|shantytown|tambo|chaski|shuttle|rikuy|bobbin|yupana|\bhank\b"
+    r"|desire[-_ ]?path|seeds\.local"
+    # Quipu spawning a stack client binary is the reverse dependency itself.
+    r"|Command::new\(\s*\"(?:st|sd|cy)\"",
+    re.IGNORECASE,
+)
 # A work-item reference such as `(aegis-pu7)` or `aegis-xdvg.6` is provenance,
 # not vocabulary: it names no namespace, host or term the code depends on.
 # Such tokens are removed before matching, so citing an item in a comment does
@@ -162,6 +179,20 @@ def self_test() -> int:
         ):
             (root / "src" / "clean.rs").write_text(leak + "\n")
             cases.append((f"still refused: {leak}", run(root, allow) == 1))
+        for leak in (
+            'Command::new("st")',
+            'let p = "~/.config/bobbin";',
+            "// reconcile_with_yupana",
+            '"x-quipu-source": "shantytown"',
+            '"http://seeds.local/item/x"',
+            "tambo pack verify",
+        ):
+            (root / "src" / "clean.rs").write_text(leak + "\n")
+            cases.append((f"client name refused: {leak}", run(root, allow) == 1))
+        (root / "src" / "clean.rs").write_text(
+            'let seeds = input.get("seeds"); // PPR seeds\nlet cost = 1;\n'
+        )
+        cases.append(("graph-algorithm seeds and \"st\" substrings pass", run(root, allow) == 0))
         (root / "src" / "clean.rs").write_text("fn y() {}\n")
         cases.append(("then passes", run(root, allow) == 0))
         old.write_text("// legacy: Aegis\n// aegis again\n")
