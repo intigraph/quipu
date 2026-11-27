@@ -1,11 +1,13 @@
 //! Catch a stale label snapshot up from the committed transaction delta.
 //!
 //! The commit hook ([`super::cache::maintain`]) only sees writes made by its own
-//! process. A read worker (`src/server/process_pool.rs` routes `/resolve`
-//! there) never sees the primary's commits, so every board write left its
-//! snapshot stale and the next `/resolve` paid a full label scan: measured
-//! (aegis-wjo7) at 2.5-5 s for seeds' create path against ~0.6 s on a current
-//! snapshot. The database itself says what changed, by `idx_tx` and
+//! process, and runs after RELEASE. Two readers see a commit before it does: a
+//! read worker (`src/server/process_pool.rs` routes `/resolve` there when
+//! `read_processes > 0`), which never sees the primary's commits at all, and,
+//! with `read_processes = 0`, a pooled reader in the primary that shares the
+//! writer's cache but reads between the commit and the hook. Either one used
+//! to pay a full label scan on the stale snapshot: measured (aegis-wjo7) at
+//! 2.5-5 s for seeds' create path against ~0.6 s on a current snapshot. The database itself says what changed, by `idx_tx` and
 //! `idx_retracted_tx`, so a stale snapshot of the SAME store generation can be
 //! brought current in milliseconds instead of rebuilt.
 //!

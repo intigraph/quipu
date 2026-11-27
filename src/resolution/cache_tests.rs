@@ -391,3 +391,101 @@ fn identity_or_epoch_change_falls_back_to_the_exact_scan() {
         "epoch change never patched"
     );
 }
+
+/// aegis-wjo7: every label lookup, warm and cache clear is counted with the
+/// path it took. Counters are process-wide and other tests run in parallel,
+/// so each check is "moved by at least one", never an absolute value.
+fn moved(counts: impl Fn() -> Vec<(&'static str, u64)>, label: &str, act: impl FnOnce()) -> u64 {
+    let before = super::cache_counters::count(&counts(), label);
+    act();
+    super::cache_counters::count(&counts(), label) - before
+}
+
+#[test]
+fn label_lookups_are_counted_by_where_they_were_answered() {
+    use super::cache_counters::{lookup_counts, warm_counts};
+    let mut store = Store::open_in_memory().unwrap();
+    write(&mut store, 1, "Alice", Op::Assert);
+    assert!(
+        moved(warm_counts, "published", || {
+            store.prepare_resolution_index().unwrap();
+        }) >= 1
+    );
+    assert!(moved(lookup_counts, "hit", || drop(entries(&store))) >= 1);
+    let resident = store.resolution_cache.lock().take();
+    assert!(moved(lookup_counts, "scan_cold", || drop(entries(&store))) >= 1);
+    *store.resolution_cache.lock() = resident;
+    store.conn.execute_batch("SAVEPOINT open_tx").unwrap();
+    assert!(
+        moved(lookup_counts, "scan_in_transaction", || drop(entries(
+            &store
+        ))) >= 1
+    );
+    store.conn.execute_batch("RELEASE open_tx").unwrap();
+    store.resolution_config_mut().cache_labels = false;
+    assert!(moved(lookup_counts, "scan_disabled", || drop(entries(&store))) >= 1);
+}
+
+#[test]
+fn a_separate_reader_counts_its_catch_up_and_its_uncertified_scan() {
+    use super::cache_counters::lookup_counts;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("store.db");
+    let mut writer = Store::open(path.to_str().unwrap()).unwrap();
+    write(&mut writer, 1, "Alice", Op::Assert);
+    let reader = Store::open_read_only(path.to_str().unwrap()).unwrap();
+    assert!(reader.prepare_resolution_index().unwrap());
+    write(&mut writer, 2, "Bob", Op::Assert);
+    assert!(moved(lookup_counts, "catch_up", || drop(entries(&reader))) >= 1);
+    crate::tool_knot(
+        &mut writer,
+        &serde_json::json!({"turtle":format!("<urn:test:1> <{}sameAs> <urn:test:2> .",namespace::OWL)}),
+    )
+    .unwrap();
+    assert!(moved(lookup_counts, "scan_uncertified", || drop(entries(&reader))) >= 1);
+    assert_eq!(entries(&reader), oracle(&reader));
+}
+
+#[test]
+fn every_commit_that_leaves_the_cache_empty_is_counted_with_its_reason() {
+    use super::cache_counters::cleared_counts;
+    let mut store = Store::open_in_memory().unwrap();
+    write(&mut store, 1, "Alice", Op::Assert);
+    store.prepare_resolution_index().unwrap();
+    assert!(
+        moved(cleared_counts, "unknown_effects", || {
+            let previous = store.resolution_cache.lock().take();
+            write(&mut store, 2, "Bob", Op::Assert);
+            *store.resolution_cache.lock() = previous;
+            cache::maintain(&store, None, store.latest_tx_id().unwrap());
+        }) >= 1
+    );
+    assert!(
+        store.resolution_cache.lock().is_none(),
+        "the cache is empty"
+    );
+    // A resident snapshot two commits behind is not this commit's predecessor.
+    store.prepare_resolution_index().unwrap();
+    let stale = store.resolution_cache.lock().take();
+    write(&mut store, 3, "Carol", Op::Assert);
+    *store.resolution_cache.lock() = stale;
+    assert!(
+        moved(cleared_counts, "not_predecessor", || {
+            let behind = store.resolution_cache.lock().take();
+            write(&mut store, 4, "Dave", Op::Assert);
+            *store.resolution_cache.lock() = behind;
+            write(&mut store, 5, "Erin", Op::Assert);
+        }) >= 1
+    );
+    store.prepare_resolution_index().unwrap();
+    assert!(
+        moved(cleared_counts, "same_as", || {
+            crate::tool_knot(
+                &mut store,
+                &serde_json::json!({"turtle":format!("<urn:test:1> <{}sameAs> <urn:test:9> .",namespace::OWL)}),
+            )
+            .unwrap();
+        }) >= 1
+    );
+    assert_eq!(entries(&store), oracle(&store));
+}

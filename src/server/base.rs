@@ -221,6 +221,7 @@ pub(crate) async fn metrics_handler(
     super::admission::shed::render_metrics(&mut body);
     super::update::render_update_paths(&mut body);
     super::handle::writer_timing::render(&mut body);
+    super::handle::resolution_cache::render(&mut body);
     super::publication::replicate_challenge_timing::render(&mut body);
     Ok((
         [(
