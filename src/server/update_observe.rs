@@ -103,3 +103,54 @@ pub(super) fn apply_update_observed(
     );
     result
 }
+
+/// What a routed update saw inside its owner, for its observation line.
+#[cfg(unix)]
+#[derive(Default)]
+pub(super) struct RoutedSeen {
+    pub(super) store_id: Option<String>,
+    pub(super) shacl_validate_on_write: Option<bool>,
+    pub(super) path: Option<UpdatePath>,
+}
+
+/// The routed counterpart of [`apply_update_observed`]'s telemetry
+/// (aegis-n0wc.5 H2a): the same store counters for `client`, and one
+/// `update_observation` line with the same field names for the phases a
+/// routed update has. It records no poststate profile (the routed path does
+/// not run one), so those fields are absent rather than zero.
+#[cfg(unix)]
+pub(super) fn observe_routed(
+    client: &str,
+    ok: bool,
+    seen: &RoutedSeen,
+    hold: quipu::store::graph_owner::OwnerHold,
+    times: &UpdateTimes,
+) {
+    let wait = hold.wait.as_secs_f64();
+    let held = hold.held.map(|held| held.as_secs_f64());
+    quipu::metrics::metrics().observe_store_counters(client, "/update", wait, held.unwrap_or(0.0));
+    eprintln!(
+        "{}",
+        serde_json::json!({
+            "event": "update_observation",
+            "route": "graph_set",
+            "server_process_id": std::process::id(),
+            "client": client,
+            "outcome": if ok { "ok" } else { "error" },
+            "path": seen.path.map(|path| match path {
+                UpdatePath::Sliced => "sliced",
+                UpdatePath::Full => "full",
+            }),
+            "owner_store_id": seen.store_id,
+            "shacl_validate_on_write": seen.shacl_validate_on_write,
+            "store_wait_ms": ms(wait),
+            "store_held_ms": held.map(ms),
+            "dataset_ms": ms(times.dataset),
+            "eval_ms": ms(times.eval),
+            "gates_ms": ms(times.gates),
+            "prep_ms": ms(times.prep),
+            "explicit_shapes_ms": ms(times.shapes),
+            "commit_ms": ms(times.commit),
+        })
+    );
+}

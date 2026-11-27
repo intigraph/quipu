@@ -372,3 +372,56 @@ fn sabotage_an_r3_update_sent_to_legacy_writes_nothing_in_any_file() {
     let after: Vec<_> = files.iter().map(|x| head(&f.root, x)).collect();
     assert_eq!(after, before);
 }
+
+/// Seconds held on `/update` by `client` (or the overflow bucket it may have
+/// been folded into), read from the rendered exposition.
+fn update_held(client: &str) -> f64 {
+    quipu::metrics::metrics()
+        .render_with_graph_counts(None, None)
+        .lines()
+        .filter(|line| line.starts_with("quipu_store_held_seconds_total{"))
+        .filter(|line| line.contains("endpoint=\"/update\""))
+        .filter(|line| {
+            line.contains(&format!("client=\"{client}\"")) || line.contains("client=\"other\"")
+        })
+        .filter_map(|line| line.rsplit(' ').next()?.parse::<f64>().ok())
+        .sum()
+}
+
+/// H2a: a routed write records store time for its client like a legacy write
+/// does. Before, `apply_routed` built its phase timings and dropped them.
+#[test]
+fn h2a_a_routed_update_records_store_time_for_its_client() {
+    let f = fx();
+    let before = update_held("h2a-routed");
+    let created = dispatch(
+        Some(&f.router),
+        &f.legacy,
+        &format!("{BASE}{CREATE}"),
+        &seeds(),
+        "h2a-routed",
+    )
+    .unwrap();
+    assert_eq!(report(created)["owner"]["store_id"], f.tracker_id.as_str());
+    assert!(
+        update_held("h2a-routed") > before,
+        "the routed write held the owner's writer and must say so"
+    );
+}
+
+/// H2a: the owner reports its hold on success, and no hold on a refusal made
+/// before its writer was taken (a refused write still reports its wait).
+#[test]
+fn h2a_the_owner_reports_held_only_when_it_held_its_writer() {
+    let f = fx();
+    let Ok(Route::Owner(owner, members)) = route(Some(&f.router), &format!("{BASE}{CREATE}"))
+    else {
+        panic!("CREATE routes to the tracker owner");
+    };
+    let (refused, hold) = owner.update_observed(&Default::default(), |_| Ok(()));
+    assert!(refused.is_err(), "an empty selection is refused");
+    assert_eq!(hold.held, None, "refused before the writer was held");
+    let (done, hold) = owner.update_observed(&members, |_| Ok(()));
+    assert!(done.is_ok());
+    assert!(hold.held.is_some(), "the writer was held for the work");
+}
