@@ -113,13 +113,15 @@ pub fn configure_provider(
                         config.dimension,
                         config.max_sequence_length,
                         &crate::model_assets::recipe(),
+                        config.sessions,
                     )?
                 } else {
-                    crate::OnnxEmbeddingProvider::load(
+                    crate::OnnxEmbeddingProvider::load_with_sessions(
                         model,
                         tokenizer,
                         config.dimension,
                         config.max_sequence_length,
+                        config.sessions,
                     )?
                 };
                 store.set_embedding_provider(Arc::new(provider));

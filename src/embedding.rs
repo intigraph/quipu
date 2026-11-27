@@ -37,6 +37,13 @@ pub trait EmbeddingProvider: Send + Sync {
         texts.iter().map(|t| self.embed_text(t)).collect()
     }
 
+    /// [`Self::embed_batch`] for bulk and write-embedding drains: a provider
+    /// with several sessions gives this work at most one, so it never takes
+    /// every session from waiting reads (aegis-wjo7). Default: `embed_batch`.
+    fn embed_batch_background(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
+        self.embed_batch(texts)
+    }
+
     /// Return the embedding dimension (e.g. 384 for all-MiniLM-L6-v2).
     fn dimension(&self) -> usize;
 }
@@ -392,7 +399,7 @@ pub(crate) fn auto_embed_entities(
 
     for chunk in work.items.chunks(batch_sz) {
         let texts: Vec<&str> = chunk.iter().map(|(_, t, _)| t.as_str()).collect();
-        let embeddings = provider.embed_batch(&texts)?;
+        let embeddings = provider.embed_batch_background(&texts)?;
 
         for ((eid, text, _), emb) in chunk.iter().zip(embeddings.iter()) {
             store.mark_named_search_embedding(*eid)?;

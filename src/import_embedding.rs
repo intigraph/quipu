@@ -126,7 +126,7 @@ pub(crate) fn prepare(
         let texts = work.texts();
         let mut embeddings = Vec::new();
         for chunk in texts.chunks(store.embedding_config().embed_batch_size.max(1)) {
-            embeddings.extend(provider.embed_batch(chunk)?);
+            embeddings.extend(provider.embed_batch_background(chunk)?);
         }
         store.apply_deferred_embed(&work, &embeddings)?;
     }

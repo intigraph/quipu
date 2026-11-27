@@ -49,7 +49,16 @@ pub struct EmbeddingConfig {
     /// (default: 50 000). A store upgraded with a large backlog drains it
     /// over several passes instead of in one long delete.
     pub superseded_prune_max_per_pass: usize,
+
+    /// ONNX inference sessions in the process (default 1, at most
+    /// [`MAX_EMBEDDING_SESSIONS`]; aegis-wjo7). One session serializes every
+    /// embedding; N lets N run at once, at the cost of N copies of the model
+    /// in memory. Bulk and write-embedding drains use at most one session.
+    pub sessions: usize,
 }
+
+/// Largest accepted [`EmbeddingConfig::sessions`].
+pub const MAX_EMBEDDING_SESSIONS: usize = 8;
 
 /// Default for [`EmbeddingConfig::superseded_retention_days`].
 pub const DEFAULT_SUPERSEDED_RETENTION_DAYS: u32 = 30;
@@ -70,6 +79,7 @@ impl Default for EmbeddingConfig {
             exclude_predicates: Vec::new(),
             superseded_retention_days: DEFAULT_SUPERSEDED_RETENTION_DAYS,
             superseded_prune_max_per_pass: DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS,
+            sessions: 1,
         }
     }
 }
@@ -104,8 +114,14 @@ impl<'de> serde::Deserialize<'de> for EmbeddingConfig {
             max_sequence_length,
             exclude_predicates,
             superseded_retention_days,
-            superseded_prune_max_per_pass
+            superseded_prune_max_per_pass,
+            sessions
         );
+        if !(1..=MAX_EMBEDDING_SESSIONS).contains(&config.sessions) {
+            return Err(serde::de::Error::custom(format!(
+                "embedding sessions must be 1..={MAX_EMBEDDING_SESSIONS}"
+            )));
+        }
         Ok(config)
     }
 }
@@ -128,5 +144,21 @@ mod tests {
         let forged: EmbeddingConfig = toml::from_str("auto_embed_explicit = true").unwrap();
         assert!(!forged.auto_embed_explicit);
         assert!(toml::from_str::<EmbeddingConfig>("auto_embed = 'true'").is_err());
+    }
+
+    /// aegis-wjo7: one session unless an operator asks for more, bounded.
+    #[test]
+    fn sessions_default_to_one_and_are_bounded() {
+        assert_eq!(toml::from_str::<EmbeddingConfig>("").unwrap().sessions, 1);
+        assert_eq!(EmbeddingConfig::default().sessions, 1);
+        assert_eq!(
+            toml::from_str::<EmbeddingConfig>("sessions = 2")
+                .unwrap()
+                .sessions,
+            2
+        );
+        for bad in ["sessions = 0", "sessions = 9", "sessions = -1"] {
+            assert!(toml::from_str::<EmbeddingConfig>(bad).is_err(), "{bad}");
+        }
     }
 }

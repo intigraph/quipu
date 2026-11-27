@@ -4,7 +4,6 @@
 //! provides the [`EmbeddingProvider`] trait for vector search support.
 
 use std::path::Path;
-use std::sync::Mutex;
 
 use ndarray::Array2;
 use ort::ep::CPU;
@@ -14,10 +13,12 @@ use tokenizers::{PaddingStrategy, Tokenizer};
 
 use crate::embedding::EmbeddingProvider;
 use crate::error::Result;
+use crate::session_pool::{Lane, SessionPool};
 
 /// ONNX Runtime embedding provider.
 pub struct OnnxEmbeddingProvider {
-    session: Mutex<Session>,
+    /// One session by default; see [`crate::session_pool`] (aegis-wjo7).
+    sessions: SessionPool<Session>,
     tokenizer: Tokenizer,
     dim: usize,
     /// Hard cap on input tokens; longer inputs are truncated (hq-7v0).
@@ -40,7 +41,19 @@ impl OnnxEmbeddingProvider {
         dim: usize,
         max_seq_len: usize,
     ) -> Result<Self> {
-        Self::load_checked(model_path, tokenizer_path, dim, max_seq_len, None)
+        Self::load_with_sessions(model_path, tokenizer_path, dim, max_seq_len, 1)
+    }
+
+    /// [`Self::load`] with `sessions` (1..=8) inference sessions over the SAME
+    /// verified model bytes (aegis-wjo7). Each holds its own weights.
+    pub fn load_with_sessions(
+        model_path: &Path,
+        tokenizer_path: &Path,
+        dim: usize,
+        max_seq_len: usize,
+        sessions: usize,
+    ) -> Result<Self> {
+        Self::load_checked(model_path, tokenizer_path, dim, max_seq_len, None, sessions)
     }
 
     pub(crate) fn load_pinned(
@@ -49,8 +62,16 @@ impl OnnxEmbeddingProvider {
         dim: usize,
         max_seq_len: usize,
         expected: &crate::embedding_runtime::EmbeddingRecipe,
+        sessions: usize,
     ) -> Result<Self> {
-        Self::load_checked(model_path, tokenizer_path, dim, max_seq_len, Some(expected))
+        Self::load_checked(
+            model_path,
+            tokenizer_path,
+            dim,
+            max_seq_len,
+            Some(expected),
+            sessions,
+        )
     }
 
     fn load_checked(
@@ -59,7 +80,14 @@ impl OnnxEmbeddingProvider {
         dim: usize,
         max_seq_len: usize,
         expected: Option<&crate::embedding_runtime::EmbeddingRecipe>,
+        sessions: usize,
     ) -> Result<Self> {
+        if !(1..=crate::session_pool::MAX_SESSIONS).contains(&sessions) {
+            return Err(crate::Error::InvalidValue(format!(
+                "embedding sessions must be 1..={}, got {sessions}",
+                crate::session_pool::MAX_SESSIONS
+            )));
+        }
         // Hash and load the SAME buffers: a path reopened after hashing is
         // not proof of the bytes consumed by the runtime.
         let model_bytes = std::fs::read(model_path)
@@ -84,20 +112,24 @@ impl OnnxEmbeddingProvider {
         // verified GPU core; the bundled default is only the CPU fallback.
         #[cfg(feature = "bundled-onnx")]
         crate::onnx_runtime::initialize(None)?;
-        let session = Session::builder()
-            .and_then(|b| b.with_intra_threads(1))
-            // Request shapes vary with batch size and token length. ORT's CPU
-            // arena and memory-pattern cache otherwise retain the largest
-            // allocation. Under sustained embedding traffic that correlated
-            // with monotonic RSS growth to the service cap and >100% CPU
-            // (aegis-2s6xpb). Prefer returning allocations to the OS over
-            // optimizing a shape that is not stable between requests.
-            .and_then(|b| b.with_memory_pattern(false))
-            .and_then(|b| {
-                b.with_execution_providers([CPU::default().with_arena_allocator(false).build()])
-            })
-            .and_then(|b| b.commit_from_memory(&model_bytes))
-            .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?;
+        // Every session is built the same way from the SAME verified buffer.
+        let build = || {
+            Session::builder()
+                .and_then(|b| b.with_intra_threads(1))
+                // Request shapes vary with batch size and token length. ORT's CPU
+                // arena and memory-pattern cache otherwise retain the largest
+                // allocation. Under sustained embedding traffic that correlated
+                // with monotonic RSS growth to the service cap and >100% CPU
+                // (aegis-2s6xpb). Prefer returning allocations to the OS over
+                // optimizing a shape that is not stable between requests.
+                .and_then(|b| b.with_memory_pattern(false))
+                .and_then(|b| {
+                    b.with_execution_providers([CPU::default().with_arena_allocator(false).build()])
+                })
+                .and_then(|b| b.commit_from_memory(&model_bytes))
+                .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))
+        };
+        let session = build()?;
 
         let output_dimension = session
             .outputs()
@@ -127,8 +159,13 @@ impl OnnxEmbeddingProvider {
             .map_err(|e| crate::Error::Store(format!("Tokenizer truncation config failed: {e}")))?;
         use_batch_longest_padding(&mut tokenizer);
 
+        let mut built = Vec::with_capacity(sessions);
+        built.push(session);
+        for _ in 1..sessions {
+            built.push(build()?);
+        }
         Ok(Self {
-            session: Mutex::new(session),
+            sessions: SessionPool::new(built)?,
             tokenizer,
             dim,
             max_seq_len,
@@ -137,7 +174,8 @@ impl OnnxEmbeddingProvider {
     }
 
     /// Embed a batch of texts, returning vectors and performing mean pooling.
-    fn embed_batch_inner(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
+    /// Only `session.run` holds a session; tokenizing and pooling do not.
+    fn embed_batch_inner(&self, texts: &[&str], lane: Lane) -> Result<Vec<Vec<f32>>> {
         if texts.is_empty() {
             return Ok(vec![]);
         }
@@ -190,7 +228,7 @@ impl OnnxEmbeddingProvider {
         let type_tensor = Tensor::from_array((shape, token_type_ids.into_boxed_slice()))
             .map_err(|e| crate::Error::Store(format!("Tensor creation failed: {e}")))?;
 
-        let mut session = self.session.lock().unwrap();
+        let mut session = self.sessions.checkout(lane);
         // Bind inputs BY NAME, not positionally. The all-MiniLM-L6-v2 ONNX model's
         // input order is [input_ids, token_type_ids, attention_mask]; positional
         // binding (ids, mask, type) fed attention_mask into the token_type_ids slot
@@ -276,7 +314,7 @@ impl EmbeddingProvider for OnnxEmbeddingProvider {
     }
 
     fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
-        let results = self.embed_batch_inner(&[text])?;
+        let results = self.embed_batch_inner(&[text], Lane::Interactive)?;
         results
             .into_iter()
             .next()
@@ -284,7 +322,11 @@ impl EmbeddingProvider for OnnxEmbeddingProvider {
     }
 
     fn embed_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
-        self.embed_batch_inner(texts)
+        self.embed_batch_inner(texts, Lane::Interactive)
+    }
+
+    fn embed_batch_background(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
+        self.embed_batch_inner(texts, Lane::Background)
     }
 
     fn dimension(&self) -> usize {
@@ -322,9 +364,10 @@ mod tests {
                 },
             )
             .unwrap();
-            let error = OnnxEmbeddingProvider::load_pinned(&model, &tokenizer, 384, 256, &expected)
-                .err()
-                .expect("replaced input must be refused before ORT bootstrap");
+            let error =
+                OnnxEmbeddingProvider::load_pinned(&model, &tokenizer, 384, 256, &expected, 1)
+                    .err()
+                    .expect("replaced input must be refused before ORT bootstrap");
             assert!(
                 error.to_string().contains("consumed-buffer pin mismatch"),
                 "{error}"
