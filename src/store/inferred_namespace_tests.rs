@@ -1,12 +1,17 @@
 //! w3id follow-through for the companion tag (aegis-m5s.3): a fresh store
-//! writes only the canonical camayoc-core `sourceKind`, and a store tagged
-//! under the former `aegis.gastown.local` spelling still reads as tagged.
+//! writes only the canonical [`SOURCE_KIND`], and a store tagged under the
+//! former [`LEGACY_SOURCE_KIND`] spelling still reads as tagged.
 
 use super::*;
 use crate::reasoner::{RULE_NS, evaluate, parse_rules};
 
 const TS: &str = "2026-01-01T00:00:00Z";
-const OLD_HOSTS: [&str; 2] = ["aegis.gastown.local", "scbrown.github.io/quechua"];
+/// The former deployment host is read off the alias constant rather than
+/// spelled again, so the negative control tracks the alias it guards.
+fn old_hosts() -> [&'static str; 2] {
+    let legacy_host = LEGACY_SOURCE_KIND.split('/').nth(2).unwrap();
+    [legacy_host, "scbrown.github.io/quechua"]
+}
 
 fn companion_terms(store: &Store) -> Vec<String> {
     let companion = store.lookup(ROOT_INFERRED_GRAPH_IRI).unwrap().unwrap();
@@ -46,7 +51,7 @@ fn fresh_companion_writes_no_old_namespace_terms() {
 
     let terms = companion_terms(&store);
     assert!(terms.iter().any(|t| t == SOURCE_KIND), "{terms:?}");
-    for host in OLD_HOSTS {
+    for host in old_hosts() {
         assert!(
             !terms.iter().any(|t| t.contains(host)),
             "{host} in {terms:?}"

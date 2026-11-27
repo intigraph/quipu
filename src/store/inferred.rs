@@ -19,7 +19,7 @@
 //! a companion, so a user minting `…#inferred` cannot forge entailments.
 //!
 //! Each companion is self-describing: it carries
-//! `<companion> camayoc:sourceKind "inferred"` (the tag attaches at the GRAPH
+//! `<companion> core:sourceKind "inferred"` (the tag attaches at the GRAPH
 //! level — tagging a derived triple's *subject* would mistag the subject,
 //! which may itself be observed) and a freshness note
 //! `<companion> quipu:derivedAsOfTx <n>`, the premise-side transaction head
@@ -42,8 +42,8 @@ pub const ROOT_INFERRED_GRAPH_IRI: &str = "urn:quipu:graph:root#inferred";
 /// companion's closure last reflected.
 pub const DERIVED_AS_OF_TX: &str = "http://quipu.local/graph#derivedAsOfTx";
 
-/// The epistemic-class tag camayoc's ingress discipline defines; carried by
-/// the companion graph node itself. The canonical w3id camayoc-core spelling
+/// The epistemic-class tag the ingress discipline defines; carried by the
+/// companion graph node itself. The canonical w3id core-vocabulary spelling
 /// is the only one written (aegis-m5s.3).
 pub const SOURCE_KIND: &str = "https://w3id.org/intigraph/camayoc/core/ns#sourceKind";
 
@@ -135,7 +135,7 @@ impl Store {
 
     /// Intern (and, on first use, tag) the companion inferred graph for `g`.
     ///
-    /// First use writes the graph-level `camayoc:sourceKind "inferred"` tag so
+    /// First use writes the graph-level `core:sourceKind "inferred"` tag so
     /// the companion is self-describing; subsequent calls are a lookup. A tag
     /// under either spelling counts, so a pre-rename store is not re-tagged.
     pub fn ensure_companion_inferred_graph(&mut self, g: i64, timestamp: &str) -> Result<i64> {
