@@ -322,3 +322,64 @@ fn tied_top_k_and_strict_target_match_across_cache_states() {
         (response(&other, 1), response(&other, 3), strict(&other))
     );
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+    /// aegis-wjo7: a read worker never sees the primary's commit hook. Its
+    /// stale snapshot must catch up from the database delta (resident
+    /// generation advances without a rescan) and still equal the SQL oracle.
+    #[test]
+    fn separate_process_reader_catches_up_from_the_delta(ops in prop::collection::vec((0u8..5,0u8..8,"[a-zA-ZÀ-ÿΩΣ]{0,20}"),1..24)) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("store.db");
+        let mut writer = Store::open(path.to_str().unwrap()).unwrap();
+        for n in 0..8 { write(&mut writer,n,"Seed",Op::Assert); }
+        let reader = Store::open_read_only(path.to_str().unwrap()).unwrap();
+        prop_assert!(reader.prepare_resolution_index().unwrap());
+        for (kind,entity,label) in ops {
+            let identity_change = kind == 4;
+            match kind {
+                0|1=>write(&mut writer,entity,&label,Op::Assert),
+                2=>write(&mut writer,entity,&label,Op::Retract),
+                3=>{crate::tool_set(&mut writer,&serde_json::json!({"entity":format!("urn:test:{entity}"),"predicate":format!("{}label",namespace::RDFS),"value":{"str":label}})).unwrap();},
+                _=>{
+                    let plan=crate::tool_retract_source(&mut writer,&serde_json::json!({"source":"cache-test","repair":"private-cache-test"})).unwrap();
+                    crate::tool_retract_source(&mut writer,&serde_json::json!({"source":"cache-test","repair":"private-cache-test","apply":true,"expect":plan["planned"]})).unwrap();
+                },
+            }
+            prop_assert_eq!(entries(&reader),oracle(&reader));
+            let latest = reader.latest_tx_id().unwrap();
+            if !identity_change {
+                prop_assert_eq!(cache::resident_generation(&reader), Some(latest));
+            }
+            reader.prepare_resolution_index().unwrap();
+            prop_assert_eq!(entries(&reader),oracle(&reader));
+        }
+    }
+}
+
+#[test]
+fn identity_or_epoch_change_falls_back_to_the_exact_scan() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("store.db");
+    let mut writer = Store::open(path.to_str().unwrap()).unwrap();
+    write(&mut writer, 1, "Alice", Op::Assert);
+    let reader = Store::open_read_only(path.to_str().unwrap()).unwrap();
+    assert!(reader.prepare_resolution_index().unwrap());
+    let stale = cache::resident_generation(&reader);
+    crate::tool_knot(
+        &mut writer,
+        &serde_json::json!({"turtle":format!("<urn:test:1> <{}sameAs> <urn:test:2> .",namespace::OWL)}),
+    )
+    .unwrap();
+    assert_eq!(entries(&reader), oracle(&reader));
+    assert_eq!(cache::resident_generation(&reader), stale, "sameAs never patched");
+    writer.mint_log_epoch("test epoch").unwrap();
+    write(&mut writer, 3, "Carol", Op::Assert);
+    assert!(reader.prepare_resolution_index().unwrap()); // full rescan publishes
+    let rescanned = cache::resident_generation(&reader);
+    writer.mint_log_epoch("second epoch").unwrap();
+    write(&mut writer, 4, "Dave", Op::Assert);
+    assert_eq!(entries(&reader), oracle(&reader));
+    assert_eq!(cache::resident_generation(&reader), rescanned, "epoch change never patched");
+}

@@ -39,6 +39,7 @@ use crate::vector::VectorMatch;
 
 mod adjudication;
 pub(crate) mod cache;
+mod cache_delta;
 #[cfg(test)]
 mod cache_tests;
 mod index;

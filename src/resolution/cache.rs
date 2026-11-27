@@ -1,8 +1,5 @@
 //! One shared label snapshot, maintained only from complete committed changes.
-use super::{
-    LabelIndex,
-    index::{LabelEntry, LabelProfile},
-};
+use super::LabelIndex;
 use crate::{
     error::Result,
     namespace,
@@ -17,9 +14,21 @@ struct Key {
     store: String,
     path: Option<String>,
     tx: i64,
+    /// The change-log epoch: a freeze deletes rows without leaving a delta,
+    /// and mints a new epoch, so a snapshot never catches up across one.
+    epoch: Option<String>,
     attachments: Vec<crate::store::attach::Attachment>,
 }
 impl Key {
+    /// Same store generation, only further along: what a delta can bridge.
+    fn behind(&self, now: &Self) -> bool {
+        self.tx < now.tx
+            && self.store == now.store
+            && self.path == now.path
+            && self.epoch.is_some()
+            && self.epoch == now.epoch
+            && self.attachments == now.attachments
+    }
     fn of(store: &Store) -> Result<Self> {
         Ok(Self {
             store: store.store_id()?,
@@ -28,6 +37,7 @@ impl Key {
                     .map_or_else(|_| p.to_string(), |p| p.to_string_lossy().into_owned())
             }),
             tx: store.latest_tx_id()?,
+            epoch: store.log_epoch().ok(),
             attachments: store.attachments.clone(),
         })
     }
@@ -49,13 +59,49 @@ pub(super) fn get(store: &Store) -> Result<Arc<LabelIndex>> {
         let Ok(key) = Key::of(store) else {
             return Ok(Arc::new(LabelIndex::scan(store)?));
         };
-        if let Some(cached) = store.resolution_cache.lock().as_ref()
-            && cached.key == key
-        {
-            return Ok(cached.index.clone());
+        let resident = store
+            .resolution_cache
+            .lock()
+            .as_ref()
+            .map(|c| (c.key.clone(), c.index.clone()));
+        if let Some((cached, index)) = resident {
+            if cached == key {
+                return Ok(index);
+            }
+            if let Some(index) = advance(store, &cached, &index, &key)? {
+                return Ok(index);
+            }
         }
     }
     Ok(Arc::new(LabelIndex::scan(store)?))
+}
+
+/// Bring a stale snapshot of the same generation current from the delta and
+/// publish it, unless a newer generation was published meanwhile. `None` when
+/// the delta cannot certify it (see [`super::cache_delta`]).
+fn advance(
+    store: &Store,
+    cached: &Key,
+    index: &Arc<LabelIndex>,
+    key: &Key,
+) -> Result<Option<Arc<LabelIndex>>> {
+    if !cached.behind(key) {
+        return Ok(None);
+    }
+    let Some(index) = super::cache_delta::catch_up(store, index, cached.tx, key.tx)? else {
+        return Ok(None);
+    };
+    let mut cache = store.resolution_cache.lock();
+    if cache
+        .as_ref()
+        .is_none_or(|c| c.key.store != key.store || c.key.tx <= key.tx)
+    {
+        *cache = Some(CachedLabels {
+            key: key.clone(),
+            index: index.clone(),
+        });
+    }
+    Ok(Some(index))
 }
 
 impl Store {
@@ -75,11 +121,13 @@ impl Store {
             return Ok(false);
         }
         let key = Key::of(self)?;
-        if self
+        let resident = self
             .resolution_cache
             .lock()
             .as_ref()
-            .is_some_and(|c| c.key == key)
+            .map(|c| (c.key.clone(), c.index.clone()));
+        if let Some((cached, index)) = resident
+            && (cached == key || advance(self, &cached, &index, &key)?.is_some())
         {
             return Ok(true);
         }
@@ -130,6 +178,7 @@ fn maintain_checked(store: &Store, effective: Option<&[Datum]>, tx: i64) -> Resu
         || cached.key.store != key.store
         || cached.key.path != key.path
         || cached.key.attachments != key.attachments
+        || cached.key.epoch != key.epoch
     {
         return Ok(());
     }
@@ -143,47 +192,7 @@ fn maintain_checked(store: &Store, effective: Option<&[Datum]>, tx: i64) -> Resu
         .filter(|d| labels.contains(&d.attribute))
         .map(|d| store.canonical_id(d.entity))
         .collect::<Result<_>>()?;
-    let mut index = cached.index;
-    if !affected.is_empty() {
-        // Read the final current rows for the affected identities, including
-        // unchanged labels in attached layers and other named graphs. Applying
-        // caller datums directly would lose duplicate producers and closures.
-        let mut ids: Vec<i64> = affected.iter().copied().collect();
-        if !store.attachments.is_empty() {
-            let sql = format!(
-                "SELECT alias_id FROM term_alias WHERE canonical_id IN ({})",
-                super::id_list(&ids)
-            );
-            let mut stmt = store.conn.prepare(&sql)?;
-            let aliases = stmt
-                .query_map([], |r| r.get::<_, i64>(0))?
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            ids.extend(aliases);
-        }
-        let sql = format!(
-            "SELECT e,v FROM {} WHERE a IN ({}) AND e IN ({}) AND valid_to IS NULL AND op=1",
-            store.facts_source(),
-            super::id_list(&labels),
-            super::id_list(&ids)
-        );
-        let mut stmt = store.conn.prepare(&sql)?;
-        let mut rows = stmt.query([])?;
-        let index = Arc::make_mut(&mut index);
-        index
-            .entries
-            .retain(|entry| !affected.contains(&entry.entity_id));
-        while let Some(row) = rows.next()? {
-            let bytes: Vec<u8> = row.get(1)?;
-            if let Ok(crate::types::Value::Str(label)) = crate::types::Value::from_bytes(&bytes) {
-                let lower = label.to_lowercase();
-                index.entries.push(Arc::new(LabelEntry {
-                    entity_id: store.canonical_id(row.get(0)?)?,
-                    profile: LabelProfile::of(&lower),
-                    lower,
-                }));
-            }
-        }
-    }
+    let index = super::cache_delta::rebuild(store, &cached.index, &affected, &labels)?;
     // Another warmer may have published meanwhile. Never replace a newer
     // generation with an older one; all readers also verify the database stamp.
     let mut cache = store.resolution_cache.lock();
