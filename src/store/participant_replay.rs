@@ -7,6 +7,7 @@ use super::*;
 /// The most time all members' PREPARE dry runs may hold the fences (malcolm
 /// C2). Checked at every dry-run boundary: one validator call is not
 /// preemptible, so the hold is bounded by this plus one validation.
+#[cfg(feature = "shacl")]
 pub const PREPARE_VALIDATION_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Test only: a change applied to one member's writer at a chosen point.
@@ -24,7 +25,7 @@ thread_local! {
 }
 
 /// Test only: every dry run sleeps `delay` (an artificially slow validator).
-#[cfg(test)]
+#[cfg(all(test, feature = "shacl"))]
 pub fn with_slow_dry_run<T>(delay: std::time::Duration, work: impl FnOnce() -> T) -> T {
     DRY_RUN_DELAY.with(|slot| slot.set(Some(delay)));
     let result = work();
@@ -34,7 +35,7 @@ pub fn with_slow_dry_run<T>(delay: std::time::Duration, work: impl FnOnce() -> T
 
 /// Test only: a smaller PREPARE validation budget, so a slow-validator row
 /// need not sleep for the production one.
-#[cfg(test)]
+#[cfg(all(test, feature = "shacl"))]
 pub fn with_prepare_budget<T>(budget: std::time::Duration, work: impl FnOnce() -> T) -> T {
     BUDGET.with(|slot| slot.set(Some(budget)));
     let result = work();
@@ -42,6 +43,7 @@ pub fn with_prepare_budget<T>(budget: std::time::Duration, work: impl FnOnce() -
     result
 }
 
+#[cfg(feature = "shacl")]
 pub(super) fn budget() -> std::time::Duration {
     #[cfg(test)]
     if let Some(budget) = BUDGET.with(std::cell::Cell::get) {
@@ -52,7 +54,7 @@ pub(super) fn budget() -> std::time::Duration {
 
 /// Test only: run `change` on the first judged member's writer just before
 /// the COMMIT decision (a shapes reload between PREPARE and the decision).
-#[cfg(test)]
+#[cfg(all(test, feature = "shacl"))]
 pub fn with_before_decision<T>(
     change: impl FnOnce(&mut Store) + 'static,
     work: impl FnOnce() -> T,
@@ -104,7 +106,7 @@ pub(super) fn shapes_of(store: &Store) -> Result<Option<String>> {
 }
 
 /// Test only: the injected dry-run delay, if armed.
-#[cfg(test)]
+#[cfg(all(test, feature = "shacl"))]
 pub(super) fn test_delay() {
     if let Some(delay) = DRY_RUN_DELAY.with(std::cell::Cell::get) {
         std::thread::sleep(delay);

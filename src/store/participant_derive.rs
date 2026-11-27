@@ -18,21 +18,27 @@
 //! subset-only: it is never written and creates no focus, so it can satisfy
 //! a constraint but never add a violation. Derived and declared checks share
 //! [`MAX_DEPENDENCY_CHECKS`]; a duplicate of a declared check is one check.
+#[cfg(feature = "shacl")]
 use super::deps::{DependencyPin, SUBCLASS_OF, SubclassPin};
 use super::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+#[cfg(feature = "shacl")]
+use std::collections::BTreeSet;
 
+#[cfg(feature = "shacl")]
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 #[path = "participant_replay.rs"]
 mod replay;
+#[cfg(feature = "shacl")]
 use replay::budget;
 pub(super) use replay::{audit, recheck_shapes, replay};
-#[cfg(test)]
+#[cfg(all(test, feature = "shacl"))]
 pub use replay::{with_before_decision, with_prepare_budget, with_slow_dry_run};
 
 /// One derived triple, the source (index in canonical order) and graph it
 /// was read from.
+#[cfg(feature = "shacl")]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Found {
     source: usize,
