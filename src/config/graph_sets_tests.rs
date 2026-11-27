@@ -90,6 +90,7 @@ fn pilot(root: &Path, enabled: bool, graph: &str) -> IngestPilotConfig {
         credentials_file: root.join("witness.json"),
         catalog_file: root.join("pilot.json"),
         memory_mib: 512,
+        reads: None,
     }
 }
 

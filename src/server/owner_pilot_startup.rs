@@ -6,11 +6,19 @@
 //! the legacy fence, resolves credentials, runs S1 against the live witness and
 //! admits the owner. ANY refusal exits the process. There is no fallback: a
 //! server asked to run the pilot never serves without it.
-use super::dataset::{PreparedDataset, Startup};
+//!
+//! With `[quipu.ingest_pilot.reads]` the same admitted dataset also serves
+//! authenticated composed reads at `POST /owner/query` (aegis-4qv.8), sized
+//! from the same memory budget. Without it, only `/owner/knot*` is mounted.
+use super::dataset::{PreparedDataset, ReadConfig, Startup};
 use crate::SharedStore;
 use quipu::{
     QuipuConfig,
+    config::PilotReadsConfig,
     graph_catalog::Catalog,
+    read_authorization::{
+        ComposedReadAdmission, ComposedReadReservation, profile::ScopedReadConfig,
+    },
     store::{
         graph_owner::LegacyWriterFence,
         graph_router::{EnrolledPilotConfig, IngestPilot},
@@ -40,6 +48,59 @@ fn configure(store: &mut quipu::Store, config: &QuipuConfig) {
     crate::base::apply_governance(store, config);
 }
 
+/// Composed-read admission over the pilot's one memory budget. The legacy
+/// participant and the owner each hold a writer, a fence and their readers.
+pub(crate) fn read_admission(
+    catalog: &Arc<Catalog>,
+    memory_mib: u64,
+    reads: &PilotReadsConfig,
+) -> quipu::Result<ComposedReadAdmission> {
+    let bytes = |mib: u64| {
+        mib.checked_mul(1 << 20).ok_or_else(|| {
+            quipu::Error::InvalidValue("ingest pilot reads: reservation overflows".into())
+        })
+    };
+    let readers = catalog.budget().readers_per_owner as u64;
+    ComposedReadAdmission::new(
+        catalog.clone(),
+        memory_mib,
+        readers + 2,
+        reads.concurrency,
+        ComposedReadReservation {
+            runtime_bytes: bytes(reads.runtime_mib)?,
+            view_bytes: bytes(reads.view_mib)?,
+            query_bytes: bytes(reads.query_mib)?,
+            max_response_bytes: usize::try_from(bytes(reads.max_response_mib)?).map_err(|_| {
+                quipu::Error::InvalidValue("ingest pilot reads: response bound too large".into())
+            })?,
+        },
+    )
+}
+
+/// The explicit, owner-selected read authority; nothing comes from a request.
+pub(crate) fn read_config(reads: &PilotReadsConfig) -> ReadConfig {
+    ReadConfig {
+        policy: ScopedReadConfig {
+            policy_path: reads.policy_file.to_string_lossy().into_owned(),
+            owner: reads.owner.clone(),
+        },
+        registry: reads.registry_file.to_string_lossy().into_owned(),
+        timeout: Duration::from_secs(reads.timeout_secs),
+    }
+}
+
+/// The served pilot router: `/owner/knot*`, plus `/owner/query` when reads
+/// are configured. A refusal here is a startup refusal, never a fallback.
+pub(crate) fn serve(
+    dataset: &Arc<PreparedDataset>,
+    reads: Option<(&PilotReadsConfig, ComposedReadAdmission)>,
+) -> Result<axum::Router, crate::base::AppError> {
+    match reads {
+        None => Ok(dataset.routes()),
+        Some((reads, admission)) => dataset.routes_with_reads(read_config(reads), admission),
+    }
+}
+
 /// Merge the admitted owner's `/owner/knot*` routes. The caller must pass the
 /// router BEFORE `protected_app`, so these routes keep the ordinary auth layer.
 pub(crate) fn mount(
@@ -53,10 +114,19 @@ pub(crate) fn mount(
     // The catalog is validated before any credential or witness is touched.
     let catalog = Arc::new(Catalog::load_file(&pilot.catalog_file).unwrap_or_else(|e| fail(e)));
     let readers = catalog.budget().readers_per_owner as u64;
-    // Legacy participant and owner each hold a writer, a fence and readers.
-    let allocation = catalog
-        .memory_allocation(pilot.memory_mib, readers + 2, 0)
-        .unwrap_or_else(|e| fail(e));
+    let reads = pilot.reads.as_ref().map(|reads| {
+        let admission =
+            read_admission(&catalog, pilot.memory_mib, reads).unwrap_or_else(|e| fail(e));
+        (reads, admission)
+    });
+    // Legacy participant and owner each hold a writer, a fence and readers;
+    // with reads, the same budget also reserves the composed-read scratch.
+    let allocation = match &reads {
+        Some((_, admission)) => admission.allocation(),
+        None => catalog
+            .memory_allocation(pilot.memory_mib, readers + 2, 0)
+            .unwrap_or_else(|e| fail(e)),
+    };
     let enrolled = EnrolledPilotConfig {
         root: pilot.root.clone(),
         inventory: pilot.inventory.clone(),
@@ -93,10 +163,16 @@ pub(crate) fn mount(
     };
     // Process-lifetime: the borrowed legacy participant and the owner must
     // outlive every request, exactly like the served StoreHandle.
-    let dataset: &'static PreparedDataset = Box::leak(dataset);
+    let dataset: &'static Arc<PreparedDataset> = Box::leak(Box::new(Arc::new(*dataset)));
+    let routes = serve(dataset, reads).unwrap_or_else(|e| fail(e.message()));
     eprintln!(
-        "ingest pilot ENABLED: graph {} at /owner/knot (catalog revision {revision})",
-        pilot.graph
+        "ingest pilot ENABLED: graph {} at /owner/knot{} (catalog revision {revision})",
+        pilot.graph,
+        if pilot.reads.is_some() {
+            " and /owner/query"
+        } else {
+            ""
+        },
     );
-    app.merge(dataset.routes().with_state(()))
+    app.merge(routes.with_state(()))
 }

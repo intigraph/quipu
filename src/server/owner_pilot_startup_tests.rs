@@ -39,6 +39,9 @@ mod query_acceptance;
 #[path = "owner_pilot_read_tests.rs"]
 mod read_http;
 
+#[path = "owner_pilot_routed_read_tests.rs"]
+mod routed_read;
+
 fn protected(path: &Path, body: &[u8]) {
     let mut bytes = body.to_vec();
     bytes.extend_from_slice(format!("\nsha256:{}\n", hex::encode(Sha256::digest(body))).as_bytes());

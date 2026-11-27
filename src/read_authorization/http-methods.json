@@ -243,6 +243,9 @@
   "/owner/knot/status": [
     "post"
   ],
+  "/owner/query": [
+    "post"
+  ],
   "/patch": [
     "post"
   ],

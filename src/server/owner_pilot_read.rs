@@ -105,7 +105,7 @@ pub(super) fn routes(
     load_registry(&config.registry)?;
     Ok(dataset.routes().merge(
         Router::new()
-            .route("/query", post(query))
+            .route("/owner/query", post(query))
             .layer(axum::extract::DefaultBodyLimit::max(131_072))
             .with_state(Serving {
                 dataset,

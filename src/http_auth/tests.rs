@@ -376,6 +376,11 @@ fn routes_in_server_source() -> Vec<String> {
             "server/owner_pilot_http.rs",
             include_str!("../server/owner_pilot_http.rs"),
         ),
+        // aegis-4qv.8: the pilot's routed read, mounted by owner_pilot_startup.
+        (
+            "server/owner_pilot_read.rs",
+            include_str!("../server/owner_pilot_read.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
         (
             "server/writer_instance.rs",

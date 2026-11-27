@@ -304,6 +304,45 @@ behind the ordinary authentication. Each request carries the v2 completion
 contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
 `x-quipu-owner-policy` pins. Legacy `/knot` is unchanged.
 
+### Reading the pilot owner's graph
+
+After cutover the routed graph's facts live in the owner file, not the
+ordinary store, so the ordinary `/query` does not return them. To serve them,
+add a `[quipu.ingest_pilot.reads]` table. The admitted dataset then also serves
+`POST /owner/query`. Leave the table out and only `/owner/knot*` is mounted, as
+before.
+
+```toml
+[quipu.ingest_pilot.reads]
+policy_file = "/etc/quipu/read-policy.db"       # OwnerReadPolicy grants
+owner = "urn:principal:owner"                   # grant issuer
+registry_file = "/etc/quipu/read-registry.json" # named-bearer registry
+timeout_secs = 10                               # 1..=30
+concurrency = 1                                 # composed reads at once
+runtime_mib = 16
+view_mib = 16
+query_mib = 64
+max_response_mib = 1                            # at most query_mib
+```
+
+Every key is required. The read reservations come out of the pilot's
+`memory_mib`, and a budget too small for them refuses startup. The policy file
+must be a separate file from the owner and legacy data files. The policy file
+and the registry are re-read on every request.
+
+A request names its read participants explicitly. They are the pilot graph,
+ROOT (`urn:quipu:graph:root`), or both. The query selects them with
+`FROM` / `FROM NAMED`:
+
+```json
+{"graphs": ["https://example.org/graph/code"],
+ "query": "SELECT ?s ?p ?o FROM NAMED <https://example.org/graph/code> WHERE { GRAPH <https://example.org/graph/code> { ?s ?p ?o } }"}
+```
+
+The caller needs a named bearer from the registry and an unrevoked `Query`
+grant covering every selected graph. Otherwise the server returns `403`. An
+exhausted read admission returns `503` with `"outcome": "UNKNOWN"`.
+
 ### Enrolling the pilot owner
 
 An owner file must be enrolled before `[quipu.ingest_pilot]` can start it.

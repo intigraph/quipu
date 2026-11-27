@@ -44,6 +44,36 @@ pub struct IngestPilotConfig {
     pub catalog_file: PathBuf,
     /// Memory budget (MiB) for the legacy participant plus owner connections.
     pub memory_mib: u64,
+    /// Optional `[quipu.ingest_pilot.reads]` (aegis-4qv.8): authenticated
+    /// composed reads at `POST /owner/query`. Absent mounts only `/owner/knot*`.
+    #[serde(default)]
+    pub reads: Option<PilotReadsConfig>,
+}
+
+/// Owner-selected read authority for `POST /owner/query`. Every key is
+/// required; none is discovered from a request. The policy and registry are
+/// separate files from the data files, and both are re-read per request.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PilotReadsConfig {
+    /// `OwnerReadPolicy` SQLite file holding the read grants.
+    pub policy_file: PathBuf,
+    /// Issuer IRI the grants in `policy_file` must carry.
+    pub owner: String,
+    /// Named-bearer credential registry (JSON) the read identity resolves in.
+    pub registry_file: PathBuf,
+    /// Per-read deadline, 1..=30 seconds.
+    pub timeout_secs: u64,
+    /// Concurrent composed reads admitted at once (scratch connections).
+    pub concurrency: usize,
+    /// Runtime share (MiB) kept outside the read admission.
+    pub runtime_mib: u64,
+    /// Per-read view scratch reservation (MiB).
+    pub view_mib: u64,
+    /// Per-read evaluator plus serialized output reservation (MiB).
+    pub query_mib: u64,
+    /// Hard response body ceiling (MiB); must not exceed `query_mib`.
+    pub max_response_mib: u64,
 }
 
 #[derive(Deserialize)]

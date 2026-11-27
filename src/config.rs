@@ -15,7 +15,7 @@ mod federation;
 mod graph_sets;
 pub use graph_sets::GraphSetsConfig;
 pub(crate) mod ingest_pilot;
-pub use ingest_pilot::IngestPilotConfig;
+pub use ingest_pilot::{IngestPilotConfig, PilotReadsConfig};
 mod query_capture;
 mod vector_backend;
 pub use attachments::{

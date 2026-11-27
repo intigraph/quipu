@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "e6f1f1fa069d22a50d3da1abd6e708d4aa1db249fff16606ce859763bde818c9",
+      "source_sha256": "3ca51253db232dfb5b5faf089ea17540b7b9b1a8f713881cbe4d0d62aadf75d2",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"

@@ -123,3 +123,35 @@ fn witness_ca_is_optional_and_bounded() {
         "a writable anchor is refused"
     );
 }
+
+const READS: &str = r#"
+[quipu.ingest_pilot.reads]
+policy_file = "/etc/quipu/read-policy.db"
+owner = "urn:owner"
+registry_file = "/etc/quipu/read-registry.json"
+timeout_secs = 10
+concurrency = 1
+runtime_mib = 16
+view_mib = 16
+query_mib = 16
+max_response_mib = 1
+"#;
+
+#[test]
+fn reads_table_is_optional_and_explicit() {
+    // aegis-4qv.8: absent reads keeps the knot-only pilot exactly as before.
+    assert!(parse(FULL).unwrap().ingest_pilot.unwrap().reads.is_none());
+    let reads = parse(&format!("{FULL}{READS}"))
+        .unwrap()
+        .ingest_pilot
+        .unwrap()
+        .reads
+        .unwrap();
+    assert_eq!(reads.owner, "urn:owner");
+    assert_eq!(reads.concurrency, 1);
+    assert_eq!(reads.timeout_secs, 10);
+    // Every read key is required, and a typo cannot drop a pin.
+    let missing = READS.replace("owner = \"urn:owner\"\n", "");
+    assert!(parse(&format!("{FULL}{missing}")).is_err());
+    assert!(parse(&format!("{FULL}{READS}graphs = [\"urn:x\"]\n")).is_err());
+}

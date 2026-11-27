@@ -173,6 +173,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/knot/status",
     // aegis-4qv: owner completion proof, bound to the original writer identity.
     "/owner/knot/status",
+    // aegis-4qv.8: pilot composed reads over explicit graphs; per-request
+    // registry identity and owner grants. Mounted only with configured reads.
+    "/owner/query",
     "/rule_query",
     "/watermark",
     // aegis-tnh: follower readiness from its own records; never asks the primary.
@@ -282,7 +285,10 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    matches!(path, "/identity" | "/knot/status" | "/owner/knot/status")
+    matches!(
+        path,
+        "/identity" | "/knot/status" | "/owner/knot/status" | "/owner/query"
+    )
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.
