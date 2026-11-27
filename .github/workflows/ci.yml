@@ -185,9 +185,9 @@ jobs:
           grep -Fx 'test store::graph_router::tests::enrolled::tls::enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::enabled_startup_admits_two_enrolled_set_files_and_each_commits_while_the_other_is_held ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::one_unenrolled_set_file_refuses_the_whole_startup_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
-      # aegis-2g7f: mini-Quipu M1 fork registry entry (docs/design/mini-quipu.md).
+      # aegis-2g7f, aegis-6kf: mini-Quipu M1 registry entry and M2 materialize (docs/design/mini-quipu.md).
       # Named-test proofs keep this step from passing on zero tests.
-      - name: Mini-Quipu fork registry entry and refusals X1-X5
+      - name: Mini-Quipu fork registry entry, materialize and refusals X1-X6, X8
         if: runner.os == 'Linux'
         env:
           CARGO_BUILD_JOBS: 2
@@ -203,6 +203,13 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x3_prefix_or_pattern_member_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x4_multi_file_set_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x5_fork_from_a_mini_quipu_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::materialize_mints_a_fresh_identity_and_copies_members_at_the_cut ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::routed_owner_materializes_its_whole_set_at_the_recorded_digest ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::a_byte_copied_home_file_is_not_accepted_as_a_mini_quipu ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::local_writes_pass_the_pinned_shapes_gate ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::x6_reference_write_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::x8_home_cursor_locally_and_local_cursor_at_home_refuse_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::local::tests::a_home_refusal_leaves_no_file_and_no_entry ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
       # classifier. P4: host and session are redacted, never omitted, for a
       # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.

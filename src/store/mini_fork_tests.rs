@@ -9,18 +9,18 @@ use crate::{
 use sha2::{Digest, Sha256};
 use std::{path::Path, sync::Arc};
 
-const DATA: &str = "urn:application";
-const PROV: &str = "urn:provenance";
-const LEG: &str = "urn:legacy-notes";
-const FROM: &str = "2026-01-01T00:00:00Z";
+pub(super) const DATA: &str = "urn:application";
+pub(super) const PROV: &str = "urn:provenance";
+pub(super) const LEG: &str = "urn:legacy-notes";
+pub(super) const FROM: &str = "2026-01-01T00:00:00Z";
 
-struct Home {
-    _dir: tempfile::TempDir,
-    owner: GraphSetOwner,
-    legacy: Store,
-    catalog: Arc<GraphSetCatalog>,
-    routed_id: String,
-    legacy_id: String,
+pub(super) struct Home {
+    pub(super) _dir: tempfile::TempDir,
+    pub(super) owner: GraphSetOwner,
+    pub(super) legacy: Store,
+    pub(super) catalog: Arc<GraphSetCatalog>,
+    pub(super) routed_id: String,
+    pub(super) legacy_id: String,
 }
 
 fn adopted(root: &Path, file: &str, graphs: &[&str]) -> Store {
@@ -46,7 +46,7 @@ fn route(graph: &str, file: &str, store: &Store, generation: u64) -> Route {
     }
 }
 
-fn home() -> Home {
+pub(super) fn home() -> Home {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     let store = adopted(root, "application.db", &[DATA, PROV]);

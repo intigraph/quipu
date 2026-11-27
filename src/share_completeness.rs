@@ -198,6 +198,12 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // a reconstruction is a new copy and must be re-forked, not inherit it.
     ("mini_quipu_forks", Disposition::Excluded),
     ("mini_quipu_marker", Disposition::Excluded),
+    // A mini-Quipu file's own identity (fresh store_id + the registry entry it
+    // was materialized from) and its read-only reference set. A share is a new
+    // copy: carrying the identity would let it pass as that mini-Quipu, and
+    // the reference set is meaningless without the identity it belongs to.
+    ("mini_quipu_identity", Disposition::Excluded),
+    ("mini_quipu_references", Disposition::Excluded),
     // A replica's cursor into ONE source's history (the shared applier,
     // aegis-s24.2). A share of the replica is a different copy with no cursor
     // of its own: carrying it would let the copy splice a feed it never
