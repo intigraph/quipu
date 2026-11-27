@@ -69,6 +69,7 @@ fn a_present_permitted_type_admits_the_batch_and_the_reference_file_is_never_wri
     };
     let validations = [Validation {
         owner: &gamma,
+        absences: Vec::new(),
         checks: vec![check(data_graph(2))],
     }];
     let vector = as_writer(|| commit_validated(&batch, &validations)).unwrap();
@@ -117,6 +118,7 @@ fn an_absent_or_misplaced_type_refuses_with_nothing_prepared() {
     for dependency in cases {
         let validations = [Validation {
             owner: &gamma,
+            absences: Vec::new(),
             checks: vec![dependency],
         }];
         let error = as_writer(|| commit_validated(&batch, &validations)).unwrap_err();
@@ -146,6 +148,7 @@ fn a_crashed_validated_batch_fences_the_reference_file_until_recovery() {
         };
         let validations = [Validation {
             owner: &gamma,
+            absences: Vec::new(),
             checks: vec![check(data_graph(2))],
         }];
         let error = as_writer(|| {
@@ -184,6 +187,7 @@ fn unbounded_or_ambiguous_dependencies_refuse_before_any_fence() {
     };
     let over = [Validation {
         owner: &gamma,
+        absences: Vec::new(),
         checks: (0..=MAX_DEPENDENCY_CHECKS)
             .map(|_| check(data_graph(2)))
             .collect(),
@@ -192,6 +196,7 @@ fn unbounded_or_ambiguous_dependencies_refuse_before_any_fence() {
     assert!(error.to_string().contains("bound"), "{error}");
     let empty = [Validation {
         owner: &gamma,
+        absences: Vec::new(),
         checks: Vec::new(),
     }];
     let error = as_writer(|| commit_validated(&batch, &empty)).unwrap_err();
@@ -199,6 +204,7 @@ fn unbounded_or_ambiguous_dependencies_refuse_before_any_fence() {
     // A member cannot also be its own validation participant.
     let member = [Validation {
         owner: &alpha,
+        absences: Vec::new(),
         checks: vec![check(data_graph(0))],
     }];
     let error = as_writer(|| commit_validated(&batch, &member)).unwrap_err();
@@ -206,6 +212,7 @@ fn unbounded_or_ambiguous_dependencies_refuse_before_any_fence() {
     // A relative or blank IRI is not an exact dependency.
     let relative = [Validation {
         owner: &gamma,
+        absences: Vec::new(),
         checks: vec![TypeDependency {
             graph: data_graph(2).into(),
             entity: "shared".into(),

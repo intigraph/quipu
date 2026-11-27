@@ -61,6 +61,7 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // would forge a COMMIT/PUBLISHED decision or a fence for another store.
     ("participant_journal", Disposition::Excluded),
     ("participant_intents", Disposition::Excluded),
+    ("dependency_pins", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection
