@@ -656,3 +656,6 @@ fn a_missing_non_home_participant_refuses_recovery_and_the_home_stays_fenced() {
         Recovery::Published(_)
     ));
 }
+
+#[path = "participant_shapes_tests.rs"]
+mod shapes;

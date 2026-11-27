@@ -194,6 +194,21 @@ impl GraphSetOwner {
             .collect())
     }
 
+    /// Load (or replace) a named write-shape graph in this owner's file,
+    /// through its one writer, under the same gates as [`Self::transact`]:
+    /// ownership admission, placement, catalog identity, hooks and the
+    /// participant write fence (aegis-n0wc.5). The registry write itself
+    /// also refuses on a fenced file, so a direct `Store` open is no bypass.
+    pub fn load_shapes(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        let _admission = self.owner.admit()?;
+        let mut store = self.owner.writer.owned()?;
+        self.owner.placement.verify()?;
+        Owner::check_identity(self.owner.catalog_route(), &store)?;
+        Self::check_hooks(&store)?;
+        participant::check_write_fence(&store)?;
+        store.ownership_operation(|store| store.load_shapes(name, turtle, timestamp))
+    }
+
     /// Pre-queue validation shared by local and participant batches: the
     /// requests select exactly this unsigned owner and the batch its members.
     fn check_batch<'b>(
