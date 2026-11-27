@@ -11,6 +11,8 @@ use super::{
 
 #[path = "asof.rs"]
 mod asof;
+#[path = "replicate_challenge_timing.rs"]
+pub(crate) mod replicate_challenge_timing;
 #[path = "replicate_stream.rs"]
 mod replicate_stream;
 

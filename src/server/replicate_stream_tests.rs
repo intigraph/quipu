@@ -235,6 +235,64 @@ async fn a_challenge_through_the_route_bounds_freshness() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_answered_challenge_records_every_stage() {
+    // aegis-awpw: the histogram is process-wide and other tests also answer
+    // challenges, so assert growth, never exact totals.
+    fn counts() -> std::collections::BTreeMap<String, u64> {
+        let mut body = String::new();
+        super::timing::render(&mut body);
+        body.lines()
+            .filter_map(|line| {
+                line.strip_prefix("quipu_replicate_challenge_seconds_count{stage=\"")
+            })
+            .map(|rest| {
+                let (stage, value) = rest.split_once("\"} ").unwrap();
+                (stage.to_string(), value.parse().unwrap())
+            })
+            .collect()
+    }
+    let (shared, key) = source(true);
+    let mut follower = Follower::connect(&shared, &key).await;
+    let head = shared.read().latest_tx_id().unwrap();
+    follower
+        .until(
+            Duration::from_secs(5),
+            |o| matches!(o, Outcome::CoverageAdvanced { watermark } if *watermark == head),
+        )
+        .await
+        .unwrap();
+    let before = counts();
+    assert_eq!(before.len(), 4, "{before:?}");
+    let session = follower.applier.session().unwrap().to_string();
+    let nonce = [0x6b; 16];
+    let sent = follower.now();
+    follower.applier.challenge(&session, nonce, sent).unwrap();
+    let started = Instant::now();
+    let response = challenge(axum::Json(ChallengeRequest {
+        session,
+        nonce: hex::encode(nonce),
+    }))
+    .await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let proof = follower
+        .until(Duration::from_secs(5), |o| {
+            matches!(o, Outcome::ProofAccepted { .. })
+        })
+        .await;
+    assert_eq!(proof, Some(Outcome::ProofAccepted { t_send_ms: sent }));
+    let elapsed = started.elapsed();
+    let after = counts();
+    for stage in ["inbox", "admission", "poll", "answer"] {
+        assert!(
+            after[stage] > before[stage],
+            "stage {stage} not observed: {before:?} -> {after:?}"
+        );
+    }
+    // The answer stage cannot exceed what the follower waited end to end.
+    assert!(elapsed < Duration::from_secs(5));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_challenge_needs_an_open_session_and_a_sixteen_byte_nonce() {
     let unknown = challenge(axum::Json(ChallengeRequest {
         session: "00".repeat(16),

@@ -17,10 +17,12 @@
 //! capability a challenge needs: it is 128 random bits, sent only on the
 //! stream it names.
 
+use super::replicate_challenge_timing::{self as timing, Stage};
 use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
+use std::time::Instant;
 
 use axum::{
     extract::State,
@@ -51,8 +53,9 @@ const UPSTREAM_PROOF_WAIT: Duration = if cfg!(test) {
     Duration::from_secs(5)
 };
 
-/// A child's challenge, with the relay's fresh upstream proof when relayed.
-type Challenge = ([u8; 16], Option<i64>);
+/// A child's challenge, with the relay's fresh upstream proof when relayed,
+/// and when its 202 was decided (aegis-awpw stage timing).
+type Challenge = ([u8; 16], Option<i64>, Instant);
 
 /// An open session: where its challenges go, and its relay if it has one.
 #[derive(Clone)]
@@ -187,34 +190,48 @@ async fn produce(
     let mut nonces: VecDeque<Challenge> = VecDeque::new();
     loop {
         let front = nonces.front().copied();
-        if let Some((_, Some(proof))) = front {
+        if let Some((_, Some(proof), _)) = front {
             session.upstream_proof(proof);
         }
-        let nonce = front.map(|(nonce, _)| nonce);
+        let nonce = front.map(|(nonce, _, _)| nonce);
+        let requested = Instant::now();
         let polled = {
             let store = store.clone();
             crate::admission::read_blocking(move || {
+                let admitted = Instant::now();
                 let read = store.read();
                 let result = session.poll(&read, POLL_TXS, nonce).map_err(AppError::from);
-                Ok((session, result))
+                Ok((session, result, admitted, admitted.elapsed()))
             })
             .await
         };
-        let Ok((returned, result)) = polled else {
+        let Ok((returned, result, admitted, polling)) = polled else {
             return;
         };
         session = returned;
+        if nonce.is_some() {
+            timing::observe(
+                Stage::Admission,
+                admitted.saturating_duration_since(requested),
+            );
+            timing::observe(Stage::Poll, polling);
+        }
         let Ok((batch, answered)) = result else {
             return;
         };
-        if answered {
-            nonces.pop_front();
-        }
+        let answered_at = if answered {
+            nonces.pop_front().map(|(_, _, accepted)| accepted)
+        } else {
+            None
+        };
         let sent_any = !batch.is_empty();
         for frame in batch {
             if frames.send(sse(frame)).await.is_err() {
                 return;
             }
+        }
+        if let Some(accepted) = answered_at {
+            timing::observe(Stage::Answer, accepted.elapsed());
         }
         if session.ended() {
             return;
@@ -241,7 +258,10 @@ async fn produce(
                 }
             }
             nonce = inbox.recv() => match nonce {
-                Some(nonce) => nonces.push_back(nonce),
+                Some(nonce) => {
+                    timing::observe(Stage::Inbox, nonce.2.elapsed());
+                    nonces.push_back(nonce);
+                }
                 None => return,
             },
             // The follower went away: free its slot and session now.
@@ -296,9 +316,10 @@ pub(crate) async fn challenge(axum::Json(request): axum::Json<ChallengeRequest>)
         if sender.capacity() == 0 {
             return too_many();
         }
+        let accepted = Instant::now();
         tokio::spawn(async move {
             if let Some(proof) = relay.fresh_proof(UPSTREAM_PROOF_WAIT).await {
-                let _ = sender.send((nonce, Some(proof))).await;
+                let _ = sender.send((nonce, Some(proof), accepted)).await;
             }
         });
         return (
@@ -307,7 +328,7 @@ pub(crate) async fn challenge(axum::Json(request): axum::Json<ChallengeRequest>)
         )
             .into_response();
     }
-    match sender.try_send((nonce, None)) {
+    match sender.try_send((nonce, None, Instant::now())) {
         Ok(()) => (
             StatusCode::ACCEPTED,
             axum::Json(json!({"session": request.session})),
