@@ -164,14 +164,21 @@ exits non-zero with a message naming the missing input when:
 2. `mode = "base"` and `base` is missing, relative, not `http://` or
    `https://`, has query/credentials/fragment content, or does not end in `/`
    (a `#` base refuses: the tightening above);
-3. `mode = "base"` and `base` equals or lies under a **former-name** HTTP(S)
-   base (`http://aegis.gastown.local/ontology/`,
-   `https://camayoc.local/ontology/`). Former names are read aliases, never
-   new-allocation bases. (`urn:shuttle:` needs no entry here: refusal 2
-   already rejects any non-HTTP(S) base);
+3. `mode = "base"` and `base` **overlaps** a **former-name** HTTP(S) base
+   (`http://aegis.gastown.local/ontology/`,
+   `https://camayoc.local/ontology/`) under the same two-way `starts_with`
+   test refusal 4 uses: `base` equal to, under, **or above** a former name
+   refuses. So `http://aegis.gastown.local/` and `https://camayoc.local/`
+   refuse as well as `…/ontology/mem/`: a base above a former name would make
+   every legacy IRI look like a new-allocation IRI of this install. Former
+   names are read aliases, never new-allocation bases. (`urn:shuttle:` needs
+   no entry here: refusal 2 already rejects any non-HTTP(S) base);
 4. `mode = "base"` and `base` overlaps the base of any registered namespace
-   **other than this install's own scope entries** `{base}{scope}/`
-   (section 3.2) — in particular the rt9f.5 `aegis-infra` base. The scope
+   **other than this install's own scope entries** `{base}{scope}/` for the
+   configured `base` (section 3.2) — in particular the rt9f.5 `aegis-infra`
+   base, and the scope entries of any **superseded** base, which stay
+   registered (registry entries are immutable) and so keep a superseded base
+   and its successor disjoint. The scope
    entries lie under `{base}` by construction and are exempt; they are checked
    against each other and against every other entry by the registry's
    ordinary two-way overlap rule (`src/entity_namespaces.rs` `insert`);
@@ -264,10 +271,11 @@ immutable entries (`insert` refuses to reclassify a prefix):
   as provenance for the records minted under them.
 - **Rollback of a supersede** is another `supersede-install` that re-declares
   the prior values as `v<n+2>`. Nothing is deleted. Records minted under
-  `v<n+1>` stay valid identities (section 7). Because the canonical key
-  string and the option-1 path both derive from the active values, rolling
-  back to the prior values makes deterministic classes converge again on the
-  IRIs minted under `v<n>`.
+  `v<n+1>` stay valid identities (section 7). Deterministic classes do not
+  depend on the rollback restoring old values: every deterministic writer
+  applies **cross-version convergence** (section 4), so an entity keeps the
+  IRI it was first minted under — whether that was under `v<n>` or
+  `v<n+1>` — across both the supersede and its rollback.
 - **Writers pick up a supersede only by re-reading.** A writer reads the
   active declaration before each allocation batch; a writer whose configured
   inputs still match the superseded version then refuses under refusal 7
@@ -441,8 +449,46 @@ directions of an already-stored former-name link, as the rt9f.5 helper does.
 | legacy `aegis.gastown.local` → option 1 | chaski, shantytown, camayoc existing instances | optional per class; `new owl:sameAs old`; old stays recallable |
 | legacy `aegis.gastown.local` → option 2 | same, on an option-2 install | same rule; the new UUID is chosen as below so re-emission converges on it |
 | `urn:shuttle:` → option 1 or 2 | shuttle runs/workflows/events | same rule; signed registrations are never aliased in place |
-| option 1 → option 2, option 2 → option 1 | an install that later changes mode | a migration, not a config edit: `supersede-install` writes the next declaration version (section 2), then per-class alias facts; both versions and both IRI sets stay readable; startup never performs it; reversed by a further supersede |
+| option 1 base X → option 1 base Y (same mode) | an install whose resolvable base changes, e.g. a renamed domain | a migration, not a config edit: `supersede-install` writes `v<n+1>` with base Y. **No alias facts are required before writers resume**: deterministic classes converge by cross-version lookup (below), so an existing entity keeps its `{X}{scope}/…` IRI and only keys never minted before get `{Y}{scope}/…`. The X scope entries stay registered (immutable) so owner admission still covers writes to X subjects. Aliases from a Y IRI to an X IRI are optional, owner-deliberate, `new owl:sameAs old` |
+| option 1 base Y → option 1 base X (rollback of the row above) | the same install | a further `supersede-install` re-declaring X as `v<n+2>`. Entities first minted under Y keep their Y IRI by the same lookup; no alias is required and none is removed |
+| option 1 → option 2, option 2 → option 1 | an install that later changes mode | a migration, not a config edit: `supersede-install` writes the next declaration version (section 2); deterministic classes converge by cross-version lookup (below), so no alias is required before writers resume; per-class alias facts are optional; both versions and both IRI sets stay readable; startup never performs it; reversed by a further supersede |
 | legacy vocabulary → w3id vocabulary | terms, not instances | owned by m5s.1 (`owl:equivalentClass`/`equivalentProperty` and the published mapping); **never** `owl:sameAs` between instances and terms |
+
+**Cross-version convergence for deterministic classes.** A supersede changes
+the active values, so a naive re-emission of an existing key would mint a
+second IRI for an entity that already has one, which contradicts the default
+above. Every deterministic writer therefore resolves the IRI for a key as
+follows, before any write:
+
+1. **Candidates.** Compute the key's IRI under the writer's legacy form `v0`
+   (its former-name constant, only for a class that had a deterministic
+   legacy form, e.g. chaski firing, shantytown gate verdict) and under the
+   values of every declaration version `v1 … v<n>` in the active chain,
+   using each version's own mode, base or `install_uuid`. Versions with
+   byte-identical values give the same string and are one candidate (so after
+   a rollback `v1` and `v3` are one candidate).
+2. **Lookup.** Read each candidate by exact IRI in the writer's own graph. A
+   candidate **exists** when it has an `rdf:type` fact there. A read that
+   fails, times out or is truncated is indeterminate: the writer refuses and
+   mints nothing (an unknown is not an absence).
+3. **Decision.** No candidate exists: mint under the active version. Exactly
+   one exists: reuse it — this is reference reuse, not a new allocation, and
+   the collision rules of 3.3 apply to it. More than one exists: reuse the one
+   that is the subject of an `owl:sameAs` to every other existing candidate
+   (the owner's deliberate new identity, section 4); if there is none, refuse
+   and report the candidates as a duplicate identity for the owner to alias.
+4. **Admission and read-back of a reused subject.** A write to a reused
+   subject is admitted under the scope it was minted in — the path prefix of
+   that version's scope entry (option 1) or its stored scope fact (option 2) —
+   which must be the writer's own scope; read-back check 2 (section 3.5)
+   accepts that scope base or fact. A reused `v0` legacy subject has no scope
+   entry; it is admitted exactly as that writer's legacy writes are admitted
+   today, and this design adds no new admission for it.
+
+The lookup is bounded by the chain length plus one. Random classes are not
+re-emitted under an old key and need no lookup. Under this rule, X → Y and its
+rollback Y → X need no alias facts before writers resume, and an entity first
+minted under any version keeps that IRI through every later supersede.
 
 **Canonical option-2 UUID for a migrated entity.** There is exactly one
 canonical new IRI per entity, so a writer that later re-emits the entity
@@ -511,7 +557,10 @@ it is option C in the ASK below, and it still requires a recorded
 - **Install declaration:** reverting config does not erase the persisted
   declaration. Changing it is an explicit `supersede-install` (section 2),
   and undoing that is a further supersede back to the prior values; no
-  version is ever deleted, so a rollback cannot silently fork identity. A
+  version is ever deleted, so a rollback cannot silently fork identity. This
+  holds for a base change within option 1 (X → Y → X) as for a mode change:
+  cross-version convergence (section 4) keeps every entity on the IRI it was
+  first minted under, so a rollback neither requires nor removes alias facts. A
   source revert to a writer that predates the declaration does not consult it
   and returns to the previous constants as above.
 
@@ -528,7 +577,9 @@ it is option C in the ASK below, and it still requires a recorded
    scope facts; a repeated deterministic write converges; a repeated random
    write is distinct.
 4. Negative controls: unset mode refuses with no write; former-name base
-   refuses; base overlapping `aegis-infra` refuses; a public `http://` base
+   refuses, including a base above a former name
+   (`http://aegis.gastown.local/`) and one under it; a new base nested in
+   or above a superseded base's scope entries refuses; base overlapping `aegis-infra` refuses; a public `http://` base
    refuses; a scope entry overlapping another scope entry or another install's
    namespace refuses; an install declaration that carries a base prefix
    (i.e. was written as a namespace entry) is refused; mode disagreeing with the
@@ -561,11 +612,19 @@ it is option C in the ASK below, and it still requires a recorded
 8. rt9f.5 control: its six-type A/B gates and keyed shapes are unchanged.
 9. Alias convergence (when a migration is run): a migrated deterministic
    entity and a fresh re-emission for the same key produce one IRI, not two.
-10. Supersede and rollback control: `supersede-install` from `v1` to `v2`
-    reads back `v2` as active; writers configured for `v1` then refuse; a
-    second supersede back to the `v1` values reads back `v3` as active, and a
-    deterministic re-emission converges on the IRI minted under `v1`; records
-    minted under `v2` stay recallable throughout.
+10. Supersede and rollback control, run once for an option-1 base change
+    (base X → base Y → base X) and once for a mode change: `supersede-install`
+    from `v1` to `v2` reads back `v2` as active; writers configured for `v1`
+    then refuse; before any alias fact is written, a deterministic
+    re-emission under `v2` of a key first minted under `v1` reuses the `v1`
+    IRI (one IRI, not two), and a key never minted before mints under `v2`;
+    a second supersede back to the `v1` values reads back `v3` as active;
+    under `v3`, a re-emission of a key first minted under `v1` reuses the
+    `v1` IRI, and a re-emission of a key **first minted under `v2`** reuses
+    its `v2` IRI rather than minting a `v1`/`v3` IRI; a key that exists under
+    two candidates with no `owl:sameAs` between them refuses as a duplicate
+    identity; a candidate lookup that fails refuses with no write; records
+    minted under every version stay recallable throughout.
 
 ## 9. ASK Stiwi (one card, routed via the lead)
 
