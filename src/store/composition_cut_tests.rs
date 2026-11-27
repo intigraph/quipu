@@ -252,7 +252,9 @@ fn as_of_tx_on_the_graph_set_composed_store_keeps_refusing_and_valid_at_composes
     m.dataset
         .read_attached(&BOTH, deadline(), |reads, mut checkout| {
             let mut main_graphs = Vec::new();
-            let mut attached: Vec<(String, Vec<i64>)> = Vec::new();
+            // No participant batch is pending, so no file has an S3
+            // publication bound: every attached schema reads to its head.
+            let mut attached: Vec<(String, Vec<i64>, Option<i64>)> = Vec::new();
             for read in reads {
                 let id = if read.route.graph == ROOT_GRAPH_IRI {
                     0
@@ -266,7 +268,7 @@ fn as_of_tx_on_the_graph_set_composed_store_keeps_refusing_and_valid_at_composes
                         .schema_for(&read.route.store_id)
                         .unwrap()
                         .to_owned();
-                    attached.push((schema, vec![id]));
+                    attached.push((schema, vec![id], None));
                 }
             }
             checkout.compose(&main_graphs, &attached)?;
