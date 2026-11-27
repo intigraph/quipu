@@ -145,10 +145,12 @@ pub fn lock_owner_file(path: &str) -> Result<OwnerLock> {
 
 /// Domain tag of the owner's whole-store canonical fact-cut digest
 /// (aegis-4qv.4 R5). Distinct from every other digest domain.
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 const OWNER_CUT_FACTS_TAG: &[u8] = b"quipu-owner-cut-facts/v1\0";
 
 /// The owner's sealed cut, derived from the owner file under [`OwnerLock`]
 /// (aegis-4qv.4 R5), never supplied by a caller.
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OwnerCut {
     /// `max(transactions.id)`, zero for an empty owner.
@@ -162,6 +164,7 @@ pub(crate) struct OwnerCut {
     pub(crate) artifact: [u8; 32],
 }
 
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 impl OwnerLock {
     /// Derive the owner's cut while the exclusive lock is held.
     pub(crate) fn owner_cut(&self) -> Result<OwnerCut> {
@@ -198,6 +201,7 @@ impl OwnerLock {
     }
 }
 
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 impl Store {
     /// aegis-4qv.4 R4(b): the journaled whole-graph digest of `graph`'s
     /// reverse, only when that reverse is `Lifted` from exactly `from = (R, G)`
