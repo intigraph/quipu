@@ -7,6 +7,11 @@
 #   (c) an Observable must satisfy the Fluent slot fields itself, because
 #       shapes-graph rdfs:subClassOf does not extend sh:targetClass over data.
 # The wire form is unchanged: times remain xsd:dateTime literals.
+# Shape IRIs deliberately match v1: this file REPLACES quipu-fluents-v1 when
+# accepted, it is never loaded beside it. Loaded together (or unioned, as the
+# ignored all-shapes soak test does) the same-IRI shapes merge their property
+# constraints; every v2 constraint is a superset of v1's, so the union enforces
+# exactly v2.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
