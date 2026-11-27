@@ -7,6 +7,65 @@ are generated from the versioned release records.
 
 ## [Unreleased]
 
+## [0.19.6] - 2026-11-27
+
+### Added
+
+- Graph-set catalog, router, enrolled open, default-off [quipu.graph_sets] and two-file gate (#1310)([d3c1ebe](https://github.com/scbrown/quipu/commit/d3c1ebe29736ee80b154efc0e90cb1bdde17c1da))
+- *(provenance)* Cap declared header values at the contract and persist the attested session (#1319)([bc4232d](https://github.com/scbrown/quipu/commit/bc4232d8e95fa41d801d440fb4ba4a777bdf2e9c))
+- *(server)* Enabled [quipu.graph_sets] opens every owner through S1 (#1311)([25df71a](https://github.com/scbrown/quipu/commit/25df71acb293327bc3e825ce5bb0fdbec2322225))
+- *(provenance)* Read-side provenance object on /transactions and /entity_history (#1321)([64aa294](https://github.com/scbrown/quipu/commit/64aa294a3ee5e7a429d961a331dab859c43c6a97))
+- *(share)* Scrub host and session from outward shares (#1328)([fe32bc9](https://github.com/scbrown/quipu/commit/fe32bc9d22469665268da812f414f122316a1908))
+- *(store)* Mini-Quipu M1 fork registry entry, refusals X1-X5 (#1315)([0683b84](https://github.com/scbrown/quipu/commit/0683b84c5c468f03d86aea04dec0cabfbd78dddd))
+- *(provenance)* Redact host and session for readers without the grant (#1323)([a39911e](https://github.com/scbrown/quipu/commit/a39911eec3a15780ceb654f1e612f56bc8782490))
+- *(merge)* Carry write provenance through merge_core (#1326)([92ebdd6](https://github.com/scbrown/quipu/commit/92ebdd68ea4c479ba09e35e98ac444a44f16997e))
+- *(store)* Owner enrollment library API over the S3 witness (#1332)([aaa012a](https://github.com/scbrown/quipu/commit/aaa012abef75b1ec8766ba70a55571a774e559e3))
+- *(pilot)* Quipu pilot operator CLI (fence, slice export/import, cutover, catalog) (#1331)([798c2c5](https://github.com/scbrown/quipu/commit/798c2c5ea35530e1883bc907a960e5d111c4006e))
+- *(server)* Bounded /embed_refresh re-embeds stale existing vectors (#1329)([efbab8f](https://github.com/scbrown/quipu/commit/efbab8fa771be62cd89d485b67845bfd147c7b25))
+- *(store)* Phase 2 composed reader over read-only ATTACH (#1336)([a30de80](https://github.com/scbrown/quipu/commit/a30de80348d0ce1575aa910cbd04a066202e99ef))
+- *(pilot)* Quipu pilot enroll wraps enroll_pilot_owner (#1335)([34635b3](https://github.com/scbrown/quipu/commit/34635b37dbde67155a814c0da315e5b6d6910502))
+- *(server)* Shed busy reads early with 429 + Retry-After and a background priority class (#1260)([9460ce5](https://github.com/scbrown/quipu/commit/9460ce5265a5da55e69c392bc118c6adf3c8d684))
+- *(ci)* Declared change-class map, classifier, aggregate gate and lane helper (#1340)([5f4e5e8](https://github.com/scbrown/quipu/commit/5f4e5e8a975ecef9fd85443ef5efa111216339e9))
+- *(store)* Participant commit across graph-set files (.5 Phase 3) (#1341)([6ac2409](https://github.com/scbrown/quipu/commit/6ac2409ae2a742dea81401fecde434b1ee3616b3))
+- *(pilot)* Fenced reverse reconciliation API + quipu pilot reverse (#1338)([43690c0](https://github.com/scbrown/quipu/commit/43690c093de566dac5ae485786dd8cdd77640dae))
+- *(store)* SIGKILL crash rows and bounded cross-graph type dependencies (.5 Phase 3 S2) (#1342)([9909403](https://github.com/scbrown/quipu/commit/9909403002c72ea9c7b8c7bb25c9b1f40296aaad))
+- *(store)* Composed-reader publication cut for participant batches (.5 Phase 3 S3) (#1343)([76ee2e9](https://github.com/scbrown/quipu/commit/76ee2e93a9fe1b4fbeae73928cf8cdaa785a4bf5))
+- *(store)* Mini-Quipu M2 materialize and local writes, refusals X6, X8 (#1316)([87d8a43](https://github.com/scbrown/quipu/commit/87d8a4396186b9ae23a61e333a022aea1bf485b5))
+- *(replicate)* Time each freshness challenge by stage (#1345)([261dd34](https://github.com/scbrown/quipu/commit/261dd343c929d8727edbc60d8ee4aff611945bdc))
+- *(metrics)* Bounded declared-operation /query counter for push-read attribution (#1347)([407079c](https://github.com/scbrown/quipu/commit/407079cd7cb75d230e089368b2ad47862655baab))
+- *(shapes)* Classify accepted fluents-v1 as load, propose v2 tightenings (#1352)([5573b6c](https://github.com/scbrown/quipu/commit/5573b6c819630ad06cbd679959ca942b75e62c71))
+- *(pilot)* Import-slice --into G retargets a ROOT slice into the fenced routed graph (#1346)([dfd9efc](https://github.com/scbrown/quipu/commit/dfd9efcc4532bfdd4cb78fb8d1c8e1f09bf881c5))
+- *(pilot)* Mount routed reads at /owner/query from production startup (#1348)([78a9d47](https://github.com/scbrown/quipu/commit/78a9d470f96f031c753d314c704a432940932b14))
+- *(store)* Dependency pins and inverse invalidation for participant batches (.5 Phase 3 S4) (#1350)([108bfc5](https://github.com/scbrown/quipu/commit/108bfc5dabe9a9a70f93d446868c0346883a6fde))
+- *(store)* Mini-Quipu M3 merge back as fork promote through merge_core (#1318)([5adcbf6](https://github.com/scbrown/quipu/commit/5adcbf6be1222cce58dd965160ab98a315f46947))
+- *(store)* SHACL-derived type dependencies for participant batches (.5 Phase 3 slice B) (#1358)([a72d9ff](https://github.com/scbrown/quipu/commit/a72d9ffebe5013d4d6e8766e0e055d014260f4fc))
+- *(store)* Versioned composition-cut token and foreign cursor refusal (.5 B4) (#1339)([ecda977](https://github.com/scbrown/quipu/commit/ecda97754b53d03c1c0e2eb8de8186a88a72c476))
+- *(store)* Later mini merges plan against the mini's merged head (#1363)([db9ed7d](https://github.com/scbrown/quipu/commit/db9ed7db7f66e0983a7030463211275078146d4d))
+- *(store)* Mini-Quipu M4, merges carry the writer's provenance (#1364)([203548c](https://github.com/scbrown/quipu/commit/203548c908ac9d0c1513b7cc7e6a1c3ac2d5e022))
+
+### Documentation
+
+- *(readme)* One header image, current and planned capabilities (#1309)([dc44018](https://github.com/scbrown/quipu/commit/dc44018013bcc575e017b0d2e245923a9bdd573c))
+
+### Fixed
+
+- *(sparql)* Property paths follow term aliases across attached stores (#1324)([6bd0b68](https://github.com/scbrown/quipu/commit/6bd0b68b5cff6322b058d4f59a61b77e64ccf9bf))
+- *(sparql)* Keep the idx_vaet value seek under as_of_tx (#1334)([7dca0de](https://github.com/scbrown/quipu/commit/7dca0de8d3b6127a23b702e91ff91c4fbad9c629))
+- *(query)* The graph param reads ROOT by its well-known IRI (#1344)([20eee46](https://github.com/scbrown/quipu/commit/20eee4647bad2639ba86a2010205e9774ff834ec))
+- *(search)* Index current vector rows and admit keyword-only context by rank and terms (#1325)([0298950](https://github.com/scbrown/quipu/commit/02989504e20b5c58fbdc8fc38843a6ae6ae751db))
+- *(pilot)* Enroll refuses a non-https witness endpoint startup would refuse (#1349)([46d6a3b](https://github.com/scbrown/quipu/commit/46d6a3bcf2a84a0e2743276fe72eef46d7c73843))
+- *(inferred)* Companion sourceKind tag writes the w3id term (#1353)([36b3090](https://github.com/scbrown/quipu/commit/36b3090c7631c703bed204576b2633d8993cd5b4))
+- *(server)* Size shed Retry-After by pool capacity, not free permits (#1367)([e3d2f52](https://github.com/scbrown/quipu/commit/e3d2f5293ddee91f7b549e99f4d11fdf2f3963b8))
+
+### Testing
+
+- *(ownership)* Retry transient flock contention in exclusive-latch race test (#1327)([8c51e95](https://github.com/scbrown/quipu/commit/8c51e9597acd9627de8a058d778e986b3163d037))
+- *(embedding)* Unchanged-text write adds no vector row (#1337)([17293bc](https://github.com/scbrown/quipu/commit/17293bc4d549e654aee5585ab9ee0d845eb02ed7))
+
+### Perf
+
+- *(resolution)* Read workers catch the label cache up from the tx delta (#1362)([0140eab](https://github.com/scbrown/quipu/commit/0140eab48be592fa70c080a43966fb3f69c169c4))
+
 ## [0.19.5] - 2026-11-25
 
 ### Added
