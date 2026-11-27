@@ -427,7 +427,7 @@ impl<B: Objects> WitnessSource for VerifySource<'_, B> {
 }
 
 /// Digest of the native host/path binding the placement names.
-fn native_digest(db: &Database) -> [u8; 32] {
+pub(super) fn native_digest(db: &Database) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(b"quipu-enroll-native/v1\0");
     h.update(db.path.as_bytes());

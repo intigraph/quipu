@@ -486,10 +486,51 @@ an uninterrupted run's, `at` timestamp included. A dry run reports the current
 state (`planned`, `reconciling`, `proven` or `lifted`) and writes nothing. The
 owner file is only ever read, and it is kept.
 
-Every receipt carries `witness_state: active_unretired`. The owner's ownership
-witness is not retired; that is aegis-4qv.4. No catalog route points at the
-owner any more, so a restarted owner gets no writes, but its witness is still
-active.
+Every reverse receipt carries `witness_state: active_unretired`. The reverse
+itself does not retire the owner's ownership witness. No catalog route points
+at the owner any more, so a restarted owner gets no writes, but its witness is
+still active until the owner is retired.
+
+### Retiring the reversed owner
+
+`quipu::store::retire_pilot_owner` (an `ownership-witness-s3` build, Unix
+only, like enrollment) retires the reversed owner's witness authority, so the
+owner is RETIRED rather than merely unrouted. It takes the owner journal, the
+legacy database, the existing legacy ROOT writer principal, an existing
+operator principal and the sealed source cut (last owner transaction, fact-cut
+digest and artifact digest). `quipu pilot retire` wraps it, with the same
+`--witness-config` file as `pilot enroll`:
+
+```bash
+quipu pilot retire --journal owner.journal --legacy-db legacy.db \
+    --root-principal legacy-root-writer --operator pilot-operator \
+    --transaction N --facts HEX --artifact HEX --witness-config pilot.toml [--execute]
+```
+
+It runs, in order:
+
+1. refuse unless the configured profile equals the witness profile, the
+   destination is the legacy ROOT placement of that legacy database, and the
+   witness head and the journal both name the owner's exact tuple;
+2. witness reserve (one conditional create), then journal Active to Retiring;
+3. witness retire with the cut, then journal Retiring to Retired.
+
+There is no activation step. Legacy ROOT does not seek admission through the
+witness, and a Retired witness record is terminal for that store tuple: a
+later re-enrollment is a new genesis with a new tuple. The ROOT placement's
+native digest uses its own domain tag, `quipu-legacy-root-native/v1`, so it can
+never equal an enrolled owner's placement; a destination under the enrollment
+tag is refused.
+
+Any UNKNOWN witness reply (an error, a timeout or a lost reply) stops the run
+with an UNKNOWN refusal, with no retry. Re-running resumes from what the
+witness and journal durably hold and returns the same receipt. Afterwards the
+journal no longer admits the owner (`role is RETIRED`).
+
+The retirement is not signed. Its authority is the witness's create-only
+conditional write plus the profile match, the same basis as enrollment, and
+the receipt says so with `"signed": false`. The dry run reports the planned
+request and writes nothing.
 
 ## Choosing a vector backend
 
