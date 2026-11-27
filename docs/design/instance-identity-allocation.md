@@ -129,17 +129,23 @@ exits non-zero with a message naming the missing input when:
 6. the writer's bearer for the guarded write path is unset or empty. The writer
    never guesses identity headers or falls back to an unauthenticated route;
 7. the store's recorded install mode (below) disagrees with the configured
-   mode.
+   mode;
+8. the store holds **no** recorded install declaration. Allocation never
+   creates the declaration implicitly; it is a precondition (below).
 
 Reference reuse and reads never require these inputs: a reader with no
 configuration still recalls every stored record.
 
 ### Recorded install declaration
 
-On first allocation the install records one declaration (mode, base or
-install UUID, timestamp, principal) in the protected namespace registry graph
-`urn:quipu:graph:namespaces` through the existing local, explicit
-`quipu namespaces apply` path. Startup never writes it. Effective policy is
+Before any allocation, an operator records one declaration per install
+(mode, base or install UUID, timestamp, principal) in the protected namespace
+registry graph `urn:quipu:graph:namespaces` through the existing local,
+explicit `quipu namespaces apply` path. That path is local CLI only and the
+registry already requires `apply` before a mint, so the declaration is a
+**precondition**, not a side effect of the first write: a writer that finds
+no declaration refuses (refusal 8). Neither startup nor a writer ever writes
+it. Effective policy is
 config ∪ persisted, and disagreement refuses (the registry's existing rule),
 so dropping config cannot silently switch an install's identity mode.
 
@@ -180,6 +186,10 @@ stay human-loaded and keep their current identity (frozen bytes).
   loaded w3id vocabulary (m5s.1 ownership ledger); **this design does not mint
   one**. If no suitable term exists, the implementation item files a schema
   change proposal through `quipu_propose_schema_change` first.
+  **Option-2 scope enforcement is blocked until that m5s.1 term exists.** No
+  writer may allocate option-2 instances before then, because a record
+  without an enforceable scope fact cannot satisfy read-back check 2
+  (section 3.5). Option-1 enforcement does not depend on it.
 
 ### 3.3 Collision and idempotency
 
@@ -231,10 +241,32 @@ directions of an already-stored former-name link, as the rt9f.5 helper does.
 | Direction | Applies to | Alias rule |
 | --- | --- | --- |
 | legacy `aegis.gastown.local` → option 1 | chaski, shantytown, camayoc existing instances | optional per class; `new owl:sameAs old`; old stays recallable |
-| legacy `aegis.gastown.local` → option 2 | same, on an option-2 install | same rule; UUID is v5 of the legacy IRI string under `install_uuid` so the alias is reproducible |
+| legacy `aegis.gastown.local` → option 2 | same, on an option-2 install | same rule; the new UUID is chosen as below so re-emission converges on it |
 | `urn:shuttle:` → option 1 or 2 | shuttle runs/workflows/events | same rule; signed registrations are never aliased in place |
 | option 1 → option 2, option 2 → option 1 | an install that later changes mode | a migration, not a config edit: new declaration, per-class alias facts, both readable; startup never performs it |
 | legacy vocabulary → w3id vocabulary | terms, not instances | owned by m5s.1 (`owl:equivalentClass`/`equivalentProperty` and the published mapping); **never** `owl:sameAs` between instances and terms |
+
+**Canonical option-2 UUID for a migrated entity.** There is exactly one
+canonical new IRI per entity, so a writer that later re-emits the entity
+converges on the alias target instead of minting a second `urn:uuid`:
+
+- **Deterministic class:** the alias target is the ordinary new-mint value,
+  `UUIDv5(install_uuid, "<scope>\n<class>\n<canonical key input>")`, computed
+  from the entity's original key input (section 2), **not** from the legacy
+  IRI string. A migrated firing and a freshly re-emitted firing for the same
+  key are therefore the same IRI. If the key input cannot be recovered from
+  the stored record, that entity is not aliased; it stays a historical
+  identity.
+- **Random class:** no writer re-emits a random entity under its old key, so
+  convergence by recomputation does not apply. The alias target is
+  `UUIDv5(install_uuid, "legacy-alias\n<legacy IRI>")`, a separate input
+  domain that cannot equal any new-mint input. Re-running the migration
+  reads back the existing alias by the legacy IRI before writing, so it is
+  idempotent.
+
+The same rule applies to option 1: the alias target is the IRI the writer
+would mint today for that key (deterministic) or a migration-recorded opaque
+key read back before reuse (random).
 
 Subclass or `closeMatch` never implies `sameAs`. No alias is manufactured from
 a label match.
@@ -292,11 +324,13 @@ it is option C in the ASK below, and it still requires a recorded
    write is distinct.
 4. Negative controls: unset mode refuses with no write; former-name base
    refuses; base overlapping `aegis-infra` refuses; mode disagreeing with the
-   recorded declaration refuses; a principal writing into another scope
-   refuses.
+   recorded declaration refuses; no recorded declaration refuses; a principal
+   writing into another scope refuses.
 5. Legacy control: a store holding legacy-IRI records still recalls them after
    the change; a signed legacy payload still verifies.
 6. rt9f.5 control: its six-type A/B gates and keyed shapes are unchanged.
+7. Alias convergence (when a migration is run): a migrated deterministic
+   entity and a fresh re-emission for the same key produce one IRI, not two.
 
 ## 9. ASK Stiwi (one card, routed via the lead)
 
