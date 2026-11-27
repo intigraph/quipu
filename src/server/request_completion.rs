@@ -107,6 +107,12 @@ impl Completion<'_> {
             self.declared_agent.as_deref(),
             elapsed.as_secs_f64(),
         );
+        self.metrics.observe_operation_query(
+            &self.client,
+            &self.endpoint,
+            self.command_context.metric_operation(),
+            elapsed.as_secs_f64(),
+        );
         if cancelled {
             self.cancellations.observe(&self.client, &self.endpoint);
         } else {

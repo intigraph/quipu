@@ -2342,6 +2342,26 @@ dimension, so the series count stays at most clients x 32:
   requests (including dropped futures, like the client counter);
 - `quipu_http_agent_query_seconds_total{client,agent}` — their wall time.
 
+`/query` load is also counted by the caller's DECLARED `X-Quipu-Operation`, so
+a reader can say why it read: for example a read that follows a pushed change
+versus a scheduled poll. The label is a server-owned allowlist of generic
+values; Quipu names no consumer. Read causes are `change-follow`, `poll`,
+`reconcile`, `canary`, `backfill`, `startup` and `interactive`; generic read
+verbs are `query`, `show`, `list`, `ready`, `search`, `count`, `stats` and
+`health`. Exactly one header value that matches an allowlisted operation exactly
+counts as itself. A request without the header is `unlabelled`. A repeated,
+malformed or unlisted value is `other`; it is never a free-form label. The value
+is caller-declared and unauthenticated, and is never authorization. There is no
+task or endpoint dimension, so the series count stays at most clients x 17:
+
+- `quipu_http_operation_query_requests_total{client,operation}` — completed
+  `/query` requests (including dropped futures, like the client counter);
+- `quipu_http_operation_query_seconds_total{client,operation}` — their wall
+  time.
+
+The completion log keeps recording the raw declaration as `declared_operation`
+(below); the counter changes no log field.
+
 Writers declare structured provenance in five headers: `X-Quipu-Agent`,
 `X-Quipu-Harness`, `X-Quipu-Model`, `X-Quipu-Session` and `X-Quipu-Host`. Their
 values are not metric labels, except `X-Quipu-Agent` on `/query` above. On write routes the server classifies how
@@ -2387,7 +2407,9 @@ The component sources `seeds` and `shantytown` remain distinguishable from
 command attribution. Operations are `query`, `health`, `graphs`, `show`, `list`, `ready`, `where`,
 `search`, `count`, `info`, `stats`, `tend`, `ready-count`, `create`, `update`,
 `close`, or `comments`. These declarations contain no arguments, paths, message
-text, or credentials. They do not authenticate a caller or add metric labels.
+text, or credentials. They do not authenticate a caller. A source never becomes
+a metric label; an operation does so only through the allowlisted `/query`
+counter above.
 An attributed census additionally requires a reader that retains these fields
 and proves log coverage; an endpoint alone does not identify a command.
 
