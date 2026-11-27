@@ -325,6 +325,19 @@ pub fn commit_validated(
     }
 }
 
+/// [`commit_validated`] with SHACL-derived type dependencies (slice B):
+/// `sources` are owners enlisted ONLY as type sources for members' `sh:class`
+/// values. Default-off: with no sources nothing is derived.
+/// SLICE B WIP: sources are not yet consulted (rows-first stub).
+pub fn commit_derived(
+    batch: &ParticipantBatch<'_>,
+    validations: &[Validation<'_>],
+    sources: &[&GraphSetOwner],
+) -> Result<ReceiptVector> {
+    let _ = sources;
+    commit_validated(batch, validations)
+}
+
 /// Reconcile one batch after restart from durable state only (no caller
 /// payload). The home must be among `owners`; every recorded participant
 /// must be present with its recorded identity. Otherwise participants stay
@@ -584,3 +597,7 @@ mod deps_tests;
 #[cfg(test)]
 #[path = "participant_pins_tests.rs"]
 mod pins_tests;
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "participant_shacl_deps_tests.rs"]
+mod shacl_deps_tests;
