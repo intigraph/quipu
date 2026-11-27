@@ -98,11 +98,13 @@ value; disagreement refuses.
 
 ### Instance IRI forms
 
-- **Option 1:** `{base}{scope}/{class}/{key}`, where `scope` is the writer's
+- **Option 1:** `{base}{scope}/{class}/v1/{key}`, where `scope` is the writer's
   owner scope (section 3), `class` is a short fixed segment
   (`firing`, `reaction`, `run`, `event`, `gate-verdict`, `record`, …) and `key`
   is either the deterministic key (lower-case hex digest or the native opaque
-  26-char base32 key) or a fresh opaque key.
+  26-char base32 key) or a fresh opaque key. `v1` is the key-input version
+  segment (below); it is present for random classes too, so every option-1
+  IRI has the same shape.
 - **Option 2:** `urn:uuid:<uuid>`, where deterministic classes use
   `UUIDv5(install_uuid, "<scope>\nv1\n<class>\n<key input>")` (exact form
   below) and random
@@ -121,9 +123,11 @@ the UTF-8 bytes of
 with `LF` a single U+000A, no trailing newline, `scope` and `class` the fixed
 ASCII segments of sections 3.1 and above, and `key input` unchanged from
 today's writer. Option 2 hashes this string with UUIDv5 under `install_uuid`;
-option 1 uses the writer's existing digest of `key input` as `{key}` (the
-scope and class are already in the path). The version segment `v1` lets a
-later change of key input mint a new version rather than collide.
+option 1 uses the writer's existing digest of `key input` as `{key}`, with
+scope, class and version carried as path segments instead of hashed. In both
+forms the version `v1` is part of the identity (hashed in option 2, the
+`/v1/` segment in option 1), so a later change of key input mints under `v2`
+rather than colliding with a `v1` identity.
 
 ### Validation and refusals (before any write)
 
@@ -162,27 +166,48 @@ configuration still recalls every stored record.
 
 Before any allocation, an operator records one declaration per install
 (mode, base or install UUID, visibility, timestamp, principal) in the
-protected namespace registry graph `urn:quipu:graph:namespaces` through the
-existing local, explicit `quipu namespaces apply` path.
+protected namespace registry graph `urn:quipu:graph:namespaces` through a
+local, explicit CLI apply step that **does not exist yet** (Quipu gap below).
+The current `quipu namespaces apply` (`src/entity_namespaces.rs` `apply`)
+cannot carry it: it serializes only `Namespace` entries, as
+`<urn:quipu:namespace:<prefix>>` facts on
+`https://w3id.org/intigraph/vocab/namespaceDeclaration`, `Namespace` is
+`deny_unknown_fields`, and `persisted()` parses every fact on that predicate
+as a `Namespace` and errors on a mismatch. Writing the declaration on that
+predicate would therefore break every registry read.
 
 The declaration is a **distinct record kind** (proposed subject
 `<urn:quipu:instance-identity>`), **not** a `[[quipu.namespaces]]` entry with
 base `{base}`. It holds no prefix, mints nothing and does not take part in
 the namespace overlap test. Were it a namespace entry, the registry's two-way
 `starts_with` test would refuse every scope entry `{base}{scope}/` beneath it.
-Only the per-scope entries of section 3.2 are namespace entries. That path is local CLI only and the
-registry already requires `apply` before a mint, so the declaration is a
+Only the per-scope entries of section 3.2 are namespace entries. Like
+`apply`, the new step is local CLI only, and the registry already requires
+`apply` before a mint, so the declaration is a
 **precondition**, not a side effect of the first write: a writer that finds
 no declaration refuses (refusal 8). Neither startup nor a writer ever writes
 it. Effective policy is
 config ∪ persisted, and disagreement refuses (the registry's existing rule),
 so dropping config cannot silently switch an install's identity mode.
 
-Quipu gap to close in the implementation item: the registry currently admits
-only HTTP(S) bases, while `namespace::require_base_ns` already admits `urn:`.
-Option 2 needs a registry entry kind with no base prefix (`mode = "urn-uuid"`,
-`install_uuid`, `types` allowlist) whose owner scope is enforced from facts,
-not from IRI prefix.
+Quipu gaps to close in the implementation item (new code, not configuration):
+
+1. **Install declaration record.** Subject `<urn:quipu:instance-identity>`
+   (proposed) in `urn:quipu:graph:namespaces`, on a **distinct predicate**
+   (proposed `https://w3id.org/intigraph/vocab/instanceIdentityDeclaration`,
+   final name decided in that item, never `namespaceDeclaration`), with its
+   own serde type, its own apply step (proposed
+   `quipu namespaces declare-install`) and its own read path. `persisted()`
+   keeps reading only `namespaceDeclaration`, so registry reads are
+   unaffected; the declaration reader refuses more than one declaration
+   subject, an unknown field, or a value that fails refusals 1–5. Read-back is
+   exact: after apply, the declaration read returns the same mode, base or
+   install UUID and visibility byte for byte, or the apply reports failure.
+2. **URN-base entry kind.** The registry currently admits only HTTP(S) bases,
+   while `namespace::require_base_ns` already admits `urn:`. Option 2 needs a
+   registry entry kind with no base prefix (`mode = "urn-uuid"`,
+   `install_uuid`, `types` allowlist) whose owner scope is enforced from
+   facts, not from IRI prefix.
 
 ## 3. Owner key and scoped allocation
 
@@ -349,7 +374,7 @@ it is option C in the ASK below, and it still requires a recorded
    reported separately and changed only under m5s.1), by class (section 1), measured with `git grep` on non-test,
    non-doc source.
 2. Fresh disposable install, option 1: one real write per writer mints under
-   `{base}{scope}/`, zero legacy triples written; read-back per 3.5 passes.
+   `{base}{scope}/{class}/v1/`, zero legacy triples written; read-back per 3.5 passes.
 3. Fresh disposable install, option 2: the same writes mint `urn:uuid:` with
    scope facts; a repeated deterministic write converges; a repeated random
    write is distinct.
@@ -364,10 +389,13 @@ it is option C in the ASK below, and it still requires a recorded
    plus all four scope entries `{base}chaski/` … `{base}camayoc/` apply
    together without an overlap refusal, and each writer then mints under its
    own scope.
-6. Legacy control: a store holding legacy-IRI records still recalls them after
+6. Registry control: after the install declaration is applied, an ordinary
+   `quipu namespaces` read still succeeds and lists only namespace entries
+   (the declaration predicate is not parsed as a `Namespace`).
+7. Legacy control: a store holding legacy-IRI records still recalls them after
    the change; a signed legacy payload still verifies.
-7. rt9f.5 control: its six-type A/B gates and keyed shapes are unchanged.
-8. Alias convergence (when a migration is run): a migrated deterministic
+8. rt9f.5 control: its six-type A/B gates and keyed shapes are unchanged.
+9. Alias convergence (when a migration is run): a migrated deterministic
    entity and a fresh re-emission for the same key produce one IRI, not two.
 
 ## 9. ASK Stiwi (one card, routed via the lead)
