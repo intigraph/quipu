@@ -372,3 +372,59 @@ fn sabotage_an_r3_update_sent_to_legacy_writes_nothing_in_any_file() {
     let after: Vec<_> = files.iter().map(|x| head(&f.root, x)).collect();
     assert_eq!(after, before);
 }
+
+/// Seconds held on `/update` by exactly `client`, read from the rendered
+/// exposition, or `None` when that client has no series of its own. The
+/// `other` overflow bucket is deliberately not counted: other tests in this
+/// process raise it, so counting it would let a dropped observation pass.
+fn update_held(client: &str) -> Option<f64> {
+    let series = format!("client=\"{client}\"");
+    quipu::metrics::metrics()
+        .render_with_graph_counts(None, None)
+        .lines()
+        .filter(|line| line.starts_with("quipu_store_held_seconds_total{"))
+        .filter(|line| line.contains("endpoint=\"/update\"") && line.contains(&series))
+        .filter_map(|line| line.rsplit(' ').next()?.parse::<f64>().ok())
+        .reduce(|a, b| a + b)
+}
+
+/// H2a: a routed write records store time for its client like a legacy write
+/// does. Before, `apply_routed` built its phase timings and dropped them.
+#[test]
+fn h2a_a_routed_update_records_store_time_for_its_client() {
+    let f = fx();
+    let before = update_held("h2a-routed").unwrap_or(0.0);
+    let created = dispatch(
+        Some(&f.router),
+        &f.legacy,
+        &format!("{BASE}{CREATE}"),
+        &seeds(),
+        "h2a-routed",
+    )
+    .unwrap();
+    assert_eq!(report(created)["owner"]["store_id"], f.tracker_id.as_str());
+    let after = update_held("h2a-routed")
+        .expect("the routed write must record a series for its own client, not fold or drop it");
+    assert!(
+        after > before,
+        "the routed write held the owner's writer and must say so"
+    );
+}
+
+/// H2a: the owner reports its hold on success, and no hold on a refusal made
+/// before its writer was taken (a refused write still reports its wait).
+#[test]
+fn h2a_the_owner_reports_held_only_when_it_held_its_writer() {
+    let f = fx();
+    let Ok(Route::Owner(owner, members)) =
+        super::route(Some(&f.router), &format!("{BASE}{CREATE}"))
+    else {
+        panic!("CREATE routes to the tracker owner");
+    };
+    let (refused, hold) = owner.update_observed(&Default::default(), |_| Ok(()));
+    assert!(refused.is_err(), "an empty selection is refused");
+    assert_eq!(hold.held, None, "refused before the writer was held");
+    let (done, hold) = owner.update_observed(&members, |_| Ok(()));
+    assert!(done.is_ok());
+    assert!(hold.held.is_some(), "the writer was held for the work");
+}
