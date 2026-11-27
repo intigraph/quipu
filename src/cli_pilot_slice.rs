@@ -7,6 +7,8 @@
 //! sorted canonical forms (`slice_multiset`), one per line. Import recomputes
 //! it before opening the owner file and again after writing, so a tampered or
 //! truncated slice refuses and a completed import proves multiset equality.
+//! `--into G --legacy-db LEGACY` lands a ROOT slice in the routed graph `G`
+//! fenced for it in LEGACY, and records that retarget in the receipt.
 use super::{Flags, Out, identity, open_ro, open_rw, parse, receipt, write_new_0600};
 use quipu::store::{SliceFact, slice_multiset};
 use quipu::types::Value;
@@ -191,13 +193,77 @@ fn read_slice(path: &Path) -> Result<Slice, String> {
     })
 }
 
+/// `--into G --legacy-db LEGACY`: land a ROOT slice in the routed graph `G`.
+///
+/// Admitted only when LEGACY (the slice's source file) has `G` fenced with a
+/// verified fence, has not routed the tag to another graph, and still holds
+/// exactly this slice for the tag in ROOT. Read-only; returns the receipt's
+/// retarget record.
+fn retarget(slice: &Slice, into: &str, legacy: &str) -> Result<Json, String> {
+    let root = quipu::schema::ROOT_GRAPH_IRI;
+    if slice.graph != root {
+        return Err("--into retargets a slice exported from ROOT only".into());
+    }
+    if into == root {
+        return Err("--into names a routed graph, not ROOT".into());
+    }
+    let before = identity(Path::new(legacy));
+    let store = open_ro(legacy)?;
+    let fence = store
+        .routed_graph_fence_rows()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|(iri, _, _)| iri == into);
+    let Some((_, revision, generation)) = fence else {
+        return Err(
+            "--into graph is not fenced in --legacy-db; it is not routed for this source".into(),
+        );
+    };
+    store.verify_routed_fence().map_err(|e| e.to_string())?;
+    let routed = store
+        .routed_source_fence_rows()
+        .map_err(|e| e.to_string())?;
+    if routed
+        .iter()
+        .any(|(tag, graph, _, _)| *tag == slice.tag && graph != into)
+    {
+        return Err("--legacy-db routes this tag to another graph".into());
+    }
+    let source = store
+        .export_routed_slice(&slice.tag, root)
+        .map_err(|e| e.to_string())?;
+    drop(store);
+    if multiset_sha256(&source) != slice.digest {
+        return Err("--legacy-db does not hold this slice for its tag in ROOT".into());
+    }
+    Ok(json!({
+        "from_graph": root, "into_graph": into,
+        "legacy_fence": {"catalog_revision": revision, "generation": generation},
+        "legacy_before": before, "legacy_after": identity(Path::new(legacy)),
+    }))
+}
+
 pub(super) fn import_slice(rest: &[String]) -> Out {
-    let flags = parse(rest, &["--owner-file", "--in", "--at"], &["--execute"])?;
+    let flags = parse(
+        rest,
+        &["--owner-file", "--in", "--at", "--into", "--legacy-db"],
+        &["--execute"],
+    )?;
     let owner = existing(&flags, "--owner-file")?;
     let path = Path::new(&owner);
-    let slice = read_slice(Path::new(&existing(&flags, "--in")?))?;
+    let mut slice = read_slice(Path::new(&existing(&flags, "--in")?))?;
     let execute = flags.on("--execute");
     let before = identity(path);
+    // The multiset is always the slice's own; only the landing graph moves.
+    let retargeted = match (flags.opt("--into"), flags.opt("--legacy-db")) {
+        (None, None) => None,
+        (Some(into), Some(_)) => {
+            let record = retarget(&slice, into, &existing(&flags, "--legacy-db")?)?;
+            slice.graph = into.to_string();
+            Some(record)
+        }
+        _ => return Err("--into and --legacy-db are given together or not at all".into()),
+    };
     // Read-only preflight of the same conditions the library refuses on, so a
     // refused import never opens the owner file for writing.
     let store = open_ro(&owner)?;
@@ -210,10 +276,13 @@ pub(super) fn import_slice(rest: &[String]) -> Out {
             "the tag already owns current facts in this graph; a slice imports once".into(),
         );
     }
-    let plan = json!({
+    let mut plan = json!({
         "tag": slice.tag, "graph": slice.graph, "count": slice.facts.len(),
         "multiset_sha256": slice.digest,
     });
+    if let Some(record) = retargeted {
+        plan["retarget"] = record;
+    }
     if !execute {
         return Ok(receipt(
             "import-slice",
