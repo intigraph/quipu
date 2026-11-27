@@ -115,8 +115,14 @@
     },
     {
       "file": "fluents-v1.ttl",
+      "action": "load",
+      "name": "quipu-fluents-v1",
+      "reason": "Proposal 52, accepted live 2026-11-13; exact bytes are the writer admission check. Structural schema only: writer, transport and retention gates remain open."
+    },
+    {
+      "file": "fluents-v2.ttl",
       "action": "exclude",
-      "reason": "Versioned fluent wire contract; structural schema only. Live proposal acceptance and shape activation require the governed writer, transport and retention acceptance packet."
+      "reason": "Proposed successor to quipu-fluents-v1 (three structural tightenings); not accepted. Activation needs its own proposal acceptance and a writer admission-check update."
     },
     {
       "file": "shape-mappings.ttl",

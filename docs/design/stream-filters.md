@@ -149,9 +149,9 @@ read per transaction it walks; it never scans the graph.
 
 Subscribing to a fluent's current value needs a current-value read, which does
 not exist: fluents are a contract (`docs/design/fluents-v1-contract.md`) and a
-pending shape file not loaded (`shapes/MANIFEST`), and PR #1136 adds internal
-APIs only. The slice: `{"feed":"fluent","fluent":"<IRI>"}` emits
-`quipu.fluent` frames `{fluent, value, tx}` whenever the projected current value
+structural shape set (loaded since proposal 52; writer gates still open), and
+PR #1136 adds internal APIs only. The slice:
+`{"feed":"fluent","fluent":"<IRI>"}` emits `quipu.fluent` frames `{fluent, value, tx}` whenever the projected current value
 changes, computed in the hub from that fluent's observation records. It starts
 when a fluent projection with a current-value read is active on the served
 store.

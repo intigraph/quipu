@@ -1,12 +1,26 @@
 # Fluent contract v1
 
 This is the source contract for implementing fluents. It is not permission to
-activate a served schema, reinterpret existing slots, migrate data, or discard
-history. `shapes/fluents-v1.ttl` versions pending proposal 52, the stable-IRI
-successor to proposal 51. Proposal 51 remains unchanged as historical evidence.
-The successor retains its pending-proposal warning. `shapes/MANIFEST` excludes it from
-deployment loading. The warning describes live admission; versioning the draft
-does not accept the proposal in a running store.
+reinterpret existing slots, migrate data, or discard history.
+`shapes/fluents-v1.ttl` is proposal 52, the stable-IRI successor to proposal 51.
+Proposal 52 was accepted into the live store on 2026-11-13 (registry name
+`quipu-fluents-v1`, sha256 `02012e2b…00529b5`); `shapes/MANIFEST` classifies
+it as `load`. Proposal 51 remains pending and unchanged as historical evidence.
+The v1 file keeps its original opening comment, now stale, because its exact
+bytes are the accepted set and the native writer's admission check.
+
+Accepting the shape is structural only. The writer, transport and retention
+gates below are still open, so accepting v1 does not make fluents safe to
+write through ordinary adapters.
+
+`shapes/fluents-v2.ttl` is a proposed successor and is not accepted. It enforces
+three rules that this contract states and v1 does not check: timezone-qualified
+`asOf`/`recordedOn` (an `sh:pattern` on the `xsd:dateTime` lexical form, so the
+wire form is unchanged), `sh:IRIOrLiteral` on `observationValue`, and
+`sh:node qp:FluentShape` on `qp:Observable`, because a shapes-graph
+`rdfs:subClassOf` does not extend `sh:targetClass` over data. The manifest
+excludes it. Activating it needs its own proposal acceptance and a writer
+admission-check update.
 
 ## Names and declaration
 
@@ -17,7 +31,7 @@ IRIs use that prefix. Implementations must use a dedicated fluent vocabulary
 constant rather than minting these terms from the legacy `namespace::QUIPU`.
 This does not rename that existing constant, migrate its terms or stored data,
 admit aliases, or substitute a generic Observation for FluentObservation.
-The registry name for a future activation is `quipu-fluents-v1`.
+The live registry name is `quipu-fluents-v1`.
 
 | Class | Required fields, exactly one unless specified |
 | --- | --- |
@@ -39,8 +53,23 @@ strings and complex paths refuse; missing annotations preserve ordinary slots.
 
 The Fluent identity fixes graph, subject, predicate, property-shape identity and
 policy. Changing their interpretation requires a new explicitly admitted
-declaration; it must not reinterpret an existing observation log. Ordinary
-status and assignee disagreements remain slot conflicts and decisions.
+declaration; it must not reinterpret an existing observation log.
+
+Ordinary status and assignee disagreements remain slot conflicts and decisions.
+The one admitted exception is a claim on a workflow step (ruling 2026-11-13,
+decision `mem/decision/shantytown/stigmergy-claim-model/20261113`). A claim may
+be a fluent with policy `set`: every claimant is retained, there is no merge
+conflict, and a standing condition on more than one live claimant triggers a
+deterministic tie-break. Status stays excluded. A run's current step stays an
+ordinary `maxCount 1` slot derived from signed transitions, and divergent
+transitions stay a merge conflict. Ordinary assignee fields, such as a work
+item's assignee, stay outside fluents unless separately admitted.
+
+A `set` fluent meant to hold one value that holds more is a bug, and system
+operators must be able to see it. So a `set` fluent should be able to declare
+its intended cardinality (one or many), and a single query should find every
+breach. The shape of that declaration has not been ruled on; it is a proposal
+only, and neither v1 nor v2 carries it.
 
 ## Values and ordering
 
@@ -125,7 +154,8 @@ proofs establish deduplication across overlapping replicas. A cached roll-up
 must not erase identities needed for replay or double-count overlapping input.
 No raw-history deletion is authorized by this contract.
 
-Before live proposal acceptance or changing the manifest to `load`, require:
+Proposal 52's acceptance activated the structural profile only. Before
+fluents are written through any adapter, require:
 
 - Native Store ownership, authority, SHACL and policy admission with no partial
   append on refusal; all replacement/retraction paths preserve immutability.
@@ -134,8 +164,10 @@ Before live proposal acceptance or changing the manifest to `load`, require:
 - Persistent share/fork/pendant round trips preserving event identities and
   authenticated source order, plus domain-time and RDF 1.2 reader controls.
 - Bounded observable evaluation and cycle/unknown-input refusal controls.
-- Explicit retention/roll-up disposition, exact versioned shape bytes, the
-  deployment classification and a separate schema-activation decision.
+- Explicit retention/roll-up disposition. Exact versioned shape bytes, the
+  deployment classification and the schema-activation decision are satisfied
+  for v1. The remaining gates are tracked on aegis-karb.8.
 
-Until then, source-contract review unblocks implementation work only. It does
-not certify the private algebra kernel or any installed fluent feature.
+Until then, the loaded profile and source-contract review unblock
+implementation work only. They do not certify the private algebra kernel or
+any installed fluent feature.

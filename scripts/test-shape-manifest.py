@@ -29,9 +29,9 @@ class Manifest(unittest.TestCase):
         value = M.plan(ROOT / "shapes")
         self.assertTrue({
             "aegis-ontology", "governance", "provenance", "code-entities",
-            "contributor-knowledge", "demoted-derivation", "class-subsumption"}
+            "contributor-knowledge", "demoted-derivation", "class-subsumption", "quipu-fluents-v1"}
             <= {r["name"] for r in value["load"]})
-        self.assertTrue({"skill-catalogue.ttl", "render.ttl", "rule-editions.ttl", "rule-answers.ttl", "read-policy.ttl", "fluents-v1.ttl"}
+        self.assertTrue({"skill-catalogue.ttl", "render.ttl", "rule-editions.ttl", "rule-answers.ttl", "read-policy.ttl", "fluents-v2.ttl"}
                         <= {r["file"] for r in value["exclude"]})
         self.assertNotIn("read-policy.ttl", {r["file"] for r in value["load"]})
 
