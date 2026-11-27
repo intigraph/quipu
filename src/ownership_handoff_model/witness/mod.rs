@@ -13,6 +13,8 @@ mod records;
 pub(crate) mod s3;
 #[cfg(all(test, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 pub(crate) mod s3_emulator;
+#[cfg(all(test, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub(crate) mod s3_tls_bridge;
 mod walk;
 use objects::{Created, Object, Objects};
 use records::*;

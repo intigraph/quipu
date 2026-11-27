@@ -27,6 +27,8 @@ use crate::{
 mod enrolled;
 #[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 pub use enrolled::EnrolledPilotConfig;
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub(crate) use enrolled::admissible_witness_profile;
 
 fn refused(message: impl std::fmt::Display) -> Error {
     Error::PolicyDenied(format!("graph router: {message}"))
