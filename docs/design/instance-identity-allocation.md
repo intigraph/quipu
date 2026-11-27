@@ -179,7 +179,7 @@ exits non-zero with a message naming the missing input when:
    valid UUID (deterministic classes cannot converge without it);
 6. the writer's bearer for the guarded write path is unset or empty. The writer
    never guesses identity headers or falls back to an unauthenticated route;
-7. the store's recorded install declaration (below) disagrees with the
+7. the store's **active** install declaration (below) is unreadable or disagrees with the
    configured identity inputs: `mode`, and `base` under `mode = "base"` or
    `install_uuid` under `mode = "urn-uuid"`, each compared byte for byte.
    Without this, an option-2 install whose configured `install_uuid` drifted
@@ -200,8 +200,8 @@ configuration still recalls every stored record.
 
 ### Recorded install declaration
 
-Before any allocation, an operator records one declaration per install
-(mode, base or install UUID, timestamp, principal) in the
+Before any allocation, an operator records the install declaration
+(mode, base or install UUID, timestamp, principal; versioned, below) in the
 protected namespace registry graph `urn:quipu:graph:namespaces` through a
 local, explicit CLI apply step that **does not exist yet** (Quipu gap below).
 The current `quipu namespaces apply` (`src/entity_namespaces.rs` `apply`)
@@ -213,8 +213,8 @@ as a `Namespace` and errors on a mismatch. Writing the declaration on that
 predicate would therefore break every registry read.
 
 The declaration holds no visibility or audience: those belong to the scope
-entries. The declaration is a **distinct record kind** (proposed subject
-`<urn:quipu:instance-identity>`), **not** a `[[quipu.namespaces]]` entry with
+entries. The declaration is a **distinct record kind** (proposed subjects
+`<urn:quipu:instance-identity:v<n>>`), **not** a `[[quipu.namespaces]]` entry with
 base `{base}`. It holds no prefix, mints nothing and does not take part in
 the namespace overlap test. Were it a namespace entry, the registry's two-way
 `starts_with` test would refuse every scope entry `{base}{scope}/` beneath it.
@@ -228,17 +228,65 @@ config ∪ persisted, and any disagreement in mode, base or install UUID
 refuses (refusal 7, mirroring the registry's existing rule), so neither
 dropping nor editing config can silently switch an install's identity.
 
+### Declaration versions, supersede and the active declaration
+
+The declaration is append-only and versioned, mirroring the registry's
+immutable entries (`insert` refuses to reclassify a prefix):
+
+- **Subjects.** Each version is its own subject
+  `<urn:quipu:instance-identity:v<n>>` (proposed), `n` a positive decimal
+  integer with no leading zero, starting at `1`. A version, once written, is
+  never edited or deleted.
+- **`declare-install` writes only `v1`.** On a store with no declaration it
+  writes `v1` and reads it back. On a store whose `v1` holds byte-identical
+  values it is a no-op that still performs the read-back. On a store with any
+  declaration whose values differ, or with any version above `v1`, it
+  **refuses with no write** and names the existing active version. It never
+  replaces, supersedes or deletes a declaration.
+- **`supersede-install` is the only way to change identity** (proposed
+  `quipu namespaces supersede-install`, local CLI only, like `apply`). Its
+  required inputs are the expected active version number and its exact values
+  (a compare-and-swap guard), the new values, and the operator principal. It
+  refuses with no write when the expected version or values do not match the
+  store's active declaration byte for byte (a stale or concurrent supersede),
+  when the new values fail refusals 1–5, or when they are byte-identical to
+  the active values. Otherwise it writes `v<n+1>` carrying the new values, a
+  `supersedes` link to `v<n>`, timestamp and principal, then reads back: the
+  active-declaration read must return `v<n+1>` with the new values byte for
+  byte, or the step reports failure.
+- **Active declaration.** The declaration reader returns the single version
+  that no other version supersedes. It refuses (and every allocating writer
+  therefore refuses, as refusal 7) when there is no `v1`, when the versions
+  are not a gap-free chain `v1 … v<n>` each superseding exactly its
+  predecessor, when two versions supersede the same predecessor (a fork), or
+  when any version fails the field checks of gap 1. Writers apply refusals 7
+  and 8 against the active version only; superseded versions stay readable
+  as provenance for the records minted under them.
+- **Rollback of a supersede** is another `supersede-install` that re-declares
+  the prior values as `v<n+2>`. Nothing is deleted. Records minted under
+  `v<n+1>` stay valid identities (section 7). Because the canonical key
+  string and the option-1 path both derive from the active values, rolling
+  back to the prior values makes deterministic classes converge again on the
+  IRIs minted under `v<n>`.
+- **Writers pick up a supersede only by re-reading.** A writer reads the
+  active declaration before each allocation batch; a writer whose configured
+  inputs still match the superseded version then refuses under refusal 7
+  until its configuration is updated, so no writer mints under a stale mode.
+
 Quipu gaps to close in the implementation item (new code, not configuration):
 
-1. **Install declaration record.** Subject `<urn:quipu:instance-identity>`
-   (proposed) in `urn:quipu:graph:namespaces`, on a **distinct predicate**
+1. **Install declaration record.** Versioned subjects
+   `<urn:quipu:instance-identity:v<n>>` (proposed, section above) in
+   `urn:quipu:graph:namespaces`, on a **distinct predicate**
    (proposed `https://w3id.org/intigraph/vocab/instanceIdentityDeclaration`,
    final name decided in that item, never `namespaceDeclaration`), with its
-   own serde type, its own apply step (proposed
-   `quipu namespaces declare-install`) and its own read path. `persisted()`
+   own serde type, its own apply steps (proposed
+   `quipu namespaces declare-install` and `quipu namespaces supersede-install`)
+   and its own read path. `persisted()`
    keeps reading only `namespaceDeclaration`, so registry reads are
-   unaffected; the declaration reader refuses more than one declaration
-   subject, an unknown field, or a value that fails refusals 1–5. Read-back is
+   unaffected; the declaration reader refuses a chain that does not resolve
+   to exactly one active version, an unknown field, or a value that fails
+   refusals 1–5. Read-back is
    exact: after apply, the declaration read returns the same mode and base
    or install UUID byte for byte, or the apply reports failure. Every
    allocating writer reads this declaration before minting and applies
@@ -257,8 +305,10 @@ Quipu gaps to close in the implementation item (new code, not configuration):
    refuses with no write. The same check refuses a private-record scope
    (section 3.1) declared public, at apply time and again at write time,
    and refuses at apply any scope named `legacy-alias` (reserved, section 3.1).
-   Today the registry checks types and graphs only; this admission and policy
-   check is new code, and acceptance 4 tests it.
+   Option-2 admission additionally applies the subject rules of section 3.2
+   (no unscoped first write, server-side UUID recomputation, UUID version
+   check). Today the registry checks types and graphs only; this admission and
+   policy check is new code, and acceptance 4 tests it.
 
 ## 3. Owner key and scoped allocation
 
@@ -306,6 +356,38 @@ stay human-loaded and keep their current identity (frozen bytes).
   writer may allocate option-2 instances before then, because a record
   without an enforceable scope fact cannot satisfy read-back check 2
   (section 3.5). Option-1 enforcement does not depend on it.
+
+**Option-2 subject admission (Quipu gap 3).** Option 1 is protected by path
+prefix: a principal cannot name a subject under another scope's base. Option 2
+has no prefix, and `install_uuid` is not secret, so any principal can compute
+another scope's deterministic UUIDv5. The guarded write path therefore admits
+a write that introduces a **new** `urn:uuid:` subject (one with no prior fact
+in the store) only when all of the following hold, and otherwise refuses with
+no write:
+
+1. **No unscoped first write.** The same transaction carries the subject's
+   scope allocation fact, naming a scope the writing principal owns. A first
+   write of a `urn:uuid:` subject with no scope fact refuses. Writes to an
+   existing subject and references to it as an object are reference reuse
+   and are governed by the collision rules of 3.3, not by this rule.
+2. **Deterministic subjects are recomputed, not trusted.** For a
+   deterministic class the transaction also carries the class segment and the
+   key input as facts (predicates from the same m5s.1 vocabulary block as the
+   scope fact). The server recomputes
+   `UUIDv5(active install_uuid, <canonical key string>)` using the
+   **claimed scope** of rule 1, and refuses unless the result equals the
+   subject byte for byte. A principal that pre-writes another scope's UUID
+   under its own scope fact computes a different UUID, so the squat refuses
+   and the owner's later write is never blocked by a 3.3 collision.
+3. **UUID version matches the class kind.** A deterministic-class subject
+   must be a version-5 UUID and a random-class subject a version-4 UUID (the
+   RFC 9562 version nibble). A principal therefore cannot claim another
+   scope's computable v5 UUID as a "random" record of its own.
+
+Random v4 subjects are not computable from public inputs, so squatting one
+requires guessing 122 random bits; that residual risk is accepted. The key
+input fact is stored in the record's own graph under the scope's own
+visibility and audience, so recording it discloses nothing beyond the record.
 
 ### 3.3 Collision and idempotency
 
@@ -359,7 +441,7 @@ directions of an already-stored former-name link, as the rt9f.5 helper does.
 | legacy `aegis.gastown.local` → option 1 | chaski, shantytown, camayoc existing instances | optional per class; `new owl:sameAs old`; old stays recallable |
 | legacy `aegis.gastown.local` → option 2 | same, on an option-2 install | same rule; the new UUID is chosen as below so re-emission converges on it |
 | `urn:shuttle:` → option 1 or 2 | shuttle runs/workflows/events | same rule; signed registrations are never aliased in place |
-| option 1 → option 2, option 2 → option 1 | an install that later changes mode | a migration, not a config edit: new declaration, per-class alias facts, both readable; startup never performs it |
+| option 1 → option 2, option 2 → option 1 | an install that later changes mode | a migration, not a config edit: `supersede-install` writes the next declaration version (section 2), then per-class alias facts; both versions and both IRI sets stay readable; startup never performs it; reversed by a further supersede |
 | legacy vocabulary → w3id vocabulary | terms, not instances | owned by m5s.1 (`owl:equivalentClass`/`equivalentProperty` and the published mapping); **never** `owl:sameAs` between instances and terms |
 
 **Canonical option-2 UUID for a migrated entity.** There is exactly one
@@ -427,8 +509,11 @@ it is option C in the ASK below, and it still requires a recorded
 - **Alias facts** are additive and carry their own provenance source; they are
   removed, if ever needed, by retracting that source, never by deleting rows.
 - **Install declaration:** reverting config does not erase the persisted
-  declaration. Changing it is an explicit migration (section 4), so a rollback
-  cannot silently fork identity.
+  declaration. Changing it is an explicit `supersede-install` (section 2),
+  and undoing that is a further supersede back to the prior values; no
+  version is ever deleted, so a rollback cannot silently fork identity. A
+  source revert to a writer that predates the declaration does not consult it
+  and returns to the previous constants as above.
 
 ## 8. Acceptance for implementation items (per repo)
 
@@ -454,7 +539,15 @@ it is option C in the ASK below, and it still requires a recorded
    recorded declaration refuses; a principal
    writing into another scope refuses; a private-record scope (`camayoc`)
    declared `visibility = "public"` or `audience = "public"` refuses at apply
-   and at write; a `#`-terminated base refuses.
+   and at write; a `#`-terminated base refuses; `declare-install` with
+   values differing from an existing declaration refuses with no write;
+   `supersede-install` with a stale expected version or values refuses with
+   no write; a declaration chain with a fork or a gap refuses every
+   allocation; on an option-2 install, a first write of a `urn:uuid:` subject
+   with no scope fact refuses, a principal writing another scope's
+   deterministic UUIDv5 under its own scope fact refuses (recomputation
+   mismatch), and a version-5 subject presented as a random-class record
+   refuses.
 5. Positive overlap and audience control: on an option-1 install with an
    `https://` base, the install declaration plus all four scope entries
    `{base}chaski/` … `{base}camayoc/` apply together without an overlap
@@ -468,6 +561,11 @@ it is option C in the ASK below, and it still requires a recorded
 8. rt9f.5 control: its six-type A/B gates and keyed shapes are unchanged.
 9. Alias convergence (when a migration is run): a migrated deterministic
    entity and a fresh re-emission for the same key produce one IRI, not two.
+10. Supersede and rollback control: `supersede-install` from `v1` to `v2`
+    reads back `v2` as active; writers configured for `v1` then refuse; a
+    second supersede back to the `v1` values reads back `v3` as active, and a
+    deterministic re-emission converges on the IRI minted under `v1`; records
+    minted under `v2` stay recallable throughout.
 
 ## 9. ASK Stiwi (one card, routed via the lead)
 
