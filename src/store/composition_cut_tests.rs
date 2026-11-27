@@ -48,7 +48,7 @@ fn a_cut_names_every_selected_graph_with_its_file_coordinate() {
             let member = &members[&read.route.graph];
             assert_eq!(member.store_id, read.route.store_id);
             assert_eq!(member.log_epoch, read.route.log_epoch);
-            assert_eq!(member.local_tx, read.local_tx);
+            assert_eq!(member.local_tx, read.published_tx);
             assert_eq!(member.generation, read.route.generation);
             assert_eq!(member.policy, read.route.policy);
         }

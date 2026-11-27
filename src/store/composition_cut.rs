@@ -40,7 +40,9 @@ pub struct CutMember {
     pub store_id: String,
     /// That file's change-log epoch.
     pub log_epoch: String,
-    /// That file's committed transaction head at the cut.
+    /// That file's PUBLISHED transaction head at the cut: the head a composed
+    /// reader may see ([`CapturedRead::published_tx`]), never an applied but
+    /// unpublished participant batch.
     pub local_tx: i64,
     /// Owner generation of the graph's route.
     pub generation: u64,
@@ -58,7 +60,9 @@ pub struct CompositionCut {
 }
 
 impl CompositionCut {
-    /// The cut a strict capture produced: one member per selected graph.
+    /// The cut a strict capture produced: one member per selected graph, each
+    /// at its file's published head. A participant batch applied in a file but
+    /// not yet published by its home is NOT part of the cut (Phase 3 S3).
     pub fn capture(reads: &[CapturedRead<'_>]) -> Result<Self> {
         let first = reads
             .first()
@@ -74,7 +78,7 @@ impl CompositionCut {
             let member = CutMember {
                 store_id: read.route.store_id.clone(),
                 log_epoch: read.route.log_epoch.clone(),
-                local_tx: read.local_tx,
+                local_tx: read.published_tx,
                 generation: read.route.generation,
                 policy: read.route.policy.clone(),
             };
@@ -145,12 +149,7 @@ impl CompositionCut {
             return Err(refused("unsupported-version", "body version is not 1"));
         }
         let cut: Self = serde_json::from_value(value).map_err(|e| refused("malformed", e))?;
-        if cut.members.is_empty() {
-            return Err(refused("empty", "a cut selects at least one graph"));
-        }
-        if cut.members.values().any(|m| m.local_tx < 0) {
-            return Err(refused("malformed", "negative local_tx"));
-        }
+        cut.check_shape()?;
         if cut.canonical() != bytes {
             return Err(refused("non-canonical", "one cut has exactly one token"));
         }
@@ -167,11 +166,19 @@ impl CompositionCut {
     /// not serve those reads as the cut's answer unless every member is at
     /// head ([`Self::is_at_head`]); answering an older cut needs historical
     /// evaluation (vector mode), which does not exist yet.
+    ///
+    /// The shape invariants [`Self::from_token`] enforces are re-checked here,
+    /// because a cut deserialized any other way (`serde_json::from_value`)
+    /// skips them. Empty or duplicated `reads` refuse too.
     pub fn admit(&self, reads: &[CapturedRead<'_>]) -> Result<()> {
-        if self.version != CUT_VERSION {
-            return Err(refused("unsupported-version", self.version));
+        self.check_shape()?;
+        if reads.is_empty() {
+            return Err(refused("empty", "no selected graph"));
         }
         let selected: BTreeSet<&str> = reads.iter().map(|r| r.route.graph.as_str()).collect();
+        if selected.len() != reads.len() {
+            return Err(refused("malformed", "duplicate selected graph"));
+        }
         if let Some(extra) = self.members.keys().find(|g| !selected.contains(g.as_str())) {
             return Err(refused("extra-member", extra));
         }
@@ -195,15 +202,30 @@ impl CompositionCut {
         Ok(())
     }
 
-    /// True when every member's `local_tx` equals the head its read captured,
-    /// i.e. the captured reads answer exactly at this cut. Call after
-    /// [`Self::admit`] succeeded for the same `reads`.
+    /// True when every member's `local_tx` equals the PUBLISHED head its read
+    /// captured, i.e. the captured reads (bounded by `published_tx`) answer
+    /// exactly at this cut. Call after [`Self::admit`] succeeded for the same
+    /// `reads`.
     pub fn is_at_head(&self, reads: &[CapturedRead<'_>]) -> bool {
         reads.iter().all(|read| {
             self.members
                 .get(&read.route.graph)
-                .is_some_and(|m| m.local_tx == read.local_tx)
+                .is_some_and(|m| m.local_tx == read.published_tx)
         })
+    }
+
+    /// Version, non-empty selection and non-negative heads.
+    fn check_shape(&self) -> Result<()> {
+        if self.version != CUT_VERSION {
+            return Err(refused("unsupported-version", self.version));
+        }
+        if self.members.is_empty() {
+            return Err(refused("empty", "a cut selects at least one graph"));
+        }
+        if self.members.values().any(|m| m.local_tx < 0) {
+            return Err(refused("malformed", "negative local_tx"));
+        }
+        Ok(())
     }
 }
 
@@ -270,10 +292,16 @@ fn check_coordinate(
     if log_epoch != read.route.log_epoch {
         return Err(refused("foreign-epoch", graph));
     }
-    if local_tx > read.local_tx {
+    // The bound is the PUBLISHED head: an applied but unpublished participant
+    // batch is not visible to a composed reader, so a coordinate naming it
+    // names writes no reader can see.
+    if local_tx > read.published_tx {
         return Err(refused(
             "ahead-of-head",
-            format!("{graph}: cut {local_tx} > head {}", read.local_tx),
+            format!(
+                "{graph}: cut {local_tx} > published head {}",
+                read.published_tx
+            ),
         ));
     }
     Ok(())
