@@ -19,7 +19,6 @@ pub(super) const INTENTS: &str = "CREATE TABLE IF NOT EXISTS participant_intents
     state TEXT NOT NULL CHECK(state IN ('prepared','applied','published','aborted')), \
     heads TEXT)";
 
-/// One participant: an owner, its ordinary routed requests and its exact
 pub(super) fn table_exists(store: &Store, name: &str) -> Result<bool> {
     Ok(store.conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",

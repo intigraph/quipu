@@ -11,23 +11,21 @@ use crate::{
 };
 use std::time::{Duration, Instant};
 
-const FILES: [(&str, [&str; 2]); 3] = [
+pub(super) const FILES: [(&str, [&str; 2]); 3] = [
     ("alpha", ["urn:alpha:data", "urn:alpha:provenance"]),
     ("beta", ["urn:beta:data", "urn:beta:provenance"]),
     ("gamma", ["urn:gamma:data", "urn:gamma:provenance"]),
 ];
 
-struct Files {
-    root: std::path::PathBuf,
-    catalog: Arc<GraphSetCatalog>,
+pub(super) struct Files {
+    pub(super) root: std::path::PathBuf,
+    pub(super) catalog: Arc<GraphSetCatalog>,
     /// Per file: (entity, attribute) term ids, stable in that file.
-    terms: Vec<(i64, i64)>,
-    routes: Vec<Route>,
+    pub(super) terms: Vec<(i64, i64)>,
+    pub(super) routes: Vec<Route>,
 }
 
-fn files(root: &Path) -> Files {
-    let mut routes = Vec::new();
-    let mut terms = Vec::new();
+pub(super) fn files(root: &Path) -> Files {
     for (file, graphs) in FILES {
         let path = root.join(format!("{file}.db"));
         {
@@ -35,13 +33,25 @@ fn files(root: &Path) -> Files {
             for graph in graphs {
                 store.graph_create(graph).unwrap();
             }
-            terms.push((
-                store.intern("urn:item").unwrap(),
-                store.intern("urn:value").unwrap(),
-            ));
+            store.intern("urn:item").unwrap();
+            store.intern("urn:value").unwrap();
         }
         Store::adopt(path.to_str().unwrap()).unwrap();
+    }
+    describe(root)
+}
+
+/// Describe EXISTING fixture files (a restarted or child process).
+pub(super) fn describe(root: &Path) -> Files {
+    let mut routes = Vec::new();
+    let mut terms = Vec::new();
+    for (file, graphs) in FILES {
+        let path = root.join(format!("{file}.db"));
         let store = Store::open(path.to_str().unwrap()).unwrap();
+        terms.push((
+            store.intern("urn:item").unwrap(),
+            store.intern("urn:value").unwrap(),
+        ));
         routes.push(Route {
             graph: graphs[0].into(),
             file_id: file.into(),
@@ -83,7 +93,7 @@ fn files(root: &Path) -> Files {
 }
 
 /// (Re)open one file's owner, as a restarted server would.
-fn open(files: &Files, index: usize) -> GraphSetOwner {
+pub(super) fn open(files: &Files, index: usize) -> GraphSetOwner {
     let path = files.root.join(format!("{}.db", FILES[index].0));
     let store = Store::open(path.to_str().unwrap()).unwrap();
     let allocation = files
@@ -102,7 +112,7 @@ fn open(files: &Files, index: usize) -> GraphSetOwner {
     .unwrap()
 }
 
-fn requests(index: usize) -> Vec<WriteRequest<'static>> {
+pub(super) fn requests(index: usize) -> Vec<WriteRequest<'static>> {
     FILES[index]
         .1
         .into_iter()
@@ -117,7 +127,7 @@ fn requests(index: usize) -> Vec<WriteRequest<'static>> {
         .collect()
 }
 
-fn batch(files: &Files, index: usize, value: &str) -> GraphSetBatch {
+pub(super) fn batch(files: &Files, index: usize, value: &str) -> GraphSetBatch {
     let (entity, attribute) = files.terms[index];
     let datum = Datum {
         entity,
@@ -141,7 +151,7 @@ fn batch(files: &Files, index: usize, value: &str) -> GraphSetBatch {
     }
 }
 
-fn members<'a>(
+pub(super) fn members<'a>(
     files: &Files,
     owners: &[&'a GraphSetOwner],
     indexes: &[usize],
@@ -158,7 +168,7 @@ fn members<'a>(
         .collect()
 }
 
-fn principal(name: &str) -> Option<Identity> {
+pub(super) fn principal(name: &str) -> Option<Identity> {
     Some(Identity {
         principal: name.into(),
         credential_id: None,
@@ -167,12 +177,12 @@ fn principal(name: &str) -> Option<Identity> {
     })
 }
 
-fn as_writer<T>(work: impl FnOnce() -> T) -> T {
+pub(super) fn as_writer<T>(work: impl FnOnce() -> T) -> T {
     with_identity(principal("urn:principal:writer"), work)
 }
 
 /// Asserted facts per member graph of `index`, read through the owner pool.
-fn counts(owner: &GraphSetOwner, index: usize) -> Result<Vec<i64>> {
+pub(super) fn counts(owner: &GraphSetOwner, index: usize) -> Result<Vec<i64>> {
     owner.owner.read(|store| {
         FILES[index]
             .1
@@ -189,13 +199,18 @@ fn counts(owner: &GraphSetOwner, index: usize) -> Result<Vec<i64>> {
     })
 }
 
-fn local_write(files: &Files, owner: &GraphSetOwner, index: usize, value: &str) -> Result<()> {
+pub(super) fn local_write(
+    files: &Files,
+    owner: &GraphSetOwner,
+    index: usize,
+    value: &str,
+) -> Result<()> {
     owner
         .transact(&requests(index), &batch(files, index, value))
         .map(|_| ())
 }
 
-fn raw_head(files: &Files, index: usize) -> i64 {
+pub(super) fn raw_head(files: &Files, index: usize) -> i64 {
     // Read the file directly (read-only), bypassing every owner fence.
     let path = files.root.join(format!("{}.db", FILES[index].0));
     let conn =
@@ -207,7 +222,7 @@ fn raw_head(files: &Files, index: usize) -> i64 {
     .unwrap()
 }
 
-fn raw_exec(files: &Files, index: usize, sql: &str) {
+pub(super) fn raw_exec(files: &Files, index: usize, sql: &str) {
     let path = files.root.join(format!("{}.db", FILES[index].0));
     rusqlite::Connection::open(path)
         .unwrap()
@@ -215,7 +230,7 @@ fn raw_exec(files: &Files, index: usize, sql: &str) {
         .unwrap();
 }
 
-fn injected(error: &crate::Error) -> bool {
+pub(super) fn injected(error: &crate::Error) -> bool {
     error.to_string().contains("injected participant crash")
 }
 
