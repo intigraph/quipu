@@ -8,6 +8,7 @@ pub mod aggregate;
 mod attach_scope;
 mod batch_absence;
 mod batch_star;
+mod bound_subject_bgp;
 mod casts;
 mod composed_absence;
 pub mod exists;
