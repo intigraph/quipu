@@ -39,7 +39,7 @@ fn a_pool_of_one_is_the_single_session_for_every_lane() {
 }
 
 /// Pool of 2: a resolve (R) and a hybrid search (H) hold DIFFERENT sessions at
-/// the same time. The try_checkout half proves it without blocking; then two
+/// the same time. The `try_checkout` half proves it without blocking; then two
 /// threads each wait at a barrier WHILE holding a session, which only a pool
 /// admitting both at once can pass.
 #[test]
