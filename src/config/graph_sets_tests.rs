@@ -267,3 +267,33 @@ fn enabled_startup_refuses_in_one_line_naming_the_reason() {
     off.catalog_file = root.join("does-not-exist.json");
     assert!(off.startup_refusal(None).is_none());
 }
+
+/// aegis-n0wc.5.2: `[quipu.graph_sets.reads]` is optional (absent = no read
+/// mount), takes the pilot's read keys, and refuses unknown or missing keys.
+#[test]
+fn reads_table_is_optional_and_takes_the_pilot_read_keys() {
+    let root = Path::new("/srv/owners");
+    assert!(
+        parse(&table(root))
+            .unwrap()
+            .graph_sets
+            .unwrap()
+            .reads
+            .is_none()
+    );
+    let reads = "[quipu.graph_sets.reads]\npolicy_file = \"/srv/read/policy.db\"\n\
+                 owner = \"urn:owner\"\nregistry_file = \"/srv/read/registry.json\"\n\
+                 timeout_secs = 10\nconcurrency = 1\nruntime_mib = 16\nview_mib = 16\n\
+                 query_mib = 64\nmax_response_mib = 1\n";
+    let cfg = parse(&format!("{}{reads}", table(root)))
+        .unwrap()
+        .graph_sets
+        .unwrap();
+    let parsed = cfg.reads.expect("reads table");
+    assert_eq!(parsed.concurrency, 1);
+    assert_eq!(parsed.owner, "urn:owner");
+    let unknown = format!("{}{reads}principal = \"urn:x\"\n", table(root));
+    assert!(parse(&unknown).is_err(), "unknown read key refuses");
+    let missing = format!("{}{}", table(root), reads.replace("concurrency = 1\n", ""));
+    assert!(parse(&missing).is_err(), "missing read key refuses");
+}

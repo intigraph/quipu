@@ -433,8 +433,13 @@ async fn main() {
     }
 
     let attest_store = state.clone();
-    graph_sets_startup::start(&config, &state);
+    let graph_set_reads = graph_sets_startup::start(&config, &state);
     let app = knot_durable::mount_pilot(api_routes(), &config, &state);
+    // Merged before protected_app so /graph-sets/query keeps the auth layer.
+    let app = match graph_set_reads {
+        Some(routes) => app.merge(routes.with_state(())),
+        None => app,
+    };
     let app = protected_app(
         app,
         &workers,

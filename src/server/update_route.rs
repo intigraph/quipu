@@ -244,6 +244,25 @@ fn attach_cut(
     }
 }
 
+/// Test seam for other server tests (aegis-n0wc.5.2): one routed `/update`
+/// through the real dispatch, attributed to `actor`, returning its receipt.
+#[cfg(all(test, unix))]
+pub(crate) fn routed_update_for_test(
+    router: &quipu::store::graph_owner::GraphSetRouter,
+    legacy: &crate::SharedStore,
+    update: &str,
+    actor: &str,
+) -> serde_json::Value {
+    let attribution = super::Attribution {
+        actor: Some(actor.into()),
+        source: actor.into(),
+    };
+    match dispatch(Some(router), legacy, update, &attribution, "test").unwrap() {
+        Dispatched::Report(report) => report,
+        Dispatched::Refused(message) => panic!("routed update refused: {message}"),
+    }
+}
+
 #[cfg(all(test, unix))]
 #[path = "update_route_tests.rs"]
 mod tests;

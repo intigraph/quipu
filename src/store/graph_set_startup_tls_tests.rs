@@ -187,6 +187,7 @@ fn owners(enroll: [bool; 2]) -> Owners {
         witness_ca_file: Some(ca),
         credentials_file: credentials,
         prefixes,
+        reads: None,
     };
     Owners {
         _dir: dir,

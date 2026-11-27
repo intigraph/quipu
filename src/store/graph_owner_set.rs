@@ -288,13 +288,32 @@ impl GraphSetOwner {
         members: &BTreeSet<String>,
         deadline: std::time::Instant,
     ) -> Result<crate::store::composition_cut::CompositionCut> {
+        self.read_members(members, deadline, |selected| {
+            crate::store::composition_cut::CompositionCut::capture(selected)
+        })
+    }
+
+    /// One strict read of `members` in this owner (aegis-n0wc.5.2): a single
+    /// captured snapshot of the owner file, exposed as one [`CapturedRead`]
+    /// per selected member, all at the same coordinate. Every member must be
+    /// a graph of THIS owner. Refuses (never queues) when a fence or reader is
+    /// occupied. Authorization is the caller's: this grants nothing.
+    pub fn read_members<T>(
+        &self,
+        members: &BTreeSet<String>,
+        deadline: std::time::Instant,
+        query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
+    ) -> Result<T> {
+        if members.is_empty() {
+            return Err(refused("read selects no graph-set member"));
+        }
         let routes = members
             .iter()
             .map(|graph| {
                 self.catalog
                     .logical_route(graph)
                     .filter(|route| route.store_id == self.owner.catalog_route().store_id)
-                    .ok_or_else(|| refused("cut member is not a graph of this owner"))
+                    .ok_or_else(|| refused("read member is not a graph of this owner"))
             })
             .collect::<Result<Vec<_>>>()?;
         Owner::read_strict(&[&self.owner], deadline, |physical| {
@@ -312,7 +331,7 @@ impl GraphSetOwner {
                     legacy: source.legacy,
                 })
                 .collect();
-            crate::store::composition_cut::CompositionCut::capture(&selected)
+            query(&selected)
         })
     }
 

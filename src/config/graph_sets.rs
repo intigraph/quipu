@@ -49,6 +49,12 @@ pub struct GraphSetsConfig {
     pub credentials_file: PathBuf,
     /// Exactly one existing enrolled lineage prefix per routed owner graph.
     pub prefixes: BTreeMap<String, String>,
+    /// Optional `[quipu.graph_sets.reads]` (aegis-n0wc.5.2): authenticated
+    /// reads of one routed owner's members at `POST /graph-sets/query`, the
+    /// same keys and authority as `[quipu.ingest_pilot.reads]`. Absent mounts
+    /// nothing; `/update` routing is unchanged either way.
+    #[serde(default)]
+    pub reads: Option<super::PilotReadsConfig>,
 }
 
 #[cfg(all(unix, feature = "ownership-witness-s3"))]
@@ -140,9 +146,16 @@ impl GraphSetsConfig {
         }
         GraphSetRouter::verify_fence(&catalog, legacy)?;
         let readers = catalog.physical().budget().readers_per_owner as u64;
-        let allocation = catalog
-            .physical()
-            .memory_allocation(self.memory_mib, readers + 2, 0)?;
+        // With reads, the owners and the read admission share ONE allocation
+        // that also reserves the read scratch (as the pilot does).
+        let scratch = self
+            .reads
+            .as_ref()
+            .map_or(0, |reads| reads.concurrency as u64);
+        let allocation =
+            catalog
+                .physical()
+                .memory_allocation(self.memory_mib, readers + 2, scratch)?;
         let witness_ca_der = self
             .witness_ca_file
             .as_deref()

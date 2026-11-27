@@ -44,13 +44,22 @@ struct Input {
 }
 
 fn separate_policy(dataset: &PreparedDataset, config: &ReadConfig) -> quipu::Result<()> {
+    separate_policy_files(&dataset.native_files, config)
+}
+
+/// The read policy is an existing regular file on no data file's inode. Shared
+/// with the graph-set read mount (aegis-n0wc.5.2), which names its own files.
+pub(crate) fn separate_policy_files(
+    native_files: &[std::path::PathBuf],
+    config: &ReadConfig,
+) -> quipu::Result<()> {
     use std::os::unix::fs::MetadataExt;
     let denied = || quipu::Error::CannotVerify("separate read authority unavailable".into());
     let policy = std::fs::metadata(&config.policy.policy_path).map_err(|_| denied())?;
     if !policy.is_file() {
         return Err(denied());
     }
-    for file in &dataset.native_files {
+    for file in native_files {
         let data = std::fs::metadata(file).map_err(|_| denied())?;
         if policy.dev() == data.dev() && policy.ino() == data.ino() {
             return Err(denied());
@@ -59,7 +68,9 @@ fn separate_policy(dataset: &PreparedDataset, config: &ReadConfig) -> quipu::Res
     Ok(())
 }
 
-fn load_registry(path: &str) -> quipu::Result<quipu::crew_credentials::CredentialRegistry> {
+pub(crate) fn load_registry(
+    path: &str,
+) -> quipu::Result<quipu::crew_credentials::CredentialRegistry> {
     let deny = || quipu::Error::PolicyDenied("composed read denied".into());
     let mut bytes = Vec::new();
     std::fs::File::open(path)
@@ -73,7 +84,7 @@ fn load_registry(path: &str) -> quipu::Result<quipu::crew_credentials::Credentia
     quipu::crew_credentials::CredentialRegistry::parse(&bytes, "quipu").map_err(|_| deny())
 }
 
-fn identity(
+pub(crate) fn identity(
     registry: &str,
     header: &str,
     evidence: &quipu::transaction_auth::Identity,
