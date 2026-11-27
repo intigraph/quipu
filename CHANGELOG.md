@@ -45,6 +45,8 @@ are generated from the versioned release records.
 - *(server)* Route /update to an enrolled graph-set owner, default off (.5 H1) (#1368)([8d2a8d6](https://github.com/scbrown/quipu/commit/8d2a8d633f0785e7b1c806acbd701e100957e3d3))
 - *(store)* Retire the pilot owner witness to legacy ROOT (#1370)([d725b74](https://github.com/scbrown/quipu/commit/d725b74cb1cc205dcf7e467f97ed01e321f9986f))
 
+
+
 ### Documentation
 
 - *(readme)* One header image, current and planned capabilities (#1309)([dc44018](https://github.com/scbrown/quipu/commit/dc44018013bcc575e017b0d2e245923a9bdd573c))
@@ -59,6 +61,8 @@ are generated from the versioned release records.
 - *(inferred)* Companion sourceKind tag writes the w3id term (#1353)([36b3090](https://github.com/scbrown/quipu/commit/36b3090c7631c703bed204576b2633d8993cd5b4))
 - *(server)* Size shed Retry-After by pool capacity, not free permits (#1367)([e3d2f52](https://github.com/scbrown/quipu/commit/e3d2f5293ddee91f7b549e99f4d11fdf2f3963b8))
 - *(sparql)* Keep constant-subject BGPs off the whole-graph read model (#1372)([0e20dba](https://github.com/scbrown/quipu/commit/0e20dbae8e4417f23d46255e9bdef5604236bfc2))
+
+
 
 ### Testing
 
