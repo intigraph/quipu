@@ -476,3 +476,48 @@ fn later_r12_a_remainder_decided_to_ours_clears_the_hold() {
     assert_eq!(values(&p.home.legacy, "urn:x", ONE), ["b"], "decision lost");
     assert_eq!(values(&p.home.legacy, "urn:y", ONE), ["y1"]);
 }
+
+/// R13 (review eph-review-6131b4 #1, the no-transaction path): a remainder that writes no
+/// transaction still completes the earlier merge. Here home converges on the
+/// mini's value after the partial merge, so the remainder's plan is empty.
+/// The entry must record that it holds nothing any more: its retry is
+/// already-applied, and a new head merges instead of refusing
+/// `remainder-pending` forever.
+#[test]
+fn later_r13_a_remainder_that_writes_nothing_releases_the_hold() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = conflict_pair(dir.path());
+    let first = merged(&mut p, &partial());
+    assert_eq!(first.held, 1, "{first:?}");
+    write_home(
+        &mut p.home.legacy,
+        0,
+        &[r("urn:x", ONE, "b"), a("urn:x", ONE, "c", TT)],
+        TD,
+    );
+    let rest = merged(&mut p, &request());
+    assert_eq!(rest.held, 0, "{rest:?}");
+    assert!(
+        rest.receive_tx
+            .iter()
+            .chain(&rest.decide_tx)
+            .all(|tx| *tx == 0),
+        "the fixture must exercise the no-transaction remainder: {rest:?}"
+    );
+    let entry = mini_fork_entry(&p.home.legacy, "agent-a").unwrap().unwrap();
+    let last = entry.last_merge.expect("a merge was recorded");
+    assert_eq!(
+        (last.merge_id.as_str(), last.held),
+        (rest.merge_id.as_str(), 0)
+    );
+    let path = p.path.clone();
+    let again = merge_on_legacy(&p.home.catalog, &mut p.home.legacy, &path, &request()).unwrap();
+    assert!(
+        matches!(again, MergeBack::AlreadyApplied(ref r) if *r == rest),
+        "{again:?}"
+    );
+    mini_write(&mut p, &[a("urn:z", ONE, "mini", TT)]);
+    merged(&mut p, &request());
+    assert_eq!(values(&p.home.legacy, "urn:z", ONE), ["mini"]);
+    assert_eq!(values(&p.home.legacy, "urn:x", ONE), ["c"]);
+}
