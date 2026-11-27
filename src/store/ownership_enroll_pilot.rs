@@ -11,8 +11,12 @@ use std::time::Duration;
 use super::ownership_enroll::{
     EnrollRequest, EnrollWitness, enroll_owner, plan_enrollment, refused,
 };
+use super::ownership_retire::{
+    RetireRequest, legacy_root_placement, plan_retirement, retire_owner,
+};
 use crate::config::IngestPilotConfig;
 use crate::error::Result;
+use crate::graph_catalog::Catalog;
 use crate::ownership_handoff_model::AuthorityUnit;
 use crate::ownership_handoff_model::witness::s3::{Credentials, Location, S3Objects};
 
@@ -42,6 +46,31 @@ pub fn enroll_pilot_owner(
         "full-store" | "FULL_STORE" => AuthorityUnit::FullStore,
         _ => return Err(refused("unknown authority unit; expected full-store")),
     };
+    let backend = pilot_backend(config)?;
+    let req = EnrollRequest {
+        db_path: request.db,
+        journal_path: request.journal,
+        unit,
+        profile: &config.profile,
+        principal: request.principal,
+        policy: &config.installed_policy,
+        witness: EnrollWitness {
+            profile: &config.profile,
+            objects: &backend,
+        },
+    };
+    if request.execute {
+        let receipt = enroll_owner(&req)?;
+        Ok(serde_json::json!({"mode": "executed", "receipt": receipt}))
+    } else {
+        let plan = plan_enrollment(&req)?;
+        Ok(serde_json::json!({"mode": "dry-run", "plan": plan}))
+    }
+}
+
+/// The pilot witness's S3 client, after the same admissibility rules as
+/// enrolled startup; refused before credentials or any file is touched.
+fn pilot_backend(config: &IngestPilotConfig) -> Result<S3Objects> {
     if config.timeout_secs == 0 || config.timeout_secs > 30 {
         return Err(refused("witness timeout must be 1..=30 seconds"));
     }
@@ -75,23 +104,58 @@ pub fn enroll_pilot_owner(
         Duration::from_secs(config.timeout_secs),
         roots,
     );
-    let req = EnrollRequest {
-        db_path: request.db,
+    Ok(backend)
+}
+
+/// One retirement invocation (aegis-4qv.4): the reversed pilot owner's
+/// witness authority is retired to the legacy ROOT placement. `execute ==
+/// false` is a read-only report of the planned request.
+#[derive(Debug, Clone)]
+pub struct PilotRetire<'a> {
+    /// The enrolled owner's journal.
+    pub journal: &'a Path,
+    /// The legacy ROOT database the graph was reversed into.
+    pub legacy_db: &'a Path,
+    /// Existing legacy ROOT writer principal.
+    pub root_principal: &'a str,
+    /// Existing operator principal recorded on the request.
+    pub operator: &'a str,
+    /// The owner database file; held exclusively for the whole run. The
+    /// sealed cut is derived from it, never supplied.
+    pub owner_db: &'a Path,
+    /// Catalog revision R that routed the owner's graphs.
+    pub current: &'a Catalog,
+    /// Published catalog R+1 that routes none of them to the owner.
+    pub next: &'a Catalog,
+    /// Perform the retirement; otherwise plan only.
+    pub execute: bool,
+}
+
+/// Retire (or resume retiring) the reversed pilot owner. Unsigned: the
+/// report always carries `"signed": false`.
+pub fn retire_pilot_owner(
+    config: &IngestPilotConfig,
+    request: &PilotRetire<'_>,
+) -> Result<serde_json::Value> {
+    let backend = pilot_backend(config)?;
+    let (_, legacy) = super::ownership_admission::database(request.legacy_db)?;
+    let req = RetireRequest {
         journal_path: request.journal,
-        unit,
+        owner_db: request.owner_db,
+        current: request.current,
+        next: request.next,
         profile: &config.profile,
-        principal: request.principal,
-        policy: &config.installed_policy,
-        witness: EnrollWitness {
-            profile: &config.profile,
-            objects: &backend,
-        },
+        operator: request.operator,
+        destination: legacy_root_placement(request.root_principal, &legacy),
+        legacy_db: request.legacy_db,
+        witness_profile: &config.profile,
+        objects: &backend,
     };
     if request.execute {
-        let receipt = enroll_owner(&req)?;
+        let receipt = retire_owner(&req)?;
         Ok(serde_json::json!({"mode": "executed", "receipt": receipt}))
     } else {
-        let plan = plan_enrollment(&req)?;
-        Ok(serde_json::json!({"mode": "dry-run", "plan": plan}))
+        let plan = plan_retirement(&req)?;
+        Ok(serde_json::json!({"mode": "dry-run", "plan": plan, "signed": false}))
     }
 }

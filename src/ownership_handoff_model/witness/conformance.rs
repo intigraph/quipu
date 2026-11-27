@@ -196,4 +196,53 @@ pub(super) fn run<H: Harness>(h: &H) {
         1,
         "the loser sees a conflict, not silence: {results:?}"
     );
+
+    // aegis-4qv.4: UNKNOWN and LostReply on retire and on abandon. Each stop
+    // resolves by head() to exactly the model's state: UNKNOWN wrote nothing
+    // (still RESERVED); a lost reply committed its outcome (RETIRED, or the
+    // abandoned attempt's source ACTIVE again). Never absence, never a skip.
+    let reserved = WitnessHead::Reserved {
+        request: c.request.clone(),
+    };
+    let source = Journal::Active {
+        authority: genesis(),
+    };
+    let abandonment = Abandonment {
+        request: c.request.clone(),
+        reason: "operator abandoned".into(),
+    };
+    let retired = WitnessHead::Retired {
+        certificate: c.clone(),
+    };
+    let reopened = WitnessHead::Active {
+        authority: genesis(),
+    };
+    for (name, fault, retire, after) in [
+        ("unknown retire", Fault::Unknown, true, &reserved),
+        ("lost-reply retire", Fault::LostReply, true, &retired),
+        ("unknown abandon", Fault::Unknown, false, &reserved),
+        ("lost-reply abandon", Fault::LostReply, false, &reopened),
+    ] {
+        let w = h.fresh();
+        assert_eq!(w.reserve(0, &c.request), Reply::Ok(()), "{name}: reserve");
+        let run = |w: &ObjectWitness<H::Backend>| {
+            if retire {
+                w.retire(0, &c)
+            } else {
+                w.abandon(0, &abandonment, &source, false)
+            }
+        };
+        h.inject(&w, fault);
+        assert_eq!(run(&w), Reply::Unknown, "{name}: stops as UNKNOWN");
+        assert_eq!(w.head(&id, 0), Reply::Ok(after.clone()), "{name}: head");
+        // The exact retry resolves by readback (or performs the write).
+        assert_eq!(run(&w), Reply::Ok(()), "{name}: exact retry");
+        let done = if retire { &retired } else { &reopened };
+        assert_eq!(w.head(&id, 0), Reply::Ok(done.clone()), "{name}: final");
+    }
+    // Positive control: a clean retire reads RETIRED.
+    let w = h.fresh();
+    assert_eq!(w.reserve(0, &c.request), Reply::Ok(()), "control reserve");
+    assert_eq!(w.retire(0, &c), Reply::Ok(()), "control retire");
+    assert_eq!(w.head(&id, 0), Reply::Ok(retired), "control head");
 }

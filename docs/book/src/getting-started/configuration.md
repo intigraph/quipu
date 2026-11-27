@@ -486,10 +486,81 @@ an uninterrupted run's, `at` timestamp included. A dry run reports the current
 state (`planned`, `reconciling`, `proven` or `lifted`) and writes nothing. The
 owner file is only ever read, and it is kept.
 
-Every receipt carries `witness_state: active_unretired`. The owner's ownership
-witness is not retired; that is aegis-4qv.4. No catalog route points at the
-owner any more, so a restarted owner gets no writes, but its witness is still
-active.
+Every reverse receipt carries `witness_state: active_unretired`. The reverse
+itself does not retire the owner's ownership witness. No catalog route points
+at the owner any more, so a restarted owner gets no writes, but its witness is
+still active until the owner is retired.
+
+### Retiring the reversed owner
+
+`quipu::store::retire_pilot_owner` (an `ownership-witness-s3` build, Unix
+only, like enrollment) retires the reversed owner's witness authority, so the
+owner is RETIRED rather than merely unrouted. It takes the owner journal, the
+owner file, the legacy database, catalog revisions R and R+1, the legacy ROOT
+writer principal and the operator principal. The sealed source cut is never
+supplied: it is derived from the owner file.
+
+The two principals are command-line input, the same as `pilot enroll
+--principal`. Nothing mints a principal. Each one must be a well-formed
+identifier: nonempty, at most 512 bytes, with no leading or trailing
+whitespace and no control characters. Each is recorded verbatim in the witness
+record and the journal, so it can be audited. A root principal equal to the
+pilot owner's own principal is refused. Quipu does not yet check either
+principal against a principal registry.
+`quipu pilot retire` wraps it, with the same `--witness-config` file as
+`pilot enroll`:
+
+```bash
+quipu pilot retire --journal owner.journal --legacy-db legacy.db \
+    --root-principal legacy-root-writer --operator pilot-operator \
+    --owner-file owner.db --catalog cat-R.json --next-catalog cat-R1.json \
+    --witness-config pilot.toml [--execute]
+```
+
+It retires only a reversed, unrouted owner. Before any witness call it
+refuses unless all of these hold:
+
+- it holds the owner file exclusively (the same lock as `pilot reverse`) for
+  the whole run, so a running owner refuses;
+- every graph catalog R routes to this owner has a reverse journaled `lifted`
+  in the legacy file from `(R, G)` to `(R+1, G+1)`, and legacy no longer
+  fences it; a missing row or a `reconciling` or `proven` reverse refuses and
+  names the graph;
+- catalog R+1 routes none of those graphs (nor any other) to this owner;
+- each graph's current owner multiset equals the journaled reverse's
+  `multiset_sha256`, so the owner wrote nothing after its reverse.
+
+Under that lock it derives the cut: the owner's last transaction id, a
+whole-store fact-cut digest over every current fact (domain tag
+`quipu-owner-cut-facts/v1`), and the SHA-256 of a consistent serialized image
+of the owner database. Then it runs, in order:
+
+1. refuse unless the configured profile equals the witness profile, both
+   principals are well-formed identifiers, the root principal is not the
+   owner's, the destination is the legacy ROOT placement of that legacy
+   database, and the witness head and the journal both name the owner's exact
+   tuple;
+2. witness reserve (one conditional create), then journal Active to Retiring;
+3. witness retire with the derived cut, then journal Retiring to Retired.
+
+There is no activation step. Legacy ROOT does not seek admission through the
+witness, and a Retired witness record is terminal for that store tuple: a
+later re-enrollment is a new genesis with a new tuple. The ROOT placement's
+native digest uses its own domain tag, `quipu-legacy-root-native/v1`, so it can
+never equal an enrolled owner's placement; a destination under the enrollment
+tag is refused.
+
+Any UNKNOWN witness reply (an error, a timeout or a lost reply) stops the run
+with an UNKNOWN refusal, with no retry. Re-running resumes from what the
+witness and journal durably hold and returns the same receipt. Afterwards the
+journal no longer admits the owner (`role is RETIRED`).
+
+The retirement is not signed. Its authority is the witness's create-only
+conditional write plus the profile match, the same basis as enrollment, and
+the receipt says so with `"signed": false`. The dry run runs every check and
+reports the planned request, the derived cut and the reversed graphs, and
+writes nothing. A re-run recomputes the cut; if the witness already records a
+retirement with a different cut, the run refuses.
 
 ## Choosing a vector backend
 

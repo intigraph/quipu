@@ -20,7 +20,7 @@ use std::path::Path;
 /// Upper bound on the witness configuration file.
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 
-fn load_config(path: &Path) -> Result<IngestPilotConfig, String> {
+pub(super) fn load_config(path: &Path) -> Result<IngestPilotConfig, String> {
     let meta = std::fs::symlink_metadata(path)
         .map_err(|_| "--witness-config cannot be inspected".to_string())?;
     if !meta.file_type().is_file() {

@@ -21,6 +21,8 @@ pub(crate) fn example_credentials() -> Credentials {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EmuFault {
     Status500,
+    /// A 500 armed for the next PUT only (GETs pass through untouched).
+    Status500OnPut,
     Slow,
     LostReplyOnPut,
     NoVersion,
@@ -76,7 +78,7 @@ fn take_fault(state: &Mutex<EmuState>, method: &str) -> Option<EmuFault> {
     let mut s = state.lock().unwrap();
     match s.faults.front().copied() {
         // A lost reply is armed for the next create only.
-        Some(EmuFault::LostReplyOnPut) if method != "PUT" => None,
+        Some(EmuFault::LostReplyOnPut | EmuFault::Status500OnPut) if method != "PUT" => None,
         _ => s.faults.pop_front(),
     }
 }
@@ -134,7 +136,7 @@ fn serve(mut stream: TcpStream, state: &Mutex<EmuState>) {
     }
     let fault = take_fault(state, &method);
     match fault {
-        Some(EmuFault::Status500) => {
+        Some(EmuFault::Status500 | EmuFault::Status500OnPut) => {
             return respond(&mut stream, "500 Internal Server Error", &[], b"");
         }
         Some(EmuFault::Slow) => std::thread::sleep(TIMEOUT * 3),

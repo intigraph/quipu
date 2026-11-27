@@ -60,7 +60,12 @@ pub(crate) mod ownership_enroll;
 #[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
 mod ownership_enroll_pilot;
 #[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
-pub use ownership_enroll_pilot::{PilotEnroll, enroll_pilot_owner};
+pub use ownership_enroll_pilot::{
+    PilotEnroll, PilotRetire, enroll_pilot_owner, retire_pilot_owner,
+};
+// Owner retirement to legacy ROOT (aegis-4qv.4): reserve -> retire, no activate.
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub(crate) mod ownership_retire;
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_journal;
