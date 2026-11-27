@@ -30,6 +30,8 @@ mod records;
 use records::*;
 pub(crate) use records::{applied_intent, check_read_fence, check_write_fence, home_published};
 
+pub(crate) use deps::check_pinned_write;
+
 #[path = "participant_crash.rs"]
 mod crash_points;
 pub use crash_points::CrashPoint;
@@ -166,7 +168,9 @@ pub fn commit(batch: &ParticipantBatch<'_>) -> Result<ReceiptVector> {
 
 /// [`commit`] with bounded cross-graph type dependencies: each validation
 /// participant is admitted and durably fenced with the members and checked
-/// under that fence before any intent; it is never written.
+/// under that fence before any intent; it writes no facts. A validation
+/// whose owner is also a member may declare only reference absences (S4),
+/// judged on that member's state after its own batch.
 pub fn commit_validated(
     batch: &ParticipantBatch<'_>,
     validations: &[Validation<'_>],
@@ -179,19 +183,39 @@ pub fn commit_validated(
         return Err(refuse("a participant batch spans at least two files"));
     }
     deps::check_bounds(validations)?;
+    let is_member =
+        |owner: &GraphSetOwner| batch.members.iter().any(|m| std::ptr::eq(m.owner, owner));
+    if validations
+        .iter()
+        .any(|v| is_member(v.owner) && !v.checks.is_empty())
+    {
+        return Err(refuse(
+            "duplicate participant: a member cannot validate a type dependency",
+        ));
+    }
     let owners: Vec<_> = (batch.members.iter().map(|m| m.owner))
-        .chain(validations.iter().map(|v| v.owner))
+        .chain(
+            validations
+                .iter()
+                .map(|v| v.owner)
+                .filter(|owner| !is_member(owner)),
+        )
         .collect();
     let order = canonical(&owners)?;
     // Validate every member against its own owner before any fence.
+    let pin_plan = deps::plan_pins(&batch.members, validations);
     let mut planned = Vec::with_capacity(order.len());
     for owner in &order {
+        let pins = pin_plan
+            .get(&owner.owner.catalog_route().file_id)
+            .cloned()
+            .unwrap_or_default();
         let payload = match batch.members.iter().find(|m| std::ptr::eq(m.owner, *owner)) {
             Some(member) => {
                 owner.check_batch(&member.requests, &member.batch)?;
-                encode_payload(&member.batch)
+                encode_payload_with(&member.batch, &pins)
             }
-            None => deps::empty_payload(owner),
+            None => deps::empty_payload(owner, &pins),
         };
         planned.push((recorded(owner), payload));
     }
@@ -233,7 +257,8 @@ pub fn commit_validated(
             )));
         }
     }
-    deps::check_satisfied(&order, &guards, validations)?;
+    deps::check_satisfied(&order, &guards, validations, &batch.members)?;
+    deps::check_member_removals(&order, &guards, &batch.members, &pin_plan)?;
     let members: Vec<_> = planned.iter().map(|(r, _)| r.clone()).collect();
     let home = members[0].clone();
     let encoded = serde_json::to_string(&members).map_err(refuse)?;
@@ -503,6 +528,7 @@ fn apply(
                 .zip(txs)
                 .map(|((graph, _), (_, tx))| (graph.clone(), tx))
                 .collect();
+            deps::apply_pins(store, &payload.pins)?;
             let encoded = serde_json::to_string(&heads).map_err(refuse)?;
             let changed = store.conn.execute(
                 "UPDATE participant_intents SET state='applied', heads=?2 \

@@ -46,12 +46,9 @@ fn term(_files: &Files, index: usize, iri: &str) -> i64 {
 /// A batch for file `index` writing `datums` into its data graph only.
 fn data_batch(files: &Files, index: usize, datums: Vec<Datum>) -> GraphSetBatch {
     let mut batch = batch(files, index, "unused");
-    for (position, (_, slot)) in batch.graphs.iter_mut().enumerate() {
-        *slot = if position == 0 {
-            datums.clone()
-        } else {
-            Vec::new()
-        };
+    let mut datums = Some(datums);
+    for (_, slot) in &mut batch.graphs {
+        *slot = datums.take().unwrap_or_default();
     }
     batch
 }
@@ -94,7 +91,13 @@ fn referencing_member<'a>(files: &Files, owner: &'a GraphSetOwner, index: usize)
         batch: data_batch(
             files,
             index,
-            vec![datum(item, attribute, TermValue::Ref(shared), Op::Assert, None)],
+            vec![datum(
+                item,
+                attribute,
+                TermValue::Ref(shared),
+                Op::Assert,
+                None,
+            )],
         ),
     }
 }
@@ -150,7 +153,10 @@ fn a_validated_batch_pins_the_type_once_per_dependent_file_and_a_refused_one_pin
     let temp = tempfile::tempdir().unwrap();
     let files = fixture(temp.path());
     let (alpha, beta, gamma) = pinned(&files);
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
     // Pins are metadata: members hold none, and gamma's head did not move.
     assert!(dependency_pins(&alpha).unwrap().is_empty());
     assert!(dependency_pins(&beta).unwrap().is_empty());
@@ -168,7 +174,10 @@ fn a_validated_batch_pins_the_type_once_per_dependent_file_and_a_refused_one_pin
         absences: Vec::new(),
     }];
     as_writer(|| commit_validated(&again, &validations)).unwrap();
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
     // A dependency that does not hold refuses and pins nothing.
     let absent = [Validation {
         owner: &gamma,
@@ -187,7 +196,10 @@ fn a_validated_batch_pins_the_type_once_per_dependent_file_and_a_refused_one_pin
     };
     let error = as_writer(|| commit_validated(&refused, &absent)).unwrap_err();
     assert!(error.to_string().contains("dependency"), "{error}");
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
 }
 
 #[test]
@@ -213,7 +225,10 @@ fn an_ordinary_write_that_removes_a_pinned_type_refuses_and_writes_nothing() {
         assert!(error.to_string().contains("pinned"), "{error}");
         assert_eq!(raw_head(&files, 2), head);
     }
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
 }
 
 #[test]
@@ -252,7 +267,10 @@ fn writes_that_leave_the_pinned_type_in_place_commit() {
     gamma_write(&files, &gamma, vec![label]).unwrap();
     // The ordinary fixture write (another entity in both graphs).
     local_write(&files, &gamma, 2, "after").unwrap();
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
 }
 
 fn removal_member<'a>(files: &Files, gamma: &'a GraphSetOwner) -> Member<'a> {
@@ -276,7 +294,13 @@ fn retract_reference(files: &Files, owner: &GraphSetOwner, index: usize) {
             &data_batch(
                 files,
                 index,
-                vec![datum(item, attribute, TermValue::Ref(shared), Op::Retract, None)],
+                vec![datum(
+                    item,
+                    attribute,
+                    TermValue::Ref(shared),
+                    Op::Retract,
+                    None,
+                )],
             ),
         )
         .unwrap();
@@ -302,7 +326,13 @@ fn a_member_batch_removing_a_pinned_type_must_enlist_every_pinning_file() {
                 batch: data_batch(
                     &files,
                     0,
-                    vec![datum(item, attribute, TermValue::Str("x".into()), Op::Assert, None)],
+                    vec![datum(
+                        item,
+                        attribute,
+                        TermValue::Str("x".into()),
+                        Op::Assert,
+                        None,
+                    )],
                 ),
             },
         ],
@@ -324,10 +354,15 @@ fn a_release_batch_with_every_reference_gone_changes_the_type_and_drops_the_pins
     let temp = tempfile::tempdir().unwrap();
     let files = fixture(temp.path());
     let (alpha, beta, gamma) = pinned(&files);
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
-    retract_reference(&files, &alpha, 0);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
+    // beta dropped its reference earlier; alpha drops its own IN the release
+    // batch, atomically with gamma removing the type.
     retract_reference(&files, &beta, 1);
     let (item, attribute) = files.terms[0];
+    let shared = term(&files, 0, SHARED);
     let batch = ParticipantBatch {
         batch_id: "batch-release".into(),
         members: vec![
@@ -338,7 +373,13 @@ fn a_release_batch_with_every_reference_gone_changes_the_type_and_drops_the_pins
                 batch: data_batch(
                     &files,
                     0,
-                    vec![datum(item, attribute, TermValue::Str("x".into()), Op::Assert, None)],
+                    vec![datum(
+                        item,
+                        attribute,
+                        TermValue::Ref(shared),
+                        Op::Retract,
+                        None,
+                    )],
                 ),
             },
         ],
@@ -346,7 +387,77 @@ fn a_release_batch_with_every_reference_gone_changes_the_type_and_drops_the_pins
     let absence = || ReferenceAbsence {
         entity: SHARED.into(),
     };
-    // alpha is a member; beta joins only to prove it no longer references E.
+    let heads: Vec<_> = (0..3).map(|i| raw_head(&files, i)).collect();
+    // Proving only beta leaves alpha's pin standing: refuse, nothing prepared.
+    let beta_only = [Validation {
+        owner: &beta,
+        checks: Vec::new(),
+        absences: vec![absence()],
+    }];
+    let error = as_writer(|| commit_validated(&batch, &beta_only)).unwrap_err();
+    assert!(
+        error.to_string().contains("pinned by dependent file alpha"),
+        "{error}"
+    );
+    assert_eq!(
+        (0..3).map(|i| raw_head(&files, i)).collect::<Vec<_>>(),
+        heads
+    );
+    // A member proves its absence on its state AFTER its own batch.
+    let both = [
+        Validation {
+            owner: &alpha,
+            checks: Vec::new(),
+            absences: vec![absence()],
+        },
+        Validation {
+            owner: &beta,
+            checks: Vec::new(),
+            absences: vec![absence()],
+        },
+    ];
+    let vector = as_writer(|| commit_validated(&batch, &both)).unwrap();
+    assert!(dependency_pins(&gamma).unwrap().is_empty());
+    // Only alpha and gamma were written; beta was fenced and checked only.
+    assert_eq!(raw_head(&files, 1), heads[1]);
+    assert_eq!(
+        as_writer(|| commit_validated(&batch, &both)).unwrap(),
+        vector
+    );
+    // The type is gone, and the next ordinary write into gamma is unpinned.
+    gamma_write(
+        &files,
+        &gamma,
+        vec![gamma_type(&files, SHARED, ACTION, Op::Assert, None)],
+    )
+    .unwrap();
+    gamma_write(
+        &files,
+        &gamma,
+        vec![gamma_type(&files, SHARED, ACTION, Op::Retract, None)],
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_member_cannot_prove_absence_while_its_own_batch_adds_a_reference() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = fixture(temp.path());
+    let (alpha, beta, gamma) = pinned(&files);
+    retract_reference(&files, &alpha, 0);
+    retract_reference(&files, &beta, 1);
+    let heads: Vec<_> = (0..3).map(|i| raw_head(&files, i)).collect();
+    // alpha's member batch re-adds `item -> SHARED` while claiming absence.
+    let batch = ParticipantBatch {
+        batch_id: "batch-release".into(),
+        members: vec![
+            removal_member(&files, &gamma),
+            referencing_member(&files, &alpha, 0),
+        ],
+    };
+    let absence = || ReferenceAbsence {
+        entity: SHARED.into(),
+    };
     let validations = [
         Validation {
             owner: &alpha,
@@ -360,22 +471,15 @@ fn a_release_batch_with_every_reference_gone_changes_the_type_and_drops_the_pins
         },
     ];
     let error = as_writer(|| commit_validated(&batch, &validations)).unwrap_err();
-    // A member is never also a validation participant.
-    assert!(error.to_string().contains("duplicate"), "{error}");
-    let beta_only = [Validation {
-        owner: &beta,
-        checks: Vec::new(),
-        absences: vec![absence()],
-    }];
-    as_writer(|| commit_validated(&batch, &beta_only)).unwrap();
-    assert!(dependency_pins(&gamma).unwrap().is_empty());
-    // The type is gone, and the next ordinary write into gamma is unpinned.
-    gamma_write(
-        &files,
-        &gamma,
-        vec![gamma_type(&files, SHARED, ACTION, Op::Assert, None)],
-    )
-    .unwrap();
+    assert!(error.to_string().contains("references"), "{error}");
+    assert_eq!(
+        (0..3).map(|i| raw_head(&files, i)).collect::<Vec<_>>(),
+        heads
+    );
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
 }
 
 #[test]
@@ -421,7 +525,13 @@ fn a_release_batch_refuses_while_any_pinning_file_still_references_the_entity() 
                     batch: data_batch(
                         &files,
                         member_index,
-                        vec![datum(item, attr, TermValue::Str("x".into()), Op::Assert, None)],
+                        vec![datum(
+                            item,
+                            attr,
+                            TermValue::Str("x".into()),
+                            Op::Assert,
+                            None,
+                        )],
                     ),
                 },
             ],
@@ -438,7 +548,10 @@ fn a_release_batch_refuses_while_any_pinning_file_still_references_the_entity() 
         (0..3).map(|i| raw_head(&files, i)).collect::<Vec<_>>(),
         heads
     );
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
 }
 
 #[test]
@@ -468,8 +581,8 @@ fn pins_follow_the_batch_decision_through_a_crash() {
             checks: vec![check()],
             absences: Vec::new(),
         }];
-        let error = as_writer(|| with_crash(point, || commit_validated(&batch, &validations)))
-            .unwrap_err();
+        let error =
+            as_writer(|| with_crash(point, || commit_validated(&batch, &validations))).unwrap_err();
         assert!(injected(&error), "{error}");
     };
     // Crash before the decision: recovery aborts and no pin exists.
@@ -484,16 +597,21 @@ fn pins_follow_the_batch_decision_through_a_crash() {
     // Crash after the decision: recovery publishes and pins exactly once.
     run("batch-publish", CrashPoint::AfterDecision);
     let (alpha, beta, gamma) = (open(&files, 0), open(&files, 1), open(&files, 2));
-    let Recovery::Published(vector) =
-        recover(&[&alpha, &beta, &gamma], "batch-publish").unwrap()
+    let Recovery::Published(vector) = recover(&[&alpha, &beta, &gamma], "batch-publish").unwrap()
     else {
         panic!("a committed validated batch recovered as an abort");
     };
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
     let Recovery::Published(again) = recover(&[&alpha, &beta, &gamma], "batch-publish").unwrap()
     else {
         panic!("a published batch recovered as an abort");
     };
     assert_eq!(again, vector);
-    assert_eq!(dependency_pins(&gamma).unwrap(), [pin("alpha"), pin("beta")]);
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [pin("alpha"), pin("beta")]
+    );
 }

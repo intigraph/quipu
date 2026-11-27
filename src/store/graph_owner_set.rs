@@ -160,6 +160,7 @@ impl GraphSetOwner {
         Owner::check_identity(self.owner.catalog_route(), &store)?;
         Self::check_hooks(&store)?;
         participant::check_write_fence(&store)?;
+        participant::check_pinned_write(&store, &batch.graphs)?;
         let native = batch
             .graphs
             .iter()

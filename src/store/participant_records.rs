@@ -19,6 +19,13 @@ pub(super) const INTENTS: &str = "CREATE TABLE IF NOT EXISTS participant_intents
     state TEXT NOT NULL CHECK(state IN ('prepared','applied','published','aborted')), \
     heads TEXT)";
 
+/// Dependency pins (S4): this file's record that another catalog file relies
+/// on "entity a `type_iri` in graph". Metadata, never facts or a tx head.
+pub(super) const PINS: &str = "CREATE TABLE IF NOT EXISTS dependency_pins (\
+    graph TEXT NOT NULL, entity TEXT NOT NULL, type_iri TEXT NOT NULL, \
+    dependent_file_id TEXT NOT NULL, \
+    PRIMARY KEY (graph, entity, type_iri, dependent_file_id))";
+
 pub(super) fn table_exists(store: &Store, name: &str) -> Result<bool> {
     Ok(store.conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
@@ -80,8 +87,25 @@ pub(super) fn unhex(text: &str) -> Result<Vec<u8>> {
         .collect()
 }
 
-/// Exact, deterministic payload bytes for one participant's native delta.
-pub(super) fn encode_payload(batch: &GraphSetBatch) -> Vec<u8> {
+/// Pin changes one participant applies with its intent (S4): pins it records
+/// for a validated batch, and (entity, dependent file) pairs a release batch
+/// proved no longer referenced, whose pins it drops.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct PinChanges {
+    pub(super) add: Vec<super::deps::DependencyPin>,
+    pub(super) release: Vec<(String, String)>,
+}
+
+impl PinChanges {
+    fn is_empty(&self) -> bool {
+        self.add.is_empty() && self.release.is_empty()
+    }
+}
+
+/// Exact, deterministic payload bytes for one participant's native delta and
+/// its pin changes. Empty changes emit exactly the bytes a plain batch always
+/// had, so existing intents and digests are unchanged.
+pub(super) fn encode_payload_with(batch: &GraphSetBatch, pins: &PinChanges) -> Vec<u8> {
     let graphs: Vec<_> = batch
         .graphs
         .iter()
@@ -102,14 +126,21 @@ pub(super) fn encode_payload(batch: &GraphSetBatch) -> Vec<u8> {
             serde_json::json!([graph, datums])
         })
         .collect();
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "timestamp": batch.timestamp,
         "actor": batch.actor,
         "source": batch.source,
         "graphs": graphs,
-    })
-    .to_string()
-    .into_bytes()
+    });
+    if !pins.is_empty() {
+        let add: Vec<_> = pins
+            .add
+            .iter()
+            .map(|p| serde_json::json!([p.graph, p.entity, p.type_iri, p.dependent_file_id]))
+            .collect();
+        value["pins"] = serde_json::json!({"add": add, "release": pins.release});
+    }
+    value.to_string().into_bytes()
 }
 
 pub(super) struct Decoded {
@@ -117,6 +148,7 @@ pub(super) struct Decoded {
     pub(super) actor: Option<String>,
     pub(super) source: Option<String>,
     pub(super) graphs: Vec<(String, Vec<super::Datum>)>,
+    pub(super) pins: PinChanges,
 }
 
 pub(super) fn decode_payload(bytes: &[u8]) -> Result<Decoded> {
@@ -143,11 +175,27 @@ pub(super) fn decode_payload(bytes: &[u8]) -> Result<Decoded> {
         }
         graphs.push((graph, datums));
     }
+    let mut pins = PinChanges::default();
+    if let Some(changes) = value.get("pins") {
+        let field = |row: &Value, i: usize| row[i].as_str().map(str::to_owned).ok_or_else(bad);
+        for row in changes["add"].as_array().ok_or_else(bad)? {
+            pins.add.push(super::deps::DependencyPin {
+                graph: field(row, 0)?,
+                entity: field(row, 1)?,
+                type_iri: field(row, 2)?,
+                dependent_file_id: field(row, 3)?,
+            });
+        }
+        for row in changes["release"].as_array().ok_or_else(bad)? {
+            pins.release.push((field(row, 0)?, field(row, 1)?));
+        }
+    }
     Ok(Decoded {
         timestamp: text("timestamp").ok_or_else(bad)?,
         actor: text("actor"),
         source: text("source"),
         graphs,
+        pins,
     })
 }
 
@@ -186,6 +234,7 @@ pub(super) fn durable<T>(
     store.ownership_operation(|store| {
         store.conn.execute_batch(JOURNAL)?;
         store.conn.execute_batch(INTENTS)?;
+        store.conn.execute_batch(PINS)?;
         work(store)
     })
 }
