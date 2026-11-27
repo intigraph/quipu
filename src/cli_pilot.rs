@@ -68,7 +68,7 @@ usage: quipu pilot <verb> [--execute]   (dry run unless --execute)
   pilot fence --db LEGACY --graph IRI --revision N --generation N [--execute]
   pilot fence --verify --db LEGACY
   pilot export-slice --db LEGACY --tag snapshot:KEY --graph IRI --out FILE [--execute]
-  pilot import-slice --owner-file OWNER --in FILE [--at RFC3339] [--execute]
+  pilot import-slice --owner-file OWNER --in FILE [--into IRI --legacy-db LEGACY] [--at RFC3339] [--execute]
   pilot cutover --db LEGACY --tag snapshot:KEY --graph IRI --revision N --generation N [--at RFC3339] [--execute]
   pilot catalog --validate FILE
   pilot catalog --write FILE --from INPUT [--execute]

@@ -363,7 +363,8 @@ quipu pilot catalog --write catalog.json --from input.json [--execute]  # 0600, 
 quipu pilot catalog --validate catalog.json   # refuses group/other-writable
 quipu pilot export-slice --db legacy.db --tag snapshot:KEY \
     --graph urn:quipu:graph:root --out slice.json [--execute]
-quipu pilot import-slice --owner-file owner.db --in slice.json [--at TS] [--execute]
+quipu pilot import-slice --owner-file owner.db --in slice.json \
+    [--into IRI --legacy-db legacy.db] [--at TS] [--execute]
 quipu pilot fence --db legacy.db --graph IRI --revision N --generation N [--execute]
 quipu pilot fence --verify --db legacy.db     # read-only
 quipu pilot cutover --db legacy.db --tag snapshot:KEY --graph IRI \
@@ -377,6 +378,15 @@ quipu pilot cutover --db legacy.db --tag snapshot:KEY --graph IRI \
   fact forms. `import-slice` recomputes it before it opens the owner file and
   again after it writes, so a tampered slice is refused. It also refuses a
   graph the owner has not committed, and a second import of the same tag.
+- Without `--into`, `import-slice` lands the slice in the graph its file
+  names. `--into IRI --legacy-db legacy.db` lands a slice exported from ROOT
+  in the routed graph `IRI` instead, so the slice file is never hand-edited.
+  It refuses unless `legacy.db` (the slice's source) has `IRI` fenced with a
+  verified fence, has not routed the tag to another graph, and still holds
+  exactly this slice's multiset for the tag in ROOT. Run it after `fence` and
+  before `cutover`. The multiset check is still against the slice's facts,
+  and the receipt's `plan.retarget` records the move from ROOT to `IRI`, with
+  the fence revision and generation and the legacy file identity.
 - `cutover` refuses unless the graph is fenced at exactly `--revision` and
   `--generation`. A stale generation is refused.
 - Flags are an exact allow-list per verb, and secret-looking flags such as
