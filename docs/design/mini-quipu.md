@@ -207,7 +207,7 @@ past it means retiring and re-forking such entries.
 
 The interim M3 refusal `decided-bounded-base` and the `second-merge` refusal
 for entries with a recorded last merge (sattler rulings on #1318, 2026-11-27)
-are lifted by this rule. Lifting them needs a recorded ruling on aegis-abt. The bounded interval a
+are lifted by this rule (sattler ruling A, aegis-abt comment 20, 2026-11-27T10:28Z). The bounded interval a
 decision closes is never read into a base: the planner's base is the live view,
 and the home cut no longer advances.
 

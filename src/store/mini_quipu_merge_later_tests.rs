@@ -4,6 +4,7 @@
 //! home-only changes, held slots and decisions are never overridden by the
 //! mini's unchanged values. A remainder of a partial merge is its own merge
 //! naming the earlier one; a new incoming refuses while a remainder is held.
+use super::super::super::tests::LEG;
 use super::*;
 
 fn values(store: &Store, s: &str, p: &str) -> Vec<String> {
@@ -352,4 +353,94 @@ fn later_r10_an_unreadable_mini_base_refuses_base_unavailable() {
     assert!(broken > 0, "the corruption touched no row");
     let path = p.path.clone();
     assert_refuses(&mut p, &path, "base-unavailable");
+}
+
+/// Two writable members: ROOT and the legacy set's other graph.
+fn multi_pair(dir: &Path) -> (Pair, i64, i64) {
+    let mut p = pair(dir, &[a("urn:x", ONE, "a", T0)], &[], &[]);
+    // Re-materialize with both members of the legacy set writable.
+    let path = dir.join("multi.db");
+    let spec = MaterializeSpec {
+        name: "agent-m".into(),
+        members: vec![
+            MiniForkMember {
+                iri: ROOT_GRAPH_IRI.into(),
+                role: MemberRole::Writable,
+            },
+            MiniForkMember {
+                iri: LEG.into(),
+                role: MemberRole::Writable,
+            },
+        ],
+        created_at: FROM.into(),
+    };
+    p.mini = materialize_on_legacy(&p.home.catalog, &mut p.home.legacy, &spec, &path).unwrap();
+    p.path = path;
+    let home_leg = p.home.legacy.committed_graph_id(LEG).unwrap().unwrap();
+    let mini_leg = p.mini.store().committed_graph_id(LEG).unwrap().unwrap();
+    (p, home_leg, mini_leg)
+}
+
+fn multi_request() -> MergeRequest<'static> {
+    MergeRequest {
+        name: "agent-m",
+        ..request()
+    }
+}
+
+fn leg_write(p: &mut Pair, ws: &[W]) {
+    let d = datums(p.mini.store(), ws);
+    p.mini.transact(LEG, &d, TT, None).unwrap();
+}
+
+fn leg_values(store: &Store, g: i64, s: &str) -> Vec<String> {
+    let (Some(e), Some(at)) = (store.lookup(s).unwrap(), store.lookup(ONE).unwrap()) else {
+        return Vec::new();
+    };
+    let mut out: Vec<String> = store
+        .current_facts_in_graph(g)
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.entity == e && f.attribute == at)
+        .map(|f| match f.value {
+            Value::Str(v) => v,
+            other => format!("{other:?}"),
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// R11 (review #3): a later merge over two writable members keeps a
+/// home-only change in the non-ROOT member and applies the mini's new value.
+#[test]
+fn later_r11_a_multi_member_later_merge_keeps_home_only_changes_in_each_member() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut p, home_leg, _) = multi_pair(dir.path());
+    leg_write(&mut p, &[a("urn:n", ONE, "first", TT)]);
+    mini_write(&mut p, &[r("urn:x", ONE, "a"), a("urn:x", ONE, "c", TT)]);
+    merged(&mut p, &multi_request());
+    assert_eq!(leg_values(&p.home.legacy, home_leg, "urn:n"), ["first"]);
+    // Home-only change in LEG after merge 1; a new mini value in LEG.
+    write_home(
+        &mut p.home.legacy,
+        home_leg,
+        &[a("urn:h", ONE, "home", TO)],
+        TD,
+    );
+    leg_write(&mut p, &[a("urn:m", ONE, "second", TT)]);
+    let later = merged(&mut p, &multi_request());
+    assert_eq!(
+        later.receive_tx.len(),
+        2,
+        "one receive per member: {later:?}"
+    );
+    assert_eq!(
+        leg_values(&p.home.legacy, home_leg, "urn:h"),
+        ["home"],
+        "home-only reverted"
+    );
+    assert_eq!(leg_values(&p.home.legacy, home_leg, "urn:m"), ["second"]);
+    assert_eq!(leg_values(&p.home.legacy, home_leg, "urn:n"), ["first"]);
+    assert_eq!(values(&p.home.legacy, "urn:x", ONE), ["c"]);
 }

@@ -233,6 +233,7 @@ jobs:
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::later::later_r8_an_m3_era_entry_refuses_second_merge ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::later::later_r9_a_remainder_on_a_rewritten_mini_base_refuses_base_mismatch ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
           grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::later::later_r10_an_unreadable_mini_base_refuses_base_unavailable ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::merge::tests::later::later_r11_a_multi_member_later_merge_keeps_home_only_changes_in_each_member ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
       # aegis-7tt P3: the read-side provenance object and the metric share one
       # classifier. P4: host and session are redacted, never omitted, for a
       # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.
