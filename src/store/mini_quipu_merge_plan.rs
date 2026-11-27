@@ -6,7 +6,7 @@ use std::path::Path;
 
 use rusqlite::{OptionalExtension, params};
 
-use super::super::{MiniForkEntry, has_table, invalid};
+use super::super::{MergeBase, MiniForkEntry, has_table, invalid};
 use super::{MergeRefusal, refused};
 use crate::{
     Result, Store,
@@ -66,13 +66,24 @@ fn carry(home: &Store, mini: &Store, v: &Value) -> Result<Value> {
     }
 }
 
+/// Carry a mini-Quipu fact into home terms.
+fn carried(home: &Store, mini: &Store, f: Fact) -> Result<Fact> {
+    Ok(Fact {
+        entity: home.intern(&mini.resolve(f.entity)?)?,
+        attribute: home.intern(&mini.resolve(f.attribute)?)?,
+        value: carry(home, mini, &f.value)?,
+        ..f
+    })
+}
+
 /// Plan one writable member exactly as fork promote plans ROOT against its
-/// fork graph: base at the cut, ours now, theirs from the file.
+/// fork graph: base at the cut (the home cut, or the mini-Quipu's own state
+/// at the last merged head), ours now, theirs from the file.
 pub(super) fn plan_member(
     home: &Store,
     mini: &Store,
     graph: &str,
-    cut: i64,
+    (base, cut): (&MergeBase, i64),
     resolved: Option<&ForkResolutions>,
     mode: Mode,
     td: Option<&str>,
@@ -80,15 +91,19 @@ pub(super) fn plan_member(
     let g = graph_of(home, graph)?.ok_or_else(|| invalid("a writable member is absent at home"))?;
     let mg =
         graph_of(mini, graph)?.ok_or_else(|| invalid("a writable member is absent locally"))?;
-    let mut theirs = Vec::new();
-    for f in mini.current_facts_in_graph(mg)? {
-        theirs.push(Fact {
-            entity: home.intern(&mini.resolve(f.entity)?)?,
-            attribute: home.intern(&mini.resolve(f.attribute)?)?,
-            value: carry(home, mini, &f.value)?,
-            ..f
-        });
-    }
+    let theirs = mini
+        .current_facts_in_graph(mg)?
+        .into_iter()
+        .map(|f| carried(home, mini, f))
+        .collect::<Result<Vec<_>>>()?;
+    let base = match base {
+        MergeBase::Home => home.graph_facts_as_of(g, cut)?,
+        MergeBase::Mini { head, .. } => mini
+            .graph_facts_as_of(mg, *head)?
+            .into_iter()
+            .map(|f| carried(home, mini, f))
+            .collect::<Result<Vec<_>>>()?,
+    };
     let closes = |e: i64, a: i64| -> Result<BTreeMap<Vec<u8>, String>> {
         let (Some(me), Some(ma)) = (
             mini.lookup(&home.resolve(e)?)?,
@@ -111,7 +126,7 @@ pub(super) fn plan_member(
         Ok(out)
     };
     let merge = home.fork_merge(
-        home.graph_facts_as_of(g, cut)?,
+        base,
         home.current_facts_in_graph(g)?,
         theirs,
         resolved,

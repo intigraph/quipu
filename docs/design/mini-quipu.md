@@ -172,24 +172,31 @@ mode and resolutions reports `already-applied` with the original transaction
 IDs (R7). If a reply is lost, the caller reads back by merge id, which is the
 existing read-back UNKNOWN contract, before it tries again.
 
-**M3 limits (sattler ruling on #1318, 2026-11-27): both fail closed, nothing written.**
+Several merges from one mini-Quipu are allowed (aegis-abt, after M3). The
+registry's home cut never moves. A merge that wrote records its incoming head,
+the base it planned against and a digest of the mini-Quipu's live writable
+members at that head:
 
-- *Decided conflict merges refuse* (`decided-bounded-base`). Deciding a conflict
-  closes a value, and advancing the base over that bounded interval is not
-  supported yet, so the whole merge rolls back. R7 is therefore proven for
-  undecided merges only. Bounded base intervals are the next aegis-abt slice.
-- *A second merge after a merge that wrote refuses* (`second-merge`, naming the
-  earlier merge id). Advancing the base to the home head folds in home-only
-  changes the mini never saw and keeps held slots at ours, so a later merge
-  would land the mini's stale values as one-sided changes. Re-fork from
-  current home. This departs from the next paragraph as an INTERIM, pending a
-  recorded design ruling on later merges.
+- **The next merge of a new head** plans against the mini-Quipu's own state at
+  the last merged head: the last point both sides share. Slots the mini did not
+  touch since then keep home, so home-only changes, held slots and decisions
+  are never overridden by the mini's unchanged values. A slot both sides
+  changed since then conflicts again. Before planning, the mini's state at that
+  head is checked against the recorded digest: `base-mismatch` if its history
+  was rewritten, `base-unavailable` if it cannot be read.
+- **A remainder** (the same incoming again, for example with the held slots now
+  decided) reuses the earlier merge's base. It is its own merge id, and its
+  source names the earlier merge (`after=<merge id>`, oracle §6 sequencing).
+  Received slots plan as convergent no-ops, so re-applying either part changes
+  nothing.
+- **A new head while the last merge still holds slots** refuses
+  (`remainder-pending`, naming that merge) and writes nothing. Otherwise the
+  held values would equal the new base and the holds would be lost silently.
 
-Several merges from one mini-Quipu are allowed (see the interim limit above). After a merge, the registry
-entry's base advances to that merge's home `decide` (or `receive`)
-coordinate, paired with the mini-Quipu head that was merged. The next merge is
-then three-way against that new base. This is the same rule as a later apply
-of a partial remainder (oracle §6): a new merge id that names the earlier one.
+The interim M3 refusals `decided-bounded-base` and `second-merge` (sattler
+rulings on #1318, 2026-11-27) are lifted by this rule. The bounded interval a
+decision closes is never read into a base: the planner's base is the live view,
+and the home cut no longer advances.
 
 ### 2.4 Retire
 

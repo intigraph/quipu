@@ -101,3 +101,49 @@ pub fn base_digest(journals: &[BaseJournal]) -> Result<String> {
         &serde_json::to_vec(&lines).map_err(|e| Error::Serialization(e.to_string()))?,
     ))
 }
+
+/// Digest of a store's LIVE writable members as of `cut`: exactly the rows
+/// the merge planner reads as a base (`graph_facts_as_of`), in the journal
+/// line form of [`base_digest`]. A later merge back plans against the
+/// mini-Quipu's own state at the merged head; home records this digest at
+/// merge time, and a rewritten or compacted history fails it.
+pub fn live_digest(store: &Store, cut: i64, writable: &[String]) -> Result<String> {
+    let mut journals = Vec::new();
+    for graph in writable {
+        let g = if graph == ROOT_GRAPH_IRI {
+            0
+        } else {
+            store
+                .committed_graph_id(graph)?
+                .ok_or_else(|| invalid("member graph is absent"))?
+        };
+        let facts = store.graph_facts_as_of(g, cut)?;
+        if facts.len() > MAX_ROWS {
+            return Err(invalid("base row budget exceeded"));
+        }
+        let rows = facts
+            .iter()
+            .map(|fact| {
+                Ok(BaseRow {
+                    triple: crate::changeset_store::fact_statement(store, fact, None)?.triple,
+                    valid_from: fact.valid_from.clone(),
+                    valid_to: None,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        journals.push(BaseJournal::new(
+            store.store_id()?,
+            store.log_epoch()?,
+            cut,
+            if graph == ROOT_GRAPH_IRI {
+                "ROOT"
+            } else {
+                graph
+            }
+            .into(),
+            shapes_hash(store, cut)?,
+            rows,
+        )?);
+    }
+    base_digest(&journals)
+}
