@@ -42,6 +42,23 @@ impl Store {
         }
     }
 
+    /// The reject shapes an ordinary write to this store is judged by, if
+    /// any (participant slice B derives from exactly these).
+    #[cfg(feature = "shacl")]
+    pub(crate) fn write_reject_shapes(&self) -> Result<Option<String>> {
+        let loaded = if self.shacl_config.validate_on_write {
+            self.get_combined_shapes()?
+                .map(|shapes| crate::shacl::split_shapes_by_policy(&shapes).reject)
+        } else {
+            None
+        };
+        Ok(match (&self.write_shapes, loaded) {
+            (Some(explicit), Some(loaded)) => Some(format!("{loaded}\n{explicit}")),
+            (Some(explicit), None) => Some(explicit.clone()),
+            (None, loaded) => loaded,
+        })
+    }
+
     pub(super) fn enforce_shacl_poststate(
         &mut self,
         datums: &[Datum],

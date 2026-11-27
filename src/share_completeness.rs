@@ -62,6 +62,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("participant_journal", Disposition::Excluded),
     ("participant_intents", Disposition::Excluded),
     ("dependency_pins", Disposition::Excluded),
+    // Slice B: subclass-axiom pins are dependency pins for sh:class; the audit
+    // rows are this participant's own post-commit judgement records.
+    ("subclass_pins", Disposition::Excluded),
+    ("participant_audit", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection

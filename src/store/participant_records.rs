@@ -26,6 +26,23 @@ pub(super) const PINS: &str = "CREATE TABLE IF NOT EXISTS dependency_pins (\
     dependent_file_id TEXT NOT NULL, \
     PRIMARY KEY (graph, entity, type_iri, dependent_file_id))";
 
+/// Subclass-axiom pins (slice B): this file's record that a dependent file's
+/// sh:class satisfaction for `via` relied on "class rdfs:subClassOf parent"
+/// in graph. Released with `via`'s type pins.
+pub(super) const SUBCLASS_PINS: &str = "CREATE TABLE IF NOT EXISTS subclass_pins (\
+    graph TEXT NOT NULL, class TEXT NOT NULL, parent TEXT NOT NULL, via TEXT NOT NULL, \
+    dependent_file_id TEXT NOT NULL, \
+    PRIMARY KEY (graph, class, parent, via, dependent_file_id))";
+
+/// Slice B audit records (dearing c71): post-commit facts about a judged
+/// member, never a fence. kind = 'shapes-delta' (judged under X, current Y)
+/// or 'verify-failed' (the applied member does not verify under the carried
+/// shapes: a corrupt intent or a replay bug; loud, stays applied).
+pub(super) const AUDIT: &str = "CREATE TABLE IF NOT EXISTS participant_audit (\
+    batch_id TEXT NOT NULL, kind TEXT NOT NULL, judged_sha256 TEXT NOT NULL, \
+    current_sha256 TEXT, detail TEXT NOT NULL, \
+    PRIMARY KEY (batch_id, kind))";
+
 pub(super) fn table_exists(store: &Store, name: &str) -> Result<bool> {
     Ok(store.conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
@@ -94,11 +111,23 @@ pub(super) fn unhex(text: &str) -> Result<Vec<u8>> {
 pub(super) struct PinChanges {
     pub(super) add: Vec<super::deps::DependencyPin>,
     pub(super) release: Vec<(String, String)>,
+    /// Slice B: subclass-axiom pins this (source) file records.
+    pub(super) axioms: Vec<super::deps::SubclassPin>,
+    /// Slice B: derived type context this (member) file's apply is judged with.
+    pub(super) context: Vec<[String; 3]>,
+    /// Slice B (malcolm C1, dearing c71): (sha256, exact bytes) of the write
+    /// shapes this member was judged by at PREPARE. Re-checked before the
+    /// COMMIT decision; carried so recovery can audit under them after a reload.
+    pub(super) shapes: Option<(String, String)>,
 }
 
 impl PinChanges {
     fn is_empty(&self) -> bool {
-        self.add.is_empty() && self.release.is_empty()
+        self.add.is_empty()
+            && self.release.is_empty()
+            && self.axioms.is_empty()
+            && self.context.is_empty()
+            && self.shapes.is_none()
     }
 }
 
@@ -139,6 +168,22 @@ pub(super) fn encode_payload_with(batch: &GraphSetBatch, pins: &PinChanges) -> V
             .map(|p| serde_json::json!([p.graph, p.entity, p.type_iri, p.dependent_file_id]))
             .collect();
         value["pins"] = serde_json::json!({"add": add, "release": pins.release});
+        // Slice B keys appear only when used, so S4 payload bytes are unchanged.
+        if !pins.axioms.is_empty() {
+            value["pins"]["axioms"] = serde_json::json!(
+                pins.axioms
+                    .iter()
+                    .map(|a| [&a.graph, &a.class, &a.parent, &a.via, &a.dependent_file_id])
+                    .collect::<Vec<_>>()
+            );
+        }
+        if !pins.context.is_empty() {
+            value["pins"]["context"] = serde_json::json!(pins.context);
+        }
+        if let Some((sha, bytes)) = &pins.shapes {
+            value["pins"]["shapes_sha256"] = serde_json::json!(sha);
+            value["pins"]["shapes"] = serde_json::json!(bytes);
+        }
     }
     value.to_string().into_bytes()
 }
@@ -189,6 +234,38 @@ pub(super) fn decode_payload(bytes: &[u8]) -> Result<Decoded> {
         for row in changes["release"].as_array().ok_or_else(bad)? {
             pins.release.push((field(row, 0)?, field(row, 1)?));
         }
+        for row in changes
+            .get("axioms")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            pins.axioms.push(super::deps::SubclassPin {
+                graph: field(row, 0)?,
+                class: field(row, 1)?,
+                parent: field(row, 2)?,
+                via: field(row, 3)?,
+                dependent_file_id: field(row, 4)?,
+            });
+        }
+        for row in changes
+            .get("context")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            pins.context
+                .push([field(row, 0)?, field(row, 1)?, field(row, 2)?]);
+        }
+        if let Some(sha) = changes.get("shapes_sha256") {
+            // Bytes may be absent or altered: recovery still applies, and its
+            // audit reports the shapes it could not verify under.
+            let bytes = changes
+                .get("shapes")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            pins.shapes = Some((sha.as_str().ok_or_else(bad)?.to_owned(), bytes.to_owned()));
+        }
     }
     Ok(Decoded {
         timestamp: text("timestamp").ok_or_else(bad)?,
@@ -235,6 +312,8 @@ pub(super) fn durable<T>(
         store.conn.execute_batch(JOURNAL)?;
         store.conn.execute_batch(INTENTS)?;
         store.conn.execute_batch(PINS)?;
+        store.conn.execute_batch(SUBCLASS_PINS)?;
+        store.conn.execute_batch(AUDIT)?;
         work(store)
     })
 }
@@ -404,4 +483,17 @@ pub(crate) fn home_published(
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(error) => Err(error.into()),
     }
+}
+
+/// The caller's verified, unsigned and unscoped principal.
+pub(super) fn principal() -> Result<crate::transaction_auth::Identity> {
+    let identity = crate::transaction_auth::current_identity()
+        .ok_or_else(|| refuse("a verified principal is required"))?;
+    if crate::transaction_auth::current_attestation().is_some() {
+        return Err(refuse("signed participant batches are not qualified"));
+    }
+    if crate::writer_scope::is_scoped_request() {
+        return Err(refuse("scoped participant batches are not qualified"));
+    }
+    Ok(identity)
 }

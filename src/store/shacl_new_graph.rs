@@ -102,8 +102,8 @@ impl Store {
             &[graph],
         )?;
         let rdf_type = self.lookup(RDF_TYPE)?;
-        let explicit_context =
-            matches!(&self.write_reference_graphs, Some((destination, _)) if *destination == graph);
+        let explicit_context = matches!(&self.write_reference_graphs, Some((destination, _)) if *destination == graph)
+            || self.derived_type_context.is_some();
         // Capture write-owned focuses before adding any referenced types.
         let subjects: BTreeSet<i64> = facts.iter().map(|fact| fact.entity).collect();
         let mut owned: BTreeSet<String> = subjects
@@ -165,6 +165,7 @@ impl Store {
                 }
             }
         }
+        self.append_derived_type_context(&mut facts)?;
         if let (Some(rdf_type), Some(subclass)) = (rdf_type, self.lookup(SUBCLASS_OF)?) {
             let mut pending: Vec<i64> = facts
                 .iter()

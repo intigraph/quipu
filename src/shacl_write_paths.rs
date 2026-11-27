@@ -16,6 +16,9 @@ pub(crate) struct CardinalityPlan {
     pub(crate) has_value_set_constraint: bool,
     pub(crate) has_value_constraint: bool,
     pub(crate) has_class_constraint: bool,
+    /// (predicate, class) for every sh:class on a predicate path: the values
+    /// a participant member may need typed by an enlisted source (slice B).
+    pub(crate) class_requirements: BTreeSet<(String, String)>,
     pub(crate) incoming_predicates: BTreeSet<String>,
     pub(crate) object_target_predicates: BTreeSet<String>,
     pub(crate) subject_target_predicates: BTreeSet<String>,
@@ -37,6 +40,7 @@ impl Validator {
             has_value_set_constraint: false,
             has_value_constraint: false,
             has_class_constraint: false,
+            class_requirements: BTreeSet::new(),
             incoming_predicates: BTreeSet::new(),
             object_target_predicates: BTreeSet::new(),
             subject_target_predicates: BTreeSet::new(),
@@ -96,8 +100,14 @@ impl Validator {
                 ) {
                     plan.has_value_constraint = true;
                 }
-                if matches!(component, IRComponent::Class(_)) {
+                if let IRComponent::Class(class) = component {
                     plan.has_class_constraint = true;
+                    let term = OxigraphInMemory::object_as_term(class.class_rule()).to_string();
+                    let iri = term.strip_prefix('<').and_then(|t| t.strip_suffix('>'));
+                    if let (Some(SHACLPath::Predicate { pred }), Some(iri)) = (shape.path(), iri) {
+                        plan.class_requirements
+                            .insert((pred.as_str().to_owned(), iri.to_owned()));
+                    }
                 }
                 // sh:uniqueLang false imposes nothing (aegis-7ur8).
                 if matches!(component, IRComponent::UniqueLang(value) if !value.unique_lang()) {

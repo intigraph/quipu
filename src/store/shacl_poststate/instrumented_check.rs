@@ -167,6 +167,7 @@ impl Store {
                         &plan.node_reference_predicates,
                         plan.has_class_constraint,
                     )?;
+                    self.append_derived_type_context(&mut facts)?;
                     self.append_subclass_context(&mut facts, graph)
                 })()
             );
