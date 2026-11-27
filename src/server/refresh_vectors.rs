@@ -118,7 +118,9 @@ pub(crate) fn refresh_embeddings(
             continue;
         };
         let texts: Vec<&str> = work.iter().map(|(_, text, _)| text.as_str()).collect();
-        let embs = provider.embed_batch(&texts).map_err(|e| e.to_string())?;
+        let embs = provider
+            .embed_batch_background(&texts)
+            .map_err(|e| e.to_string())?;
         let s = store.lock();
         let vs = s.vector_store();
         for ((eid, text, stored), emb) in work.iter().zip(embs.iter()) {

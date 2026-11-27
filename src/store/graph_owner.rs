@@ -423,7 +423,7 @@ impl Owner {
             let mut embeddings = Vec::with_capacity(texts.len());
             for chunk in texts.chunks(batch_size) {
                 // Owner admission remains reserved; inference holds no writer.
-                embeddings.extend(provider.embed_batch(chunk)?);
+                embeddings.extend(provider.embed_batch_background(chunk)?);
             }
             let mut store = self.writer.owned()?;
             self.placement.verify()?;

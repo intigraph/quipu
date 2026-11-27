@@ -93,7 +93,7 @@ pub fn batch(store: &Store, after: i64, limit: usize) -> Result<Progress> {
             continue;
         }
         let texts: Vec<_> = snapshots.iter().map(|(_, text)| text.as_str()).collect();
-        let vectors = provider.embed_batch(&texts)?;
+        let vectors = provider.embed_batch_background(&texts)?;
         if vectors.len() != snapshots.len()
             || vectors.iter().any(|v| {
                 v.len() != provider.dimension() || v.is_empty() || v.iter().any(|x| !x.is_finite())

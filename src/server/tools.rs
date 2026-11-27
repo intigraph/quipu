@@ -138,7 +138,7 @@ pub(crate) fn finish_deferred_embed(
     let mut embeddings = Vec::with_capacity(texts.len());
     for chunk in texts.chunks(batch_size) {
         // CPU work, LOCK-FREE.
-        embeddings.extend(provider.embed_batch(chunk)?);
+        embeddings.extend(provider.embed_batch_background(chunk)?);
     }
     // apply_deferred_embed still receives every vector in item order, so its
     // per-entity staleness check is unchanged by the chunking.

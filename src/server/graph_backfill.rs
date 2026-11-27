@@ -88,7 +88,9 @@ pub(crate) fn backfill_graph_embeddings(
             continue;
         }
         let texts: Vec<&str> = snapshots.iter().map(|(_, text)| text.as_str()).collect();
-        let embs = provider.embed_batch(&texts).map_err(|e| e.to_string())?;
+        let embs = provider
+            .embed_batch_background(&texts)
+            .map_err(|e| e.to_string())?;
         let s = store.lock();
         let vs = s.vector_store();
         for ((eid, text), emb) in snapshots.iter().zip(embs.iter()) {

@@ -81,7 +81,9 @@ pub(crate) fn backfill_embeddings(
         let texts: Vec<&str> = snapshots.iter().map(|(_, text, _)| text.as_str()).collect();
         // Expensive ONNX work is deliberately LOCK-FREE.  BATCH_SIZE remains
         // the existing RSS bound: one call can never scale with corpus size.
-        let embs = provider.embed_batch(&texts).map_err(|e| e.to_string())?;
+        let embs = provider
+            .embed_batch_background(&texts)
+            .map_err(|e| e.to_string())?;
 
         // BOUNDED writer-lock window: apply only snapshots that are still
         // current.  Requeue stale entities so a concurrent edit is eventually
