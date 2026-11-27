@@ -102,9 +102,11 @@ pub enum MergeRefusal {
     BaseMismatch,
     /// Writable members moved off the recorded home owner or generation.
     X4MovedOwner,
-    /// The last merge that wrote still holds slots back. Apply its remainder
-    /// (the same incoming) before merging a new head; otherwise the new base
-    /// would equal the mini's held values and silently drop the holds.
+    /// The last merge still holds slots back. Apply its remainder (the same
+    /// incoming) before merging a new head; otherwise the new base would
+    /// equal the mini's held values and silently drop the holds. Once the
+    /// mini-Quipu has written past that incoming no remainder can be made,
+    /// so the way out is a re-fork.
     RemainderPending,
     /// The entry records a merged head but no last merge: it was advanced by
     /// M3 (#1318), whose home cut already folds in home-only changes, held
@@ -453,15 +455,27 @@ fn advance(
     receipt: &MergeReceipt,
     base: &MergeBase,
 ) -> Result<()> {
-    if !receipt
+    // A remainder of the last merge is recorded even when it wrote nothing
+    // (every held slot decided to ours): otherwise its held count stays
+    // stale and every new head refuses `remainder-pending`. It keeps the
+    // digest recorded at that head, which `later_base` already checks.
+    let remainder = entry
+        .last_merge
+        .as_ref()
+        .filter(|last| last.incoming == receipt.incoming);
+    let wrote = receipt
         .decide_tx
         .iter()
         .chain(&receipt.receive_tx)
-        .any(|tx| *tx > 0)
-    {
+        .any(|tx| *tx > 0);
+    if !wrote && remainder.is_none() {
         return Ok(());
     }
     let head = incoming_head(&receipt.incoming)?;
+    let head_digest = match remainder {
+        Some(last) => last.head_digest.clone(),
+        None => live_digest(mini, head, &entry.writable)?,
+    };
     let mut next = entry.clone();
     next.merged_head = Some(head);
     next.last_merge = Some(LastMerge {
@@ -469,7 +483,7 @@ fn advance(
         incoming: receipt.incoming.clone(),
         held: receipt.held,
         base: base.clone(),
-        head_digest: live_digest(mini, head, &entry.writable)?,
+        head_digest,
     });
     home.conn.execute(
         "UPDATE mini_quipu_forks SET entry = ?1 WHERE name = ?2",
@@ -530,7 +544,8 @@ fn later_base(
         return Err(refused(
             MergeRefusal::RemainderPending,
             &format!(
-                "merge {} still holds {} slot(s); apply its remainder first",
+                "merge {} still holds {} slot(s); apply its remainder (the same \
+                 incoming) first, or re-fork if the mini-Quipu has written since",
                 last.merge_id, last.held
             ),
         ));

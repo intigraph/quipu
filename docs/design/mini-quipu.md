@@ -188,10 +188,15 @@ members at that head:
   decided) reuses the earlier merge's base. It is its own merge id, and its
   source names the earlier merge (`after=<merge id>`, oracle §6 sequencing).
   Received slots plan as convergent no-ops, so re-applying either part changes
-  nothing.
+  nothing. A remainder is always recorded as the last merge, including one
+  that writes no transaction, so its held count is current and a later new
+  head is not refused.
 - **A new head while the last merge still holds slots** refuses
   (`remainder-pending`, naming that merge) and writes nothing. Otherwise the
   held values would equal the new base and the holds would be lost silently.
+  A remainder needs the same incoming, so once the mini-Quipu has written past
+  that head no remainder can be made; the way out is a re-fork from current
+  home.
 
 - **A remainder on a mini base** re-verifies that base against its digest
   first, with the same `base-mismatch` / `base-unavailable` refusals: the

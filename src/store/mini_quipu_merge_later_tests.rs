@@ -444,3 +444,35 @@ fn later_r11_a_multi_member_later_merge_keeps_home_only_changes_in_each_member()
     assert_eq!(leg_values(&p.home.legacy, home_leg, "urn:n"), ["first"]);
     assert_eq!(values(&p.home.legacy, "urn:x", ONE), ["c"]);
 }
+
+/// R12 (review 3): a remainder that decides every held slot to ours is
+/// recorded as the last merge, so its held count is current and a new head
+/// merges instead of refusing `remainder-pending`. (Deciding ours still
+/// receives theirs as a closed interval here; `advance` also records a
+/// remainder that writes no transaction at all.)
+#[test]
+fn later_r12_a_remainder_decided_to_ours_clears_the_hold() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = conflict_pair(dir.path());
+    let first = merged(&mut p, &partial());
+    assert_eq!(first.held, 1, "{first:?}");
+    let res = ForkResolutions::from([(key(&p, "urn:x", ONE), vec![Value::Str("b".into())])]);
+    let rest = merged(&mut p, &decided(&res));
+    assert_ne!(rest.merge_id, first.merge_id);
+    assert_eq!(rest.held, 0, "{rest:?}");
+    let last = mini_fork_entry(&p.home.legacy, "agent-a")
+        .unwrap()
+        .unwrap()
+        .last_merge
+        .unwrap();
+    assert_eq!(
+        (last.merge_id.as_str(), last.held),
+        (rest.merge_id.as_str(), 0)
+    );
+    mini_write(&mut p, &[a("urn:z", ONE, "mini", TT)]);
+    let next = merged(&mut p, &request());
+    assert_ne!(next.merge_id, rest.merge_id);
+    assert_eq!(values(&p.home.legacy, "urn:z", ONE), ["mini"]);
+    assert_eq!(values(&p.home.legacy, "urn:x", ONE), ["b"], "decision lost");
+    assert_eq!(values(&p.home.legacy, "urn:y", ONE), ["y1"]);
+}
