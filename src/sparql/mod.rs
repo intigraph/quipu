@@ -48,6 +48,7 @@ mod substring_project;
 #[cfg(test)]
 mod tests;
 mod triple_alias;
+pub mod update_graphs;
 
 mod bind_join;
 #[cfg(test)]

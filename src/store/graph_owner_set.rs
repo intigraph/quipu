@@ -194,6 +194,44 @@ impl GraphSetOwner {
             .collect())
     }
 
+    /// Run one routed SPARQL update in this owner (aegis-n0wc.5 phase 4 H1).
+    /// `members` are the graphs the update names; every one must be a member
+    /// of this owner. The gates are [`Self::transact`]'s: unsigned, admission,
+    /// placement, identity, hooks and the participant write fence. A file
+    /// that records dependency pins refuses, because their guard needs the
+    /// batch's datums and an update only knows them after evaluation.
+    pub fn update<T>(
+        &self,
+        members: &BTreeSet<String>,
+        work: impl FnOnce(&mut Store) -> Result<T>,
+    ) -> Result<T> {
+        let owned = self
+            .catalog
+            .owner_graphs(&self.owner.catalog_route().graph)?;
+        if members.is_empty()
+            || members.iter().any(|g| !owned.contains(&g.as_str()))
+            || crate::transaction_auth::current_attestation().is_some()
+        {
+            return Err(refused(
+                "update does not select exactly this unsigned graph-set owner",
+            ));
+        }
+        let _admission = self.owner.admit()?;
+        let mut store = self.owner.writer.owned()?;
+        self.owner.placement.verify()?;
+        Owner::check_identity(self.owner.catalog_route(), &store)?;
+        Self::check_hooks(&store)?;
+        participant::check_write_fence(&store)?;
+        if participant::has_dependency_pins(&store)? {
+            return Err(refused(
+                "a routed update into a file with dependency pins is not qualified",
+            ));
+        }
+        store.ownership_operation(|store| {
+            store.with_writer_scope(crate::writer_scope::WriteOperation::Update, members, work)
+        })
+    }
+
     /// Pre-queue validation shared by local and participant batches: the
     /// requests select exactly this unsigned owner and the batch its members.
     fn check_batch<'b>(

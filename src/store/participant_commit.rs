@@ -30,7 +30,7 @@ mod records;
 use records::*;
 pub(crate) use records::{applied_intent, check_read_fence, check_write_fence, home_published};
 
-pub(crate) use deps::check_pinned_write;
+pub(crate) use deps::{check_pinned_write, has_dependency_pins};
 
 #[path = "participant_crash.rs"]
 mod crash_points;

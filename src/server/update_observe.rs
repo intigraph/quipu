@@ -49,7 +49,7 @@ pub(super) fn apply_update_observed(
         store.with_writer_scope(
             quipu::writer_scope::WriteOperation::Update,
             &targets,
-            |store| apply_locked(store, &plan, update, attribution, &mut times),
+            |store| apply_locked(store, &plan, update, attribution, &mut times, None),
         )
     });
     // While the guard is still alive, as /query does, so `held` is the

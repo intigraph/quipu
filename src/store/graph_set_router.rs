@@ -14,7 +14,7 @@
 //!
 //! This primitive publishes no server route and changes no startup path.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use super::{GraphSetBatch, GraphSetOwner};
@@ -152,6 +152,37 @@ impl GraphSetRouter {
             SetTarget::Routed(owner) => self.owners[owner].transact(requests, batch),
             SetTarget::Legacy => Err(refused("legacy batch must use the ordinary legacy writer")),
         }
+    }
+
+    /// Classify a SPARQL update by the graphs it names (`None` = the default
+    /// graph) with this catalog's CURRENT pins, the way [`Self::target`]
+    /// classifies a batch: all legacy, one routed owner, or a refusal for a
+    /// mix of legacy and routed or of two files (aegis-n0wc.5 H1). The caller
+    /// supplies no pins: an unchanged client request is routed server-side.
+    pub fn target_graphs(&self, graphs: &BTreeSet<Option<String>>) -> Result<SetTarget<'_>> {
+        let revision = self.catalog.physical().revision();
+        let routes: Vec<_> = graphs
+            .iter()
+            .map(|g| g.as_deref().and_then(|g| self.catalog.logical_route(g)))
+            .collect();
+        let requests: Vec<_> = graphs
+            .iter()
+            .zip(&routes)
+            .map(|(graph, route)| WriteRequest {
+                graph: graph.as_deref(),
+                catalog_revision: revision,
+                owner_generation: route.as_ref().map(|r| r.generation),
+                policy: route.as_ref().map_or("", |r| r.policy.as_str()),
+                signed: false,
+                cross_graph_context: false,
+            })
+            .collect();
+        self.target(&requests)
+    }
+
+    /// The owner [`Self::target`] or [`Self::target_graphs`] selected.
+    pub fn routed_owner(&self, key: &str) -> Option<&GraphSetOwner> {
+        self.owners.get(key)
     }
 
     /// The set owner serving `graph`'s physical owner, if routed.
