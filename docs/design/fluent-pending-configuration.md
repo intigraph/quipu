@@ -1,8 +1,8 @@
 # Pending observable configuration
 
 This describes the source-stage implementation alongside the
-[fluent contract](fluents-v1-contract.md). The schema activation and runtime
-acceptance gates in that contract remain open. The APIs below are internal
+[fluent contract](fluents-v1-contract.md). The v1 structural schema is loaded;
+the runtime acceptance gates in that contract remain open. The APIs below are internal
 implementation paths; ordinary CLI and HTTP sharing do not select pending
 configuration automatically.
 
