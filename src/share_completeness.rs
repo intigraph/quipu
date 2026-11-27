@@ -56,6 +56,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // Host-local ownership enrollment is a fence, never portable authority.
     // Reconstructing it on another store would import an enrollment decision.
     ("ownership_handoff_enrollment", Disposition::Excluded),
+    // Participant-commit journals and intents (aegis-n0wc.5) are this file's
+    // local decision and fence state, bound to its store/epoch. Importing them
+    // would forge a COMMIT/PUBLISHED decision or a fence for another store.
+    ("participant_journal", Disposition::Excluded),
+    ("participant_intents", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection
@@ -186,6 +191,13 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("log_epoch", Disposition::Excluded),
     // Local sticky authority must not travel as a restored placement grant.
     ("ownership_enforcement", Disposition::Excluded),
+    // Mini-Quipu fork registry entries pin base cuts (store_id, log_epoch,
+    // local_tx) of THIS home copy. A reconstruction mints its own identity and
+    // epoch, so a carried entry would name a cut the copy never had and claim
+    // forks it never issued. The mini marker is bound to the same identity:
+    // a reconstruction is a new copy and must be re-forked, not inherit it.
+    ("mini_quipu_forks", Disposition::Excluded),
+    ("mini_quipu_marker", Disposition::Excluded),
     // A replica's cursor into ONE source's history (the shared applier,
     // aegis-s24.2). A share of the replica is a different copy with no cursor
     // of its own: carrying it would let the copy splice a feed it never

@@ -29,6 +29,11 @@ def module(name, file):
 
 night = module('night', 'nightly-result.py')
 paths = module('paths', 'pr-surfaces.py')
+# The declared change-class map (aegis-659) runs inside this suite so the CI
+# Pre-commit checks job proves it without a workflow edit.
+change_class_tests = module('change_class_tests', 'test_change_class.py')
+for _name in ['MapContract', 'Classify', 'Evidence', 'Gate', 'Lane', 'Events']:
+    globals()['ChangeClass' + _name] = getattr(change_class_tests, _name)
 
 
 def workflow(name):

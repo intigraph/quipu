@@ -76,9 +76,11 @@ stops being read.
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
 | `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap for the `X-Quipu-Operation` labels listed here (any well-formed label, each once). Does not classify undeclared queries or grant permissions. |
 | `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation. With read processes, one service-wide heavy-operation executor runs on worker 0. See [Read concurrency](../reference/read-concurrency.md). |
+| `server.read_admission_wait_ms` | `0` | Early read shedding. `0` keeps today's admission (a queued read waits until its request budget ends, then 408). When positive, a read not admitted within this many ms is refused before it runs with 429 + `Retry-After`, and `X-Quipu-Priority: background` reads never queue. See [Read concurrency](../reference/read-concurrency.md#early-read-shedding). |
+| `server.read_background_reserve` | `1` | Read permits a `background` read must leave free for normal reads. Used only when `read_admission_wait_ms > 0`. |
 | `server.declared_label_limit` | `256` | Distinct client-declared `X-Quipu-Source` labels, and separately `X-Quipu-Operation` labels, logged as themselves per process; later new labels log as `_overflow`. Applies to every client alike. |
 | `server.memory_budget_mib` | unset | One aggregate memory budget (MiB) for the primary and every read worker; sizes SQLite caches. Required for `read_processes`. |
-| `server.read_processes` | `0` | Separate read-only worker processes. Off by default: with workers on, every read endpoint is forwarded to them, each worker takes one request at a time, and overflow is an immediate 503. See [Read concurrency](../reference/read-concurrency.md). |
+| `server.read_processes` | `0` | Separate read-only worker processes. Off by default: with workers on, every read endpoint is forwarded to them, each worker takes one request at a time, and overflow is an immediate 503 (429 + `Retry-After` when `read_admission_wait_ms` is set). See [Read concurrency](../reference/read-concurrency.md). |
 | `server.read_process_base_port` | `3031` | First loopback port for read workers |
 | `server.update_full_copy_max_facts` | `250000` | Facts an unsliceable `/update` (open subject AND open predicate) may copy before it is refused with advice; 0 = unbounded |
 | `events.retention_days` | `30` | Prune events older than N days, never past any registered consumer's committed offset; `0` keeps every event |
@@ -202,9 +204,21 @@ catalog_file = "/etc/quipu/graph-sets.json"
 root = "/var/lib/quipu/owners"             # directory holding the owner files
 installed_policy = "policy-v1"             # must equal every route's policy
 memory_mib = 512
+inventory = "/var/lib/quipu/owners/inventory"   # S1 records for every owner file
+profile = "sets"
+endpoint = "https://witness.example.org"
+bucket = "witness"
+region = "us-east-1"
+timeout_secs = 5                           # 1..=30
+# witness_ca_file = "/etc/quipu/witness-ca.der"   # optional DER trust anchor
+credentials_file = "/etc/quipu/witness.json"      # owner-only (0600)
+
+[quipu.graph_sets.prefixes]                # one existing lineage per routed owner
+"https://example.org/app/data" = "lineage/app"
 ```
 
-Every key is required and an unknown key refuses the config. `catalog_file` is
+Every key except `witness_ca_file` is required and an unknown key refuses the
+config. `prefixes` must name exactly the routed owner graphs of the catalog. `catalog_file` is
 JSON that no group or other user can write. Every member is an exact IRI; there
 is no prefix or pattern membership, so an open-ended family of graphs stays on
 the ordinary writer:
@@ -226,11 +240,14 @@ the ordinary writer:
 ```
 
 With `enabled = true` the server validates the catalog and refuses any graph,
-owner file or store lineage that `[quipu.ingest_pilot]` also claims. It then
-**exits**: graph-set owners open only through enrolled ownership, server
-startup does not open them yet, and it never falls back to an ordinary writable
-open. Do not enable this table on a served Quipu until a release says enrolled
-graph-set startup is installed.
+owner file or store lineage that `[quipu.ingest_pilot]` also claims. Before any
+credential is read, the prefixes must match the routed owners and the legacy
+writer's fence must name exactly every routed member. Each owner file then
+opens through enrolled ownership (S1) against the live witness. **Any refusal
+exits the server** with one line; it never falls back to an ordinary writable
+open. This release admits the owners but mounts no HTTP route for them. A build
+without `ownership-witness-s3` exits with
+`graph_sets enabled but enrolled set-owner open is not available; refusing`.
 
 ## Ingest pilot (per-graph owner)
 
@@ -286,6 +303,139 @@ owner serves `POST /owner/knot`, `/owner/knot/status` and `/owner/knot/seal`
 behind the ordinary authentication. Each request carries the v2 completion
 contract and exact `x-quipu-catalog-revision`, `x-quipu-owner-generation` and
 `x-quipu-owner-policy` pins. Legacy `/knot` is unchanged.
+
+### Enrolling the pilot owner
+
+An owner file must be enrolled before `[quipu.ingest_pilot]` can start it.
+`quipu::store::enroll_pilot_owner` (an `ownership-witness-s3` build, Unix
+only) is the library entry point, and `quipu pilot enroll` wraps it:
+
+```bash
+quipu pilot enroll --db owner.db --journal owner.journal --unit full-store \
+    --principal pilot-owner --witness-config pilot.toml [--execute]
+```
+
+`--witness-config` is a TOML file holding the same `[quipu.ingest_pilot]`
+table the server starts with (the table's keys at top level are accepted
+too). It must be a regular file that no group or other user can write, because
+it pins the witness endpoint, bucket and prefix. It holds no secret; the
+credentials come only from the owner-only `credentials_file` it names, and
+never from argv or the environment. Without `--execute` it is a dry run: a
+read-only preflight plus the planned authority, with no local or remote
+write. The receipt prints the planned (or executed) enrollment and the before
+and after identity of the database, journal and inventory.
+
+With `--execute` it runs, in order: an owner-only intent file next to the
+journal; witness genesis as one conditional create (`If-None-Match: *`) of
+`active/00` under the configured prefix; the Active journal; the owner-only
+inventory (`<journal>.inventory`); the database marker in one SQLite
+transaction; and a real enrolled startup against the same witness. The
+intent is retired only after that startup admits the file. A run interrupted
+at any step resumes to the identical receipt when re-run with the same
+arguments. Existing genesis bytes are accepted only when they are identical,
+and nothing is ever deleted or overwritten.
+
+Enrollment refuses, and leaves the database, inventory and witness unchanged,
+when: the database already has a marker; an inventory already exists; the
+witness prefix holds anything other than the identical genesis; the
+credentials file or an existing journal is group- or other-readable; the
+witness profile differs from the configuration; the database path is a
+symlink or not a regular file; or its device/inode changes before the marker
+is written. Credentials are read only from `credentials_file` and never
+appear in the report or errors.
+
+### Pilot operator CLI
+
+A `quipu` binary built with `ownership-witness-s3` adds `quipu pilot`, a set
+of file-level operator verbs for rehearsing and performing the pilot's
+cutover. Each verb wraps an existing library call and adds no semantics. None
+of them contacts a server or reads an environment variable. A default build
+has no `pilot` verb and its help is unchanged.
+
+Every write verb is a **dry run unless `--execute`**. A dry run opens its file
+read-only, prints the plan and writes nothing. Every verb prints one JSON
+receipt. The receipt holds the target's `before` and `after` file identity:
+device, inode, length, mode, sha256 and the WAL sidecar's sha256. A refusal
+exits nonzero and leaves the target byte-identical.
+
+```bash
+quipu pilot catalog --write catalog.json --from input.json [--execute]  # 0600, never overwrites
+quipu pilot catalog --validate catalog.json   # refuses group/other-writable
+quipu pilot export-slice --db legacy.db --tag snapshot:KEY \
+    --graph urn:quipu:graph:root --out slice.json [--execute]
+quipu pilot import-slice --owner-file owner.db --in slice.json [--at TS] [--execute]
+quipu pilot fence --db legacy.db --graph IRI --revision N --generation N [--execute]
+quipu pilot fence --verify --db legacy.db     # read-only
+quipu pilot cutover --db legacy.db --tag snapshot:KEY --graph IRI \
+    --revision N --generation N [--at TS] [--execute]
+```
+
+- `catalog --write` validates its input with the same parser the server uses
+  and reads it back once written.
+- The slice file carries its tag, graph, exactly typed facts and
+  `multiset_sha256`, which is a sha256 over the library's sorted canonical
+  fact forms. `import-slice` recomputes it before it opens the owner file and
+  again after it writes, so a tampered slice is refused. It also refuses a
+  graph the owner has not committed, and a second import of the same tag.
+- `cutover` refuses unless the graph is fenced at exactly `--revision` and
+  `--generation`. A stale generation is refused.
+- Flags are an exact allow-list per verb, and secret-looking flags such as
+  `--secret-access-key` are refused before any file is opened.
+
+`pilot enroll` is described under
+[Enrolling the pilot owner](#enrolling-the-pilot-owner).
+
+### Reverse: routing a graph back to legacy
+
+`pilot reverse` moves a routed graph back to the legacy file after its owner
+has accepted writes, without losing them. It wraps
+`Store::reverse_routed_graph`, and it is offline: stop the owner first.
+
+```bash
+# 1. Publish catalog R+1: the same as R, minus this graph's route.
+quipu pilot catalog --write cat8.json --from cat8-input.json --execute
+# 2. Rehearse, then reverse.
+quipu pilot reverse --db legacy.db --owner-file owner.db --graph IRI \
+    --revision 7 --generation 4 --catalog cat7.json --next-catalog cat8.json [--execute]
+```
+
+`--revision` and `--generation` are `R` and `G`, the catalog revision and
+`Route.generation` that the legacy fence was set to at cutover. They are not
+the owner witness generation. The verb refuses unless:
+
+- catalog `R` routes the graph at generation `G`, and catalog `R+1` differs
+  from it only by dropping that route;
+- the legacy file is fenced for the graph at exactly `(R, G)`, and its copy of
+  the graph holds no current facts;
+- it can hold the owner file exclusively without waiting: an exclusive lock on
+  the owner's writer lease (`<owner>.writer-lease`) and a SQLite
+  `locking_mode=EXCLUSIVE` lock, both kept for the whole run. Any other
+  process or connection that has the owner file open refuses the reverse,
+  including a running owner that is idle with no transaction in progress.
+  Stop the owner and every other client of the file first. Taking and
+  releasing the hold writes nothing to the owner file.
+
+With `--execute` it runs these steps. Each step is one SQLite transaction,
+recorded in the legacy table `routed_graph_reconcile`:
+
+1. Export every current fact in the owner's named graph, with its source tag.
+2. Move the legacy fence from `(R, G)` to Reconciling at `(R+1, G+1)`.
+3. Import every owner fact into the same named graph, each under its own source
+   tag, and prove that the whole graph matches the owner. The proof compares
+   graph, subject, predicate, typed object, valid time and source tag. On a
+   mismatch the import rolls back and the fence stays Reconciling.
+4. Re-prove the match, then lift the fence: the graph row and its producer
+   source-tag rows.
+
+An interrupted run resumes from the recorded step. Its receipt is identical to
+an uninterrupted run's, `at` timestamp included. A dry run reports the current
+state (`planned`, `reconciling`, `proven` or `lifted`) and writes nothing. The
+owner file is only ever read, and it is kept.
+
+Every receipt carries `witness_state: active_unretired`. The owner's ownership
+witness is not retired; that is aegis-4qv.4. No catalog route points at the
+owner any more, so a restarted owner gets no writes, but its witness is still
+active.
 
 ## Choosing a vector backend
 

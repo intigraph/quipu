@@ -1,0 +1,214 @@
+# The ONE declared change-class map (aegis-659). Every CI trigger that selects
+# jobs by what a change touched reads this file through
+# scripts/ci/change-class.py; no workflow keeps its own path list.
+#
+# How a diff is classified:
+#   1. Each changed path takes the class of the FIRST rule below whose glob
+#      matches it. A path no rule matches is `full`.
+#   2. The diff's required jobs are the union over its paths' classes. Any
+#      `full` path makes the whole diff `full`.
+#   3. `release` is a whole-diff class, not a path class: a release-plz head
+#      branch whose paths are all in `release.paths` and whose manifest edits
+#      only change `version` lines. Anything else on that branch is classified
+#      by paths as usual.
+#   4. Missing evidence (no base/head, git error, unreadable map) is `full`.
+#
+# Push to main, schedule and workflow_dispatch never consult this map: they
+# always run the full suite, and red on main still reverts.
+#
+# Job ids are `<workflow file stem>:<job id>`. scripts/test_ci_fanout.py proves
+# every id below exists, every gating job is in `full`, and each class's
+# `bypass` is exactly the complement of its `required`.
+
+version: 1
+
+# Jobs that run on pull_request or merge_group. `full` requires all of them.
+jobs:
+  - ci:deploy-skip-proof
+  - ci:query-builders
+  - ci:fmt
+  - ci:writer-ownership
+  - ci:clippy
+  - ci:test
+  - ci:generated-docs
+  - ci:build
+  - ci:wasm
+  - ci:wasm-explorer
+  - ci:check
+  - ci:source-size
+  - ci:lint-markdown
+  - ci:shacl-write-path
+  - ci:conformance
+  - ci:repository-pendant-source
+  - nix:build
+
+# Jobs an event leaves to the other event, by the workflow's own `if:`. The
+# aggregate gate for that event does not require them; the other event does.
+events:
+  pull_request:
+    deferred:
+      - ci:wasm          # browser harnesses run in the merge queue
+      - ci:wasm-explorer
+  merge_group:
+    deferred:
+      - ci:lint-markdown  # already passed on the PR head
+
+# First match wins. Order matters: the `full` rules come first so a source,
+# manifest, shape or workflow path can never be captured by a cheaper class.
+rules:
+  - class: full
+    globs:
+      - "src/**"
+      - "crates/**"
+      - "bindings/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "build.rs"
+      - "shapes/**"
+      - "ontologies/**"
+      - "queries/**"
+      - ".github/**"
+      - "scripts/ci/**"
+      - "ci/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "justfile"
+      - ".pre-commit-config.yaml"
+  - class: wasm
+    globs:
+      - "wasm/**"
+  - class: changelog
+    globs:
+      - "CHANGELOG.md"
+  - class: test
+    globs:
+      - "tests/**"
+      - "test-fixtures/**"
+      - "proptest-regressions/**"
+  - class: docs
+    globs:
+      - "docs/**"
+      - "*.md"
+
+classes:
+  full:
+    description: Source, manifests, shapes, workflows, CI scripts, or anything unmatched.
+    required: all
+    bypass: {}
+
+  docs:
+    description: The book and top-level Markdown only.
+    required:
+      - ci:check
+      - ci:lint-markdown
+      - ci:generated-docs
+      - ci:source-size
+    bypass:
+      ci:deploy-skip-proof: no deploy prefix or skip list changed
+      ci:query-builders: no client builder source changed
+      ci:fmt: no Rust changed
+      ci:writer-ownership: no Rust or test changed
+      ci:clippy: no Rust changed
+      ci:test: no Rust or test changed
+      ci:build: no Rust or manifest changed
+      ci:wasm: no wasm source or manifest changed
+      ci:wasm-explorer: no wasm source or manifest changed
+      ci:shacl-write-path: no shape, gate or Rust changed
+      ci:conformance: no Rust or shape changed
+      ci:repository-pendant-source: no pendant source changed
+      nix:build: no flake, manifest or Rust changed
+
+  changelog:
+    description: CHANGELOG.md only.
+    required:
+      - ci:check
+      - ci:lint-markdown
+    bypass:
+      ci:deploy-skip-proof: no deploy prefix or skip list changed
+      ci:query-builders: no client builder source changed
+      ci:fmt: no Rust changed
+      ci:writer-ownership: no Rust or test changed
+      ci:clippy: no Rust changed
+      ci:test: no Rust or test changed
+      ci:generated-docs: the changelog is not a generated doc
+      ci:build: no Rust or manifest changed
+      ci:wasm: no wasm source or manifest changed
+      ci:wasm-explorer: no wasm source or manifest changed
+      ci:source-size: no source file changed size
+      ci:shacl-write-path: no shape, gate or Rust changed
+      ci:conformance: no Rust or shape changed
+      ci:repository-pendant-source: no pendant source changed
+      nix:build: no flake, manifest or Rust changed
+
+  test:
+    description: Integration tests, fixtures and proptest regressions only; no src/.
+    required:
+      - ci:fmt
+      - ci:writer-ownership
+      - ci:clippy
+      - ci:test
+      - ci:build
+      - ci:check
+      - ci:source-size
+      - ci:shacl-write-path
+      - ci:conformance
+    bypass:
+      ci:deploy-skip-proof: no deploy prefix or skip list changed
+      ci:query-builders: no client builder source changed
+      ci:generated-docs: tests do not feed generated docs
+      ci:wasm: the browser harness does not build tests/
+      ci:wasm-explorer: the browser bundle does not build tests/
+      ci:lint-markdown: no Markdown changed
+      ci:repository-pendant-source: no pendant source changed
+      nix:build: the Nix package does not build tests/
+
+  wasm:
+    description: The wasm/ crates only (outside the root workspace).
+    required:
+      - ci:check
+      - ci:source-size
+      - ci:wasm
+      - ci:wasm-explorer
+    bypass:
+      ci:deploy-skip-proof: no deploy prefix or skip list changed
+      ci:query-builders: no client builder source changed
+      ci:fmt: root fmt does not cover the excluded wasm crates
+      ci:writer-ownership: root crate unchanged
+      ci:clippy: root crate unchanged
+      ci:test: root crate unchanged
+      ci:generated-docs: wasm does not feed generated docs
+      ci:build: root crate unchanged
+      ci:lint-markdown: no top-level Markdown changed
+      ci:shacl-write-path: root crate unchanged
+      ci:conformance: root crate unchanged
+      ci:repository-pendant-source: no pendant source changed
+      nix:build: the Nix package does not build wasm/
+
+  release:
+    description: A release-plz PR that only bumps versions and the changelog.
+    head_ref_prefix: release-plz-
+    paths:
+      - CHANGELOG.md
+      - Cargo.toml
+      - Cargo.lock
+      - bindings/python/Cargo.toml
+      - bindings/python/Cargo.lock
+    required:
+      - ci:fmt
+      - ci:build
+      - ci:check
+      - ci:generated-docs
+      - ci:deploy-skip-proof
+      - ci:lint-markdown
+    bypass:
+      ci:query-builders: a version bump changes no client builder
+      ci:writer-ownership: a version bump changes no code; main push reruns it
+      ci:clippy: a version bump changes no code; main push reruns it
+      ci:test: a version bump changes no code; main push reruns it
+      ci:wasm: a version bump changes no code; nightly reruns it
+      ci:wasm-explorer: a version bump changes no code; nightly reruns it
+      ci:source-size: no source file changed size
+      ci:shacl-write-path: a version bump changes no code; main push reruns it
+      ci:conformance: a version bump changes no code; main push reruns it
+      ci:repository-pendant-source: no pendant source changed
+      nix:build: a version bump changes no code; main push reruns it

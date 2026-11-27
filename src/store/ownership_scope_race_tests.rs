@@ -1,6 +1,27 @@
 use super::*;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+/// Retry `op` only while its latch acquisition reports transient flock
+/// contention, for at most five seconds. Any other error returns at once.
+///
+/// The latch's production contract is non-blocking, and that stays as it is.
+/// In a shared test process, though, a sibling test's `Command::spawn` forks
+/// while this fixture's latch fd is open. The child keeps that open file
+/// description, and the flock on it, until `exec` closes it (CLOEXEC). For
+/// that short window `try_lock` sees this test's own released lock as
+/// "would block". This is temporary contention, not admission or refusal.
+fn uncontended<T>(mut op: impl FnMut() -> Result<T>) -> Result<T> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match op() {
+            Err(e) if e.to_string().contains("would block") && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            other => return other,
+        }
+    }
+}
 
 /// These pauses are inside the actual callback / after the actual SQL call,
 /// not a reimplementation of admission. Both producers have bounded waits.
@@ -78,7 +99,7 @@ fn retirement_cannot_cross_the_callback_or_physical_sql_completion_boundary() {
 #[test]
 fn exclusive_transition_blocks_new_scopes_and_temporary_contention_is_not_admission() {
     let mut f = Fixture::new();
-    let token = ownership_latch::exclusive(&f.journal).unwrap();
+    let token = uncontended(|| ownership_latch::exclusive(&f.journal)).unwrap();
     let before = snapshot(&f.store);
     assert!(
         f.store
@@ -87,10 +108,9 @@ fn exclusive_transition_blocks_new_scopes_and_temporary_contention_is_not_admiss
     );
     assert_eq!(snapshot(&f.store), before);
     drop(token);
-    f.store
-        .ownership_transaction(|s| write(s, "positive"))
-        .unwrap();
-    super::super::super::ownership_journal::advance(&f.journal, &f.active(), &f.retiring())
+    uncontended(|| f.store.ownership_transaction(|s| write(s, "positive"))).unwrap();
+    let (active, retiring) = (f.active(), f.retiring());
+    uncontended(|| super::super::super::ownership_journal::advance(&f.journal, &active, &retiring))
         .unwrap();
     assert!(f.store.ownership_operation(|s| write(s, "stale")).is_err());
 }

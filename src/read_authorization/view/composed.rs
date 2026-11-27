@@ -16,8 +16,44 @@ pub struct ComposedReadView {
     view: ReadView,
     bindings: BTreeMap<String, (crate::graph_catalog::Route, u64)>,
     deadline: Instant,
+    /// Phase 2: the pooled composition connection this view reads through,
+    /// returned (and cleaned) when the view drops. `None` for scratch views.
+    checkout: Option<crate::store::composition::Checkout>,
     // Drop scratch state before releasing its connection reservation.
     _permit: super::ComposedReadPermit,
+}
+
+impl Drop for ComposedReadView {
+    fn drop(&mut self) {
+        if let Some(mut checkout) = self.checkout.take() {
+            // Hand the composed store back so the checkout can clean and
+            // return its connection; the permit drops after, as before.
+            if let Some(placeholder) = crate::store::composition::placeholder() {
+                checkout.restore(std::mem::replace(&mut self.view.store, placeholder));
+            }
+            drop(checkout);
+        }
+    }
+}
+
+impl ComposedReadView {
+    /// Assemble a Phase 2 attached view from already-checked parts.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(super) fn attached(
+        view: ReadView,
+        bindings: BTreeMap<String, (crate::graph_catalog::Route, u64)>,
+        deadline: Instant,
+        checkout: crate::store::composition::Checkout,
+        permit: super::ComposedReadPermit,
+    ) -> Self {
+        Self {
+            view,
+            bindings,
+            deadline,
+            checkout: Some(checkout),
+            _permit: permit,
+        }
+    }
 }
 
 impl AuthorizedRead {
@@ -125,6 +161,7 @@ impl AuthorizedRead {
             view,
             bindings,
             deadline,
+            checkout: None,
             _permit: permit,
         })
     }

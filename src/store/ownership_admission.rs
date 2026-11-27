@@ -135,7 +135,7 @@ pub(super) enum MarkerRead {
 }
 
 #[cfg(unix)]
-fn owner_only_regular(path: &Path, what: &str, deny_mask: u32) -> Result<fs::Metadata> {
+pub(super) fn owner_only_regular(path: &Path, what: &str, deny_mask: u32) -> Result<fs::Metadata> {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     let meta = fs::symlink_metadata(path).map_err(|e| refused(format!("{what}: {e}")))?;
     let euid = rustix::process::geteuid().as_raw();
@@ -162,7 +162,7 @@ fn owner_only_regular(_: &Path, what: &str, _: u32) -> Result<fs::Metadata> {
 /// path. Never opens a descriptor on the database: closing any descriptor of
 /// that file drops every POSIX fcntl lock this process holds on it, including
 /// SQLite's, so a check must not open and close one (4qv review).
-fn database(path: &Path) -> Result<(PathBuf, Database)> {
+pub(super) fn database(path: &Path) -> Result<(PathBuf, Database)> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;

@@ -61,8 +61,8 @@ const CLASSES: &[(&str, &str, FenceClass)] = &[
 /// Tables created on demand by a reviewed derivation (projections).
 const DERIVED_PREFIXES: &[(&str, &str)] = &[("qp_proj_", "g")];
 
-const FENCE_TABLE: &str = "routed_graph_fence";
-const SOURCE_FENCE_TABLE: &str = "routed_source_fence";
+pub(super) const FENCE_TABLE: &str = "routed_graph_fence";
+pub(super) const SOURCE_FENCE_TABLE: &str = "routed_source_fence";
 const SOURCE_TRIGGERS: [&str; 2] = [
     "quipu_routed_fence_transactions_source_insert",
     "quipu_routed_fence_transactions_source_update",

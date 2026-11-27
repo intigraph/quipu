@@ -308,3 +308,11 @@ fn receiver_attempt_authority_is_never_carried() {
     assert_eq!(disposition("knot_attempts"), Some(Disposition::Excluded));
     assert!(!carried().contains(&"knot_attempts"));
 }
+
+#[test]
+fn participant_commit_decisions_and_fences_are_never_carried() {
+    for table in ["participant_journal", "participant_intents"] {
+        assert_eq!(disposition(table), Some(Disposition::Excluded), "{table}");
+        assert!(!carried().contains(&table), "{table}");
+    }
+}

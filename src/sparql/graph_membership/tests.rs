@@ -598,10 +598,10 @@ fn value_source_declines_unproved_shapes_and_index() {
         as_of_tx: Some(1),
         ..Default::default()
     };
-    assert!(
-        object_source(&store, &historic, &pattern, &seed)
-            .unwrap()
-            .is_none()
+    // aegis-oav5: as_of keeps the full value index, never a current-only one.
+    assert_eq!(
+        object_source(&store, &historic, &pattern, &seed).unwrap(),
+        Some("facts INDEXED BY idx_vaet")
     );
     store
         .conn
@@ -889,4 +889,91 @@ fn unbound_predicate_presence_keeps_reads_on_covering_indexes() {
         "SELECT (\"yes\" AS ?probe) WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}missing> ?v }} }} LIMIT 1"
     );
     assert!(query(&store, &missing).unwrap().rows().is_empty());
+}
+
+/// aegis-oav5: an `as_of_tx` literal lookup keeps the `idx_vaet` seek and returns
+/// exactly the rows visible at that transaction (a later assertion is hidden).
+#[test]
+fn as_of_literal_lookup_keeps_value_seek_with_temporal_parity() {
+    let (mut store, graph) = fixture();
+    index(&store);
+    let max_tx = |store: &Store| -> i64 {
+        store
+            .conn
+            .query_row("SELECT MAX(tx) FROM facts", [], |r| r.get(0))
+            .unwrap()
+    };
+    let before = max_tx(&store);
+    ingest_rdf_to_graph(
+        &mut store,
+        "<https://example.org/late> <https://example.org/title> \"SEEDS alpha\" .".as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-01-02T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let after = max_tx(&store);
+    assert!(after > before);
+    let (pattern, _) = shape();
+    let seed = Bindings::from_iter([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    for tx in [before, after] {
+        let ctx = TemporalContext {
+            graph: GraphScope::Named(vec![graph]),
+            as_of_tx: Some(tx),
+            ..TemporalContext::default()
+        };
+        assert_eq!(
+            object_source(&store, &ctx, &pattern, &seed).unwrap(),
+            Some("facts INDEXED BY idx_vaet")
+        );
+    }
+    let q = format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }}");
+    let count_at = |tx: Option<i64>| {
+        crate::sparql::query_temporal(
+            &store,
+            &q,
+            &TemporalContext {
+                as_of_tx: tx,
+                ..TemporalContext::default()
+            },
+        )
+        .unwrap()
+        .rows()
+        .len()
+    };
+    assert_eq!(
+        count_at(Some(before)),
+        1,
+        "later assertion hidden at the earlier tx"
+    );
+    assert_eq!(count_at(Some(after)), 2, "both rows visible at head");
+    assert_eq!(
+        count_at(Some(after)),
+        count_at(None),
+        "as_of=head equals current"
+    );
+    let title = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let value = crate::Value::Str("SEEDS alpha".into()).to_bytes();
+    let plans: Vec<String> = store
+        .conn
+        .prepare(
+            "EXPLAIN QUERY PLAN SELECT e,a,v FROM facts INDEXED BY idx_vaet \
+             WHERE a=?1 AND v IN (?2,?3) AND g=?4 AND tx<=?5",
+        )
+        .unwrap()
+        .query_map(rusqlite::params![title, value, value, graph, before], |r| {
+            r.get(3)
+        })
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert!(
+        plans
+            .iter()
+            .any(|p| p.contains("idx_vaet") && p.contains("v=?")),
+        "as_of value seek required: {plans:?}"
+    );
 }

@@ -44,7 +44,7 @@ jobs:
     name: Select optional PR surfaces
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-pr-paths-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-pr-paths-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     outputs:
@@ -63,7 +63,7 @@ jobs:
     name: Deployment skip prefix proof
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-deploy-skip-proof-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-2', github.event.pull_request.number) || format('quipu-deploy-skip-proof-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     timeout-minutes: 5
@@ -81,7 +81,7 @@ jobs:
     name: Typed SPARQL client builders
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-query-builders-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-3', github.event.pull_request.number) || format('quipu-query-builders-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -112,7 +112,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-fmt-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-4', github.event.pull_request.number) || format('quipu-fmt-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -127,7 +127,7 @@ jobs:
     name: Writer ownership (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-writer-ownership-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-writer-ownership-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     strategy:
@@ -157,6 +157,18 @@ jobs:
           cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --bin quipu-server knot_durable::owner -- --test-threads=2 --color never | tee "$RUNNER_TEMP/enrolled-owner-tests.txt"
           grep -Fx 'test knot_durable::owner::dataset::tests::query_acceptance::enrolled_query_bags_paths_and_rdf_terms_match_single_file_baseline ... ok' "$RUNNER_TEMP/enrolled-owner-tests.txt"
           grep -Fx 'test knot_durable::owner::dataset::tests::read_http::enrolled_http_query_rechecks_credentials_grants_and_retains_response_budget ... ok' "$RUNNER_TEMP/enrolled-owner-tests.txt"
+      # aegis-4qv.1: the `quipu pilot` operator verbs, driven through the binary.
+      - name: Pilot operator CLI refusals and lab sequence
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --test pilot_cli -- --test-threads=2 --color never | tee "$RUNNER_TEMP/pilot-cli-tests.txt"
+          grep -Fx 'test lab_sequence_export_import_fence_cutover_keeps_bindings ... ok' "$RUNNER_TEMP/pilot-cli-tests.txt"
+          grep -Fx 'test each_guard_refuses_and_leaves_the_target_byte_identical ... ok' "$RUNNER_TEMP/pilot-cli-tests.txt"
+          grep -Fx 'test catalog_write_validates_and_refuses_group_writable ... ok' "$RUNNER_TEMP/pilot-cli-tests.txt"
       # aegis-n0wc.5: the library enrolled controls (shared S1 helper, graph-set
       # owners and the graph_sets startup refusal) are not reached by the binary
       # filter above. Named-test proofs keep this step from passing on zero tests.
@@ -171,6 +183,47 @@ jobs:
           grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set::an_unenrolled_file_or_a_missing_member_refuses_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test config::graph_sets::tests::enabled_startup_refuses_in_one_line_naming_the_reason ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
           grep -Fx 'test store::graph_router::tests::enrolled::tls::enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
+          grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::enabled_startup_admits_two_enrolled_set_files_and_each_commits_while_the_other_is_held ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
+          grep -Fx 'test store::graph_router::tests::enrolled::tls::graph_set_startup::one_unenrolled_set_file_refuses_the_whole_startup_with_no_plain_open_fallback ... ok' "$RUNNER_TEMP/enrolled-lib-tests.txt"
+      # aegis-2g7f: mini-Quipu M1 fork registry entry (docs/design/mini-quipu.md).
+      # Named-test proofs keep this step from passing on zero tests.
+      - name: Mini-Quipu fork registry entry and refusals X1-X5
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --lib -- graph_owner::graph_set::mini_fork --test-threads=2 --color never | tee "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::whole_set_fork_from_one_routed_owner_records_the_expected_cut_and_digest ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::legacy_fork_digest_equals_the_local_sync_base_slice_hash ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::sabotage_a_different_digest_construction_is_detected ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x1_routed_writer_claim_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x2_partial_catalog_set_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x3_prefix_or_pattern_member_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x4_multi_file_set_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+          grep -Fx 'test store::graph_owner::graph_set::mini_fork::tests::x5_fork_from_a_mini_quipu_refuses_with_nothing_written ... ok' "$RUNNER_TEMP/mini-fork-tests.txt"
+      # aegis-7tt P3: the read-side provenance object and the metric share one
+      # classifier. P4: host and session are redacted, never omitted, for a
+      # reader without the grant, after classification. Named-test proofs keep this step from passing on zero tests.
+      - name: Read-side write provenance equals the metric class
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --lib -- write_provenance_read --test-threads=2 --color never | tee "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_signed_write_with_a_forged_session_reads_the_binding_session_as_effective ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_bearer_write_reads_every_field_as_declared ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_transaction_with_no_declaration_row_reads_unknown_no_row ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::a_read_only_open_of_a_store_without_the_table_reads_unknown_no_table ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::tests::the_read_completeness_equals_the_metric_class_for_the_same_request ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::an_anonymous_read_shows_redacted_for_host_and_session_never_an_omission ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::a_legacy_shared_bearer_read_shows_redacted_for_host_and_session ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::a_named_bearer_read_shows_host_and_session_values ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::an_attested_session_read_shows_host_and_session_values ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
+          grep -Fx 'test write_provenance_read::disclose_tests::completeness_and_state_are_the_same_for_every_reader ... ok' "$RUNNER_TEMP/provenance-read-tests.txt"
       - name: Compile the server on Windows without Unix pilot modules
         if: runner.os == 'Windows'
         run: cargo check --locked --no-default-features --features shacl,onnx,server --bin quipu-server
@@ -180,7 +233,7 @@ jobs:
     name: Bundled ONNX runtime (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-bundled-runtime-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-bundled-runtime-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     strategy:
@@ -209,7 +262,7 @@ jobs:
     name: Clippy (${{ matrix.name }})
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-clippy-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-2', github.event.pull_request.number) || format('quipu-clippy-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     strategy:
@@ -258,7 +311,7 @@ jobs:
     name: Test (${{ matrix.name }})
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-test-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-3', github.event.pull_request.number) || format('quipu-test-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     env:
@@ -371,7 +424,7 @@ jobs:
     name: Generated docs drift
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-generated-docs-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-4', github.event.pull_request.number) || format('quipu-generated-docs-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     env:
@@ -400,7 +453,7 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-extended-features-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-extended-features-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     env:
@@ -516,7 +569,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-build-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-2', github.event.pull_request.number) || format('quipu-build-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -554,7 +607,7 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-build-full-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-3', github.event.pull_request.number) || format('quipu-build-full-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -611,7 +664,7 @@ jobs:
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-wasm-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-4', github.event.pull_request.number) || format('quipu-wasm-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     timeout-minutes: 45
@@ -692,7 +745,7 @@ jobs:
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-wasm-explorer-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-wasm-explorer-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     timeout-minutes: 45
@@ -717,7 +770,7 @@ jobs:
     name: Pre-commit checks
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-check-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-2', github.event.pull_request.number) || format('quipu-check-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -813,7 +866,7 @@ jobs:
     name: Source and shape invariants
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-source-size-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-3', github.event.pull_request.number) || format('quipu-source-size-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -862,7 +915,7 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-load-test-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-4', github.event.pull_request.number) || format('quipu-load-test-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     timeout-minutes: 20
@@ -928,7 +981,7 @@ jobs:
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-22.04
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-query-perf-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-query-perf-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     timeout-minutes: 40
@@ -1010,7 +1063,7 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-lint-markdown-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-2', github.event.pull_request.number) || format('quipu-lint-markdown-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -1037,7 +1090,7 @@ jobs:
     name: SHACL write-path conformance
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-shacl-write-path-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-3', github.event.pull_request.number) || format('quipu-shacl-write-path-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -1097,7 +1150,7 @@ jobs:
     needs: [clippy, test, build, check, shacl-write-path, generated-docs, conformance, deploy-skip-proof]
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-release-correctness-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-4', github.event.pull_request.number) || format('quipu-release-correctness-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -1119,7 +1172,7 @@ jobs:
     needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-extended-correctness-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-extended-correctness-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -1140,7 +1193,7 @@ jobs:
     name: Repository pendant source controls
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-2' || format('quipu-repository-pendant-source-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-2', github.event.pull_request.number) || format('quipu-repository-pendant-source-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     timeout-minutes: 5
@@ -1174,7 +1227,7 @@ jobs:
     needs: [fmt, query-builders, release-correctness, extended-correctness, bundled-runtime, wasm-explorer, nightly-wheels, nightly-merge-load, repository-pendant-source]
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-3' || format('quipu-nightly-gate-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-3', github.event.pull_request.number) || format('quipu-nightly-gate-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     steps:
@@ -1196,7 +1249,7 @@ jobs:
     needs: nightly-gate
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-4' || format('quipu-nightly-publish-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-4', github.event.pull_request.number) || format('quipu-nightly-publish-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     permissions:
@@ -1220,7 +1273,7 @@ jobs:
     needs: [nightly-gate, nightly-publish]
     runs-on: ubuntu-latest
     concurrency:
-      group: "${{ github.event_name == 'pull_request' && 'quipu-pr-runner-1' || format('quipu-nightly-failure-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
+      group: "${{ github.event_name == 'pull_request' && format('quipu-pr-{0}-runner-1', github.event.pull_request.number) || format('quipu-nightly-failure-{0}-{1}-{2}-{3}', github.workflow, github.run_id, github.run_attempt, strategy.job-index) }}"
       queue: max
       cancel-in-progress: false
     permissions:

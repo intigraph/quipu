@@ -121,6 +121,7 @@ impl WriteKind {
             | "/impact"
             | "/embed_backfill"
             | "/embed_backfill_graph"
+            | "/embed_refresh"
             | "/align/apply" => Self::Derive,
             "/ontology" => Self::Ontology,
             "/reason" => Self::Reasoner,

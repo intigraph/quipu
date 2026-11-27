@@ -296,3 +296,6 @@ fn enrolled_factory_admits_over_verified_tls_and_refuses_untrusted_tls() {
 
 #[path = "graph_set_enrolled_tls_tests.rs"]
 mod graph_set;
+
+#[path = "graph_set_startup_tls_tests.rs"]
+mod graph_set_startup;

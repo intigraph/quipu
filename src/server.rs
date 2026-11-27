@@ -433,7 +433,7 @@ async fn main() {
     }
 
     let attest_store = state.clone();
-    graph_sets_startup::check(&config);
+    graph_sets_startup::start(&config, &state);
     let app = knot_durable::mount_pilot(api_routes(), &config, &state);
     let app = protected_app(
         app,
@@ -601,10 +601,7 @@ fn api_routes() -> Router<SharedStore> {
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
-        .route(
-            "/embed_backfill_graph",
-            post(graph_backfill::embed_backfill_graph),
-        )
+        .merge(graph_backfill::routes())
         // Entity + history
         .route("/identity", post(auth::session_identity))
         .route("/entity", get(entity_query_conneg))

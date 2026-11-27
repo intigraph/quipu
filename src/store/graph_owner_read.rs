@@ -15,6 +15,9 @@ pub struct CapturedRead<'a> {
     pub local_tx: i64,
     /// Read-only connection in the snapshot that produced the coordinate.
     pub store: &'a Store,
+    /// This participant is the configured legacy file (owner of ROOT), the
+    /// only file an attached composition may read in term space 0.
+    pub legacy: bool,
 }
 
 impl Owner {
@@ -27,6 +30,19 @@ impl Owner {
     pub fn read_strict<T>(
         owners: &[&Self],
         deadline: Instant,
+        query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
+    ) -> Result<T> {
+        Self::read_strict_with(owners, deadline, |_| Ok(()), query)
+    }
+
+    /// [`Self::read_strict`], plus `under_fence`, which runs after every
+    /// participant snapshot is captured and BEFORE the commit fences are
+    /// released. A composition connection begins its own snapshot there, so it
+    /// observes exactly the captured cut (aegis-n0wc.5 Phase 2).
+    pub fn read_strict_with<T>(
+        owners: &[&Self],
+        deadline: Instant,
+        under_fence: impl FnOnce(&[CapturedRead<'_>]) -> Result<()>,
         query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
     ) -> Result<T> {
         let check_deadline = || {
@@ -97,13 +113,17 @@ impl Owner {
             check_deadline()?;
             snapshots.push(reader.conn.unchecked_transaction()?);
             Self::check_identity(&owner.route, reader)?;
+            super::graph_set::participant::check_read_fence(reader)?;
             captured.push(CapturedRead {
                 route: &owner.route,
                 catalog_revision: first.catalog.revision(),
                 local_tx: reader.latest_tx_id()?,
                 store: reader,
+                legacy: owner.route.graph == crate::schema::ROOT_GRAPH_IRI,
             });
         }
+        check_deadline()?;
+        under_fence(&captured)?;
         check_deadline()?;
         // The last captured head is a common published instant for this
         // cooperating-owner prototype. Evaluation uses retained WAL snapshots,

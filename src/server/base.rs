@@ -218,6 +218,7 @@ pub(crate) async fn metrics_handler(
         body.push_str(&replica.metrics());
     }
     super::request_middleware::render_request_starts(&mut body);
+    super::admission::shed::render_metrics(&mut body);
     super::update::render_update_paths(&mut body);
     super::handle::writer_timing::render(&mut body);
     Ok((
@@ -562,6 +563,7 @@ impl AppError {
                 StatusCode::REQUEST_TIMEOUT
             }
             quipu::Error::WriteAdmissionTimeout { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            quipu::Error::ReadAdmissionShed { .. } => StatusCode::TOO_MANY_REQUESTS,
             // A join explosion is a property of the QUERY (its error names the
             // limit and how to fix the query) — 422: well-formed, unprocessable
             // as written. Distinct from 408 so dashboards can tell "slow" from
@@ -576,6 +578,24 @@ impl AppError {
                 axum::Json(json!({
                     "error": self.0.to_string(), "code": "write_not_started",
                     "write_started": false, "waited_ms": waited_ms,
+                })),
+            )
+                .into_response();
+        }
+        if let quipu::Error::ReadAdmissionShed {
+            waited_ms,
+            class,
+            reason,
+            retry_after_s,
+        } = &self.0
+        {
+            return (
+                status,
+                [(axum::http::header::RETRY_AFTER, retry_after_s.to_string())],
+                axum::Json(json!({
+                    "error": self.0.to_string(), "code": "read_not_started",
+                    "read_started": false, "waited_ms": waited_ms,
+                    "class": class, "reason": reason, "retry_after_s": retry_after_s,
                 })),
             )
                 .into_response();

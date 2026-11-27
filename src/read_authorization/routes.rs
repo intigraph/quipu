@@ -57,6 +57,7 @@ const CENSUS: &[&str] = &[
     "/diff",
     "/embed_backfill",
     "/embed_backfill_graph",
+    "/embed_refresh",
     "/entity",
     "/entity/{iri}",
     "/entity/{iri}/html",

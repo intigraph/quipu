@@ -87,6 +87,39 @@ Two budgets bound a read; both answer HTTP 408 when they run out:
 The first message points at queueing (capacity or other callers), the second
 at the query itself.
 
+## Early read shedding
+
+`read_admission_wait_ms` (default `0` = off) bounds how long a read waits for
+an ordinary reader. Off, a queued read waits until its request budget ends and
+then answers 408 with no retry hint. On, a read that is not admitted within
+`min(read_admission_wait_ms, remaining request budget)` is refused **before it
+runs** with HTTP 429, a `Retry-After` header, and a JSON body:
+
+```json
+{"code": "read_not_started", "read_started": false, "class": "normal",
+ "reason": "wait_exceeded", "waited_ms": 1500, "retry_after_s": 2}
+```
+
+A shed read never touched the store, so it is always safe to retry after the
+indicated delay. A deadline that expires after execution has started still
+answers 408.
+
+Callers that are not latency-critical (status displays, dashboards, pollers)
+send `X-Quipu-Priority: background`. A background read never queues: it runs
+only while more than `read_background_reserve` permits are free, otherwise it
+is refused at once with 429. The header can only lower a request's priority;
+any other value, or a duplicated header, is treated as `normal`.
+
+`Retry-After` is estimated from the measured read service time and the number
+of waiting reads, clamped to 1–30 seconds. Shed counts appear on `/metrics` as
+`quipu_read_shed_total{reason}`.
+
+With read processes on and shedding armed, `all read processes are busy` is a
+429 with `Retry-After` (reason `workers_busy`) instead of a bare 503.
+Transport, identity and response-budget failures of a worker stay 503.
+
+Rollback: set `read_admission_wait_ms = 0` and restart.
+
 ## Identical overlapping queries
 
 `[quipu.server] query_singleflight = true` opts into per-process sharing of
@@ -120,6 +153,8 @@ follows an upstream and serves its own children. These add read capacity on
 | `query_singleflight` | `false` | Share only overlapping identical local reads; no completed-result cache |
 | `heavy_read_operations` | `[]` | Cooperative cap; currently accepts only `["owner-rows"]` |
 | `heavy_read_permits` | `1` | Max concurrent declared heavy reads; `0 < K < ordinary readers` |
+| `read_admission_wait_ms` | `0` | Shed reads not admitted within this many ms with 429 + `Retry-After`; `0` = off |
+| `read_background_reserve` | `1` | Permits a `background` read leaves free for normal reads |
 | `memory_budget_mib` | unset | One aggregate budget for primary and workers; required for workers |
 | `read_processes` | `0` | Read-only worker processes; `0` keeps in-process serving |
 | `read_process_base_port` | `3031` | First loopback port for workers |

@@ -37,6 +37,12 @@ pub use dataset::GraphSetDataset;
 mod router;
 pub use router::{GraphSetRouter, SetTarget};
 
+#[path = "mini_fork.rs"]
+pub mod mini_fork;
+
+#[path = "participant_commit.rs"]
+pub mod participant;
+
 impl GraphSetOwner {
     fn check_hooks(store: &Store) -> Result<()> {
         if store.pending_embed.is_some()
@@ -78,9 +84,15 @@ impl GraphSetOwner {
         Ok(Self { owner, catalog })
     }
 
+    /// Test latch: hold this owner's writer to prove other owners never wait.
+    #[cfg(all(test, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+    pub(crate) fn hold_writer_for_test(&self) -> parking_lot::FairMutexGuard<'_, Store> {
+        self.owner.writer.lock()
+    }
+
     /// Every configured member must already be a committed graph in the file.
     fn check_members(owner: &Owner, catalog: &GraphSetCatalog, canonical: &str) -> Result<()> {
-        owner.read(|store| {
+        owner.read_metadata(|store| {
             for member in catalog.owner_graphs(canonical)? {
                 let id = store
                     .committed_graph_id(member)?
@@ -141,24 +153,13 @@ impl GraphSetOwner {
         requests: &[WriteRequest<'_>],
         batch: &GraphSetBatch,
     ) -> Result<Vec<(String, i64)>> {
-        let plan = self.catalog.plan_batch(requests)?;
-        let supplied: BTreeSet<_> = batch.graphs.iter().map(|(g, _)| g.as_str()).collect();
-        if plan.owner != self.owner.catalog_route()
-            || batch.store_id != plan.owner.store_id
-            || batch.log_epoch != plan.owner.log_epoch
-            || supplied.len() != batch.graphs.len()
-            || supplied != plan.graphs.into_iter().collect()
-            || crate::transaction_auth::current_attestation().is_some()
-        {
-            return Err(refused(
-                "batch does not select exactly this unsigned graph-set owner",
-            ));
-        }
+        let supplied = self.check_batch(requests, batch)?;
         let _admission = self.owner.admit()?;
         let mut store = self.owner.writer.owned()?;
         self.owner.placement.verify()?;
         Owner::check_identity(self.owner.catalog_route(), &store)?;
         Self::check_hooks(&store)?;
+        participant::check_write_fence(&store)?;
         let native = batch
             .graphs
             .iter()
@@ -190,6 +191,29 @@ impl GraphSetOwner {
             .zip(heads)
             .map(|((graph, _), (_, tx))| (graph.clone(), tx))
             .collect())
+    }
+
+    /// Pre-queue validation shared by local and participant batches: the
+    /// requests select exactly this unsigned owner and the batch its members.
+    fn check_batch<'b>(
+        &self,
+        requests: &[WriteRequest<'_>],
+        batch: &'b GraphSetBatch,
+    ) -> Result<BTreeSet<&'b str>> {
+        let plan = self.catalog.plan_batch(requests)?;
+        let supplied: BTreeSet<_> = batch.graphs.iter().map(|(g, _)| g.as_str()).collect();
+        if plan.owner != self.owner.catalog_route()
+            || batch.store_id != plan.owner.store_id
+            || batch.log_epoch != plan.owner.log_epoch
+            || supplied.len() != batch.graphs.len()
+            || supplied != plan.graphs.into_iter().collect()
+            || crate::transaction_auth::current_attestation().is_some()
+        {
+            return Err(refused(
+                "batch does not select exactly this unsigned graph-set owner",
+            ));
+        }
+        Ok(supplied)
     }
 }
 

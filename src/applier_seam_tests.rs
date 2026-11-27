@@ -65,6 +65,7 @@ fn frames(
         context_graphs: vec![],
         tx: None,
         expected_store_id: store.store_id().unwrap(),
+        destination: Default::default(),
     };
     let limits = Limits {
         part_max_len,

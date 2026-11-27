@@ -10,6 +10,8 @@ pub mod attestation;
 pub mod attested_write;
 mod batches;
 pub mod changes;
+#[cfg(unix)]
+pub(crate) mod composition;
 pub mod conditional;
 pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
@@ -35,6 +37,12 @@ pub use routed_fence::{FenceClass, FencedColumn};
 /// Canonical producer slice copy between files (per-graph pilot parity).
 mod routed_slice;
 pub use routed_slice::{SliceFact, slice_multiset};
+/// Fenced reverse reconciliation of a routed graph back to legacy (pilot).
+mod routed_reverse;
+pub use routed_reverse::{
+    GraphFact, OwnerLock, ReversePlan, ReverseReceipt, ReverseState, WITNESS_STATE,
+    graph_multiset_sha256, lock_owner_file, validate_reverse_catalogs,
+};
 #[cfg(unix)]
 mod writer_lease;
 // Dormant enrollment inventory: native identity fields, no startup wiring.
@@ -43,6 +51,13 @@ mod ownership_admission;
 mod ownership_admission_fixture;
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_inventory;
+// Owner enrollment library API (aegis-4qv.2): S3 witness genesis, inventory, marker.
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub(crate) mod ownership_enroll;
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+mod ownership_enroll_pilot;
+#[cfg(all(unix, feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub use ownership_enroll_pilot::{PilotEnroll, enroll_pilot_owner};
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_journal;

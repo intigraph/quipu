@@ -16,6 +16,7 @@ use crate::store::Store;
 use probe_sql::{AS_OF_TEXT_SQL, CURRENT_TEXT_SQL};
 
 mod probe_sql;
+mod refresh_cursor;
 mod retention;
 mod scoped;
 mod scoring;

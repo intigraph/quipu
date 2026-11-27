@@ -42,6 +42,15 @@ verify the requested facts and preserve the same payload before retrying.
 These diagnostics do not change the configured request budget or bound direct
 protocol handlers that bypass tool-write admission.
 
+## Shed reads
+
+When `[quipu.server] read_admission_wait_ms` is positive, a read that cannot
+be admitted in time returns HTTP **429** with `Retry-After` and
+`code: "read_not_started"`, `read_started: false`. The read did not run, so
+retry after the indicated delay. Send `X-Quipu-Priority: background` on
+non-critical reads to be refused first instead of queueing. See
+[Read concurrency](read-concurrency.md#early-read-shedding).
+
 ## Unrecognized request fields
 
 Successful tool-backed JSON endpoints report unrecognized top-level request keys
@@ -230,6 +239,53 @@ fact transaction retain request-level audit only. Library/CLI writes without an
 HTTP identity and copied historical transactions have null local authentication
 evidence; a foreign actor is not proof of possession of a local credential. End-to-end MCP attribution
 requires the proxy to select the corresponding downstream Quipu credential.
+
+### Read-side provenance object
+
+Each entry of `GET /transactions` and `POST /entity_history` (and the MCP
+`quipu_transactions` and `quipu_entity_history` tools) carries an additive
+`provenance` object beside the unchanged `authenticated` and `declared` keys.
+It is computed on read, never stored:
+
+```json
+"provenance": {
+  "effective": {
+    "agent":   {"value": "urn:crew:signer", "basis": "attested"},
+    "session": {"value": "binding-s1",      "basis": "attested"},
+    "harness": {"value": "claude",          "basis": "declared"}
+  },
+  "superseded": {"session": {"value": "forged-session", "basis": "declared"}},
+  "completeness": "complete",
+  "state": "observed"
+}
+```
+
+- On an `attested_session` transaction the effective agent is the verified
+  principal and the effective session is the binding session. A declared
+  `X-Quipu-Agent` or `X-Quipu-Session` on that transaction appears only under
+  `superseded`. A signed row written before the binding session was persisted
+  has no effective session.
+- On any other transaction, including bearer writes, every field is
+  `declared`. Harness, host and model are always declared.
+- `completeness` is the class `quipu_write_provenance_total` counted for the
+  same request (`complete`, `partial` or `absent`), computed by the same
+  classifier, or `unknown` when there is no declaration to read.
+- `state` is `observed` when a declaration row exists, `unknown-no-row` when
+  the transaction wrote none (an engine write, an import, or a write from
+  before declarations were retained), and `unknown-no-table` on a read-only
+  open of a store that predates the table. An unknown state is not an empty
+  declaration.
+
+Host and session are disclosed only to an authenticated reader: a named
+bearer or an attested session. Any other reader, including an unauthenticated
+request on a no-auth server, the legacy shared bearer, and an in-process MCP
+call with no request identity, gets the literal string `"redacted"` as the
+`value` of `host` and `session` in `effective` and `superseded` (the `basis`
+is kept), and as their value in the `declared` block. A redacted field is
+never omitted, because an omission would read as "not declared". Agent,
+harness and model are readable under the same graph read authorization as
+the transaction `actor` and `source`. Redaction is applied after
+classification, so `completeness` and `state` are the same for every reader.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
 
@@ -2167,6 +2223,34 @@ between them rather than draining a large graph in one pass. Entities that
 exist only in named graphs are embedded from their named-graph facts, and they
 are searchable with `quipu_search` `graph=<IRI>`; unscoped search stays ROOT.
 
+### `POST /embed_refresh`
+
+Re-embed EXISTING vectors whose stored text no longer matches what the current
+entity text builder produces, for example after a builder change such as
+keeping every comment of the newest comment transaction. Entities whose vector
+text already matches are left alone, and entities with no current vector are
+skipped (the backfill routes fill those). Body, one selection form:
+
+- `{"entities": ["<IRI>", ...]}` examines exactly these (at most 256; a longer
+  list is refused, not truncated). Unknown IRIs come back in
+  `unknown_entities`.
+- `{"after": N}` (default `0`) walks entities holding a current vector with an
+  id greater than `N`, in id order.
+
+`max_entities` (default and maximum 256) bounds the entities examined per
+call. `dry_run` **defaults to `true`**: the call reports `would_change`
+without embedding or writing anything. Pass `"dry_run": false` to re-embed;
+the response then reports `changed`. Both forms also return `examined`,
+`unchanged`, `missing_skipped`, `empty_skipped`, `stale_skipped` (text or
+vector changed during the call, left for a later call) and `next_cursor`
+(pass it as `after` to resume; `null` when the walk is done).
+
+A refresh supersedes rather than overwrites: the old vector row is closed and
+the new one is written, both stamped with the same ISO-8601 instant, so
+temporal search at an earlier time still sees the old text. Entity snapshots
+are taken under the writer lock in batches of 32, embedded outside it, and
+rechecked before apply, like `/embed_backfill_graph`. Pace repeated calls.
+
 ### `GET /preview/{iri}`
 
 Return a preview rendering of an entity by IRI.
@@ -2272,10 +2356,15 @@ migration) are not counted as that client's writes:
 - `quipu_write_provenance_missing_total{client,field}` — commits missing a
   required field (`agent`, `harness`, `host`, `session`, `model`).
 
-A header that is present but blank counts as missing. A write signed with a
+A header value must be printable ASCII of at most 128 characters. A value that
+is blank, longer, or contains any other byte counts as missing and is not
+stored with the transaction; declarations stored before this limit (up to 1024
+bytes) still read back. A write signed with a
 verified `x-quipu-attestation` takes its agent and session from the key
 binding, so a signed client that omits those two headers can still be
-`complete`. Harness, host and model still come from the headers, and a
+`complete`. The transaction also records the binding's session as local
+credential evidence, which is never replicated or shared; bearer writes, and
+transactions committed before the server recorded it, have none. Harness, host and model still come from the headers, and a
 refused signature counts nothing. Coverage per client is
 `rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
 the process restarts, so use rates rather than raw values.
@@ -2843,6 +2932,12 @@ then tails `/changes?since=<watermark_tx>` (design: `docs/design/as-of-share.md`
 - `tx` is optional; without it the cut is taken at the head read inside the
   cut. `context_graphs` names further graphs the follower needs; their records
   are carried too. Unknown fields are refused.
+- `destination` is optional and defaults to `"outward"`. It governs the
+  declared write provenance each record carries (see below): only
+  `"internal"`, asked for by name, keeps the operational `host` and `session`
+  keys. Any other destination removes them structurally before the record is
+  serialized, and the manifest says `"declarations_scrubbed": ["host",
+  "session"]`. An internal cut's manifest says `"destination": "internal"`.
 - **Authorization:** the route is write-class. It requires an authenticated
   writer and is refused in read-only mode, until per-graph read authorization
   exists.
@@ -2861,7 +2956,13 @@ then tails `/changes?since=<watermark_tx>` (design: `docs/design/as-of-share.md`
   the stage; request a new cut.
 - Each record is `{op: "assert", tx, timestamp, actor, source, graph,
   entity, attribute, value, valid_from, valid_to}`, with values encoded as in
-  `/changes` (bytes as base64).
+  `/changes` (bytes as base64), plus `declared` when its origin transaction
+  has stored declarations (`agent`, `harness`, `model`, and `host` /
+  `session` only on an internal cut). An absent `declared` is unknown, not
+  "declared nothing"; a frozen graph's records carry none. A follower refuses,
+  with nothing written, any cut whose manifest is not internal but whose
+  records carry `host` or `session`. Declarations are data about the origin;
+  they never become the follower's authenticated identity.
 - The manifest's per-graph `digest` is SHA-256 over the graph's records as
   compact JSON with sorted keys, the lines sorted and joined by `\n`; its
   `scope_digest` is SHA-256 over `{"context_graphs": [...], "scope": [...]}`. A fact retracted after `T` reports `valid_to: null`, as its `/changes`

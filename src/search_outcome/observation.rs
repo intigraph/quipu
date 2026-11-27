@@ -281,7 +281,8 @@ fn error_summary(error: &crate::Error) -> Summary {
     let outcome = match error {
         crate::Error::QueryTimeout { .. }
         | crate::Error::RequestTimeout { .. }
-        | crate::Error::WriteAdmissionTimeout { .. } => Outcome::Timeout,
+        | crate::Error::WriteAdmissionTimeout { .. }
+        | crate::Error::ReadAdmissionShed { .. } => Outcome::Timeout,
         crate::Error::PolicyDenied(_) => Outcome::Refused,
         _ => Outcome::Error,
     };

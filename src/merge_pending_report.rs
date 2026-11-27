@@ -11,6 +11,10 @@ pub(crate) struct ReportRow {
     pub kind: Kind,
     pub held: bool,
     pub decision: Option<Decision<Value>>,
+    /// Origin transactions of this slot's incoming facts (P6 carriage); their
+    /// provenance is in the receipt's `carried` object.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub origin_txs: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,6 +49,7 @@ pub(super) fn rows(prepared: &crate::merge_session::Prepared) -> Vec<ReportRow> 
         .iter()
         .map(|(slot, p)| ReportRow {
             slot: slot.clone(),
+            origin_txs: Vec::new(),
             held: p.held,
             decision: prepared
                 .choices

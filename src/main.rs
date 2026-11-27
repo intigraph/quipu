@@ -78,6 +78,8 @@ mod cli_namespaces;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
+#[cfg(all(unix, feature = "ownership-witness-s3"))]
+mod cli_pilot;
 mod cli_pointer;
 mod cli_policy;
 mod cli_prime;
@@ -100,6 +102,11 @@ mod hooks_install;
 fn main() {
     quipu::write_kind::set_cli();
     let args: Vec<String> = std::env::args().collect();
+    // File-level pilot operator verbs exist only in a witness build.
+    #[cfg(all(unix, feature = "ownership-witness-s3"))]
+    if args.get(1).map(String::as_str) == Some("pilot") {
+        return cli_pilot::run(&args);
+    }
 
     match cli_input::check(&args) {
         Ok(cli_input::Action::Help(path)) => {

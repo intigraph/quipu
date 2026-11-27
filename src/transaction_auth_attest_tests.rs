@@ -338,3 +338,112 @@ fn refuse_if_refused_stops_non_transactional_work_for_a_refused_request() {
     // Outside any signed request it is a no-op.
     super::refuse_if_refused().unwrap();
 }
+
+// -- aegis-7tt P2: the verified binding session persists with its tx ----------
+
+fn bearer() -> Identity {
+    Identity {
+        principal: "urn:crew:bearer".into(),
+        credential_id: Some("k1".into()),
+        auth_class: "named_bearer".into(),
+        attestation: AttestationSlot(None),
+    }
+}
+
+#[test]
+fn p2_signed_write_reads_back_its_binding_session() {
+    let mut store = Store::open_in_memory().unwrap();
+    let b = registered(&store, "bound-session", 3600);
+    let p = pending(&b, NONCE);
+    let tx = with_identity(Some(identity(&p)), || store.transact(&[], TS, None, None)).unwrap();
+    assert_eq!(
+        store.transaction_attested_session(tx).unwrap().as_deref(),
+        Some("bound-session")
+    );
+}
+
+#[test]
+fn p2_bearer_and_unattributed_writes_are_null() {
+    let mut store = Store::open_in_memory().unwrap();
+    let tx = with_identity(Some(bearer()), || store.transact(&[], TS, None, None)).unwrap();
+    assert!(store.transaction_auth(tx).unwrap().is_some());
+    assert_eq!(store.transaction_attested_session(tx).unwrap(), None);
+    let plain = store.transact(&[], TS, None, None).unwrap();
+    assert_eq!(store.transaction_attested_session(plain).unwrap(), None);
+}
+
+/// Mutant: writing the session for ANY identity that carries a pending
+/// attestation, instead of only `auth_class = attested_session`.
+#[test]
+fn p2_mutant_a_non_attested_class_never_stores_a_session_even_with_a_slot() {
+    let mut store = Store::open_in_memory().unwrap();
+    let b = registered(&store, "slot-only", 3600);
+    let p = pending(&b, NONCE);
+    let mut id = identity(&p);
+    id.auth_class = "named_bearer".into();
+    let tx = with_identity(Some(id), || store.transact(&[], TS, None, None)).unwrap();
+    assert_eq!(store.transaction_attested_session(tx).unwrap(), None);
+}
+
+#[test]
+fn p2_pre_migration_rows_stay_null_and_read_only_open_of_an_old_store_works() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("old.db");
+    let path = path.to_str().unwrap();
+    {
+        let mut store = Store::open(path).unwrap();
+        let tx = with_identity(Some(bearer()), || store.transact(&[], TS, None, None)).unwrap();
+        // Make the store look like one written before the column existed,
+        // holding an attested-class row whose session was never recorded.
+        store
+            .conn
+            .execute_batch(
+                "ALTER TABLE transaction_auth DROP COLUMN attested_session;
+                 INSERT INTO transactions (id, timestamp) VALUES (900, '2026-01-01T00:00:00Z');
+                 INSERT INTO transaction_auth (tx, principal, auth_class)
+                     VALUES (900, 'urn:crew:tester', 'attested_session');",
+            )
+            .unwrap();
+        assert_eq!(tx, tx);
+    }
+    {
+        let ro = Store::open_read_only(path).unwrap();
+        assert_eq!(ro.transaction_attested_session(900).unwrap(), None);
+        assert_eq!(
+            ro.transaction_auth(900).unwrap().unwrap().auth_class,
+            "attested_session"
+        );
+        let has: bool = ro
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('transaction_auth') \
+                 WHERE name = 'attested_session')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!has, "a read-only open must not migrate");
+    }
+    let store = Store::open(path).unwrap();
+    let null_rows: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM transaction_auth WHERE attested_session IS NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(null_rows, 2, "migration never back-fills");
+    assert_eq!(store.transaction_attested_session(900).unwrap(), None);
+}
+
+#[test]
+fn p2_transaction_auth_stays_local_and_excluded_from_shares() {
+    assert_eq!(
+        crate::share_completeness::disposition("transaction_auth"),
+        Some(crate::share_completeness::Disposition::Excluded)
+    );
+    let store = Store::open_in_memory().unwrap();
+    let tables = crate::store_replica::catalog::inspect(&store).unwrap();
+    assert!(tables.iter().all(|t| t.name != "transaction_auth"));
+}

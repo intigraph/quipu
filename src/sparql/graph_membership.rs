@@ -137,7 +137,6 @@ pub(super) fn object_source(
         || !matches!(&pattern.predicate, NamedNodePattern::NamedNode(_))
         || store.has_attachments()
         || ctx.valid_at.is_some()
-        || ctx.as_of_tx.is_some()
     {
         return Ok(None);
     }
@@ -159,6 +158,15 @@ pub(super) fn object_source(
         .collect();
     if normalized != "createindexidx_vaetonfacts(v,a,e,valid_from)" {
         return Ok(None);
+    }
+    // aegis-oav5: an as_of_tx read keeps the value seek. idx_vaet is a full
+    // (non-partial) index, so it holds every historical row; the caller's
+    // tx/retracted_tx visibility conditions still filter after the seek. Without
+    // the hint, a two-alias plain literal (`v IN (?,?)`) with no ANALYZE stats
+    // went to idx_geav (g=?) and scanned the whole graph (119 ms vs 0.1 ms at
+    // 121k items). The current-only idx_current_aev never applies here.
+    if ctx.as_of_tx.is_some() {
+        return Ok(Some("facts INDEXED BY idx_vaet"));
     }
     if dense_plain_object(store, pattern, seed)? {
         return Ok(Some("facts INDEXED BY idx_current_aev"));
