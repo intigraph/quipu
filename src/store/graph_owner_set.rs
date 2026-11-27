@@ -277,6 +277,45 @@ impl GraphSetOwner {
         result
     }
 
+    /// A strict composition cut of `members` in this owner, at its published
+    /// head (aegis-n0wc.5 H2b): what a routed `/update` receipt hands back so
+    /// the writer can later read its own write at a defined point. Captured
+    /// AFTER the write committed and its writer was released, so every member
+    /// is at or after that write. Refuses (never queues) when a fence or reader
+    /// is occupied; the caller decides what that means for the receipt.
+    pub fn capture_cut(
+        &self,
+        members: &BTreeSet<String>,
+        deadline: std::time::Instant,
+    ) -> Result<crate::store::composition_cut::CompositionCut> {
+        let routes = members
+            .iter()
+            .map(|graph| {
+                self.catalog
+                    .logical_route(graph)
+                    .filter(|route| route.store_id == self.owner.catalog_route().store_id)
+                    .ok_or_else(|| refused("cut member is not a graph of this owner"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Owner::read_strict(&[&self.owner], deadline, |physical| {
+            let source = physical
+                .first()
+                .ok_or_else(|| refused("strict capture returned no owner"))?;
+            let selected: Vec<CapturedRead<'_>> = routes
+                .iter()
+                .map(|route| CapturedRead {
+                    route,
+                    catalog_revision: source.catalog_revision,
+                    local_tx: source.local_tx,
+                    published_tx: source.published_tx,
+                    store: source.store,
+                    legacy: source.legacy,
+                })
+                .collect();
+            crate::store::composition_cut::CompositionCut::capture(&selected)
+        })
+    }
+
     /// Pre-queue validation shared by local and participant batches: the
     /// requests select exactly this unsigned owner and the batch its members.
     fn check_batch<'b>(
