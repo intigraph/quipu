@@ -90,3 +90,23 @@ fn an_ordinary_store_still_loads_shapes() {
     store.load_shapes("plain", SHAPES, AT).unwrap();
     assert!(store.get_combined_shapes().unwrap().is_some());
 }
+
+/// eph-review-83714d #3: the enclosed registry change (a schema proposal's
+/// migration savepoint, a DataBook import) refuses on a fenced file too.
+#[test]
+fn the_enclosed_shapes_load_refuses_on_a_fenced_member_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = files(temp.path());
+    fenced(&files);
+    let head = raw_head(&files, 0);
+    let store = plain(&files, 0);
+    store.conn.execute_batch("BEGIN").unwrap();
+    let error = store.load_shapes_enclosed("other", SHAPES, AT).unwrap_err();
+    store.conn.execute_batch("ROLLBACK").unwrap();
+    assert!(error.to_string().contains("participant fenced"), "{error}");
+    assert_eq!(
+        raw_head(&files, 0),
+        head,
+        "a refused registry write moved the head"
+    );
+}

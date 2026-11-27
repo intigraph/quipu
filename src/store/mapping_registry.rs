@@ -170,6 +170,8 @@ impl Store {
         // aegis-n0wc.5: a participant file holding a prepared or applied
         // intent refuses ordinary writes, and a registry write is one: it
         // moves the head the pending batch's expected-head guard pinned.
+        // Participant files exist only where graph-set owners do (unix).
+        #[cfg(unix)]
         crate::store::graph_owner::participant::check_write_fence(self)?;
         if self.conn.is_autocommit() {
             return Err(invalid(
@@ -233,6 +235,8 @@ impl Store {
         // aegis-n0wc.5: a participant file holding a prepared or applied
         // intent refuses ordinary writes, and a registry write is one: it
         // moves the head the pending batch's expected-head guard pinned.
+        // Participant files exist only where graph-set owners do (unix).
+        #[cfg(unix)]
         crate::store::graph_owner::participant::check_write_fence(self)?;
         let actor = match crate::transaction_auth::current_identity() {
             Some(identity) if oxrdf::NamedNode::new(&identity.principal).is_ok() => {
