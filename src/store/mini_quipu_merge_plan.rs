@@ -158,3 +158,52 @@ pub(super) fn verified_mini(
     }
     Ok(digest)
 }
+
+/// Step 2 for a later merge. The first merge plans against the home cut. A
+/// remainder (the same incoming as the last merge) reuses that merge's base.
+/// A new head plans against the mini-Quipu's own state at the last merged
+/// head, checked against the digest home recorded (`base-mismatch` if the
+/// history was rewritten, `base-unavailable` if it cannot be read), and
+/// refuses while the last merge still holds slots (`remainder-pending`).
+pub(super) fn later_base(
+    mini: &Store,
+    entry: &MiniForkEntry,
+    incoming: &str,
+) -> Result<(MergeBase, Option<String>)> {
+    let (head, last) = match (entry.merged_head, entry.last_merge.as_ref()) {
+        (None, _) => return Ok((MergeBase::Home, None)),
+        (Some(head), Some(last)) => (head, last),
+        (Some(head), None) => {
+            return Err(refused(
+                MergeRefusal::SecondMerge,
+                &format!(
+                    "the entry was advanced to mini head {head} with no recorded \
+                     last merge (an M3-era home cut); re-fork from current home"
+                ),
+            ));
+        }
+    };
+    if last.incoming == incoming {
+        // A remainder reuses the earlier base. A mini base is re-verified:
+        // the history may have been rewritten since that merge.
+        if let MergeBase::Mini { head, digest } = &last.base {
+            verified_mini(mini, entry, *head, digest)?;
+        }
+        return Ok((last.base.clone(), Some(last.merge_id.clone())));
+    }
+    if last.held > 0 {
+        return Err(refused(
+            MergeRefusal::RemainderPending,
+            &format!(
+                "merge {} still holds {} slot(s); apply its remainder (the same \
+                 incoming) first, or re-fork if the mini-Quipu has written since",
+                last.merge_id, last.held
+            ),
+        ));
+    }
+    let digest = verified_mini(mini, entry, head, &last.head_digest)?;
+    Ok((
+        MergeBase::Mini { head, digest },
+        Some(last.merge_id.clone()),
+    ))
+}
