@@ -27,9 +27,7 @@ fn fail(why: impl std::fmt::Display) -> ! {
 /// reads are configured. The caller merges them BEFORE `protected_app`, so
 /// they keep the ordinary auth layer.
 pub(crate) fn start(config: &quipu::QuipuConfig, legacy: &SharedStore) -> Option<axum::Router> {
-    let Some(sets) = config.graph_sets.as_ref().filter(|s| s.enabled) else {
-        return None;
-    };
+    let sets = config.graph_sets.as_ref().filter(|s| s.enabled)?;
     #[cfg(all(unix, feature = "ownership-witness-s3"))]
     {
         let catalog = sets
