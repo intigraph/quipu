@@ -373,7 +373,11 @@ fn identity_or_epoch_change_falls_back_to_the_exact_scan() {
     )
     .unwrap();
     assert_eq!(entries(&reader), oracle(&reader));
-    assert_eq!(cache::resident_generation(&reader), stale, "sameAs never patched");
+    assert_eq!(
+        cache::resident_generation(&reader),
+        stale,
+        "sameAs never patched"
+    );
     writer.mint_log_epoch("test epoch").unwrap();
     write(&mut writer, 3, "Carol", Op::Assert);
     assert!(reader.prepare_resolution_index().unwrap()); // full rescan publishes
@@ -381,5 +385,9 @@ fn identity_or_epoch_change_falls_back_to_the_exact_scan() {
     writer.mint_log_epoch("second epoch").unwrap();
     write(&mut writer, 4, "Dave", Op::Assert);
     assert_eq!(entries(&reader), oracle(&reader));
-    assert_eq!(cache::resident_generation(&reader), rescanned, "epoch change never patched");
+    assert_eq!(
+        cache::resident_generation(&reader),
+        rescanned,
+        "epoch change never patched"
+    );
 }
