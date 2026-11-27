@@ -106,6 +106,11 @@ pub enum MergeRefusal {
     /// (the same incoming) before merging a new head; otherwise the new base
     /// would equal the mini's held values and silently drop the holds.
     RemainderPending,
+    /// The entry records a merged head but no last merge: it was advanced by
+    /// M3 (#1318), whose home cut already folds in home-only changes, held
+    /// slots and decisions. Planning on it would land the mini's unchanged
+    /// values as one-sided changes, so it refuses; re-fork from current home.
+    SecondMerge,
     /// The caller's decisions hash already names different resolutions.
     DecisionsHashReused,
 }
@@ -120,6 +125,7 @@ impl MergeRefusal {
             Self::BaseMismatch => "base-mismatch",
             Self::X4MovedOwner => "x4-multi-file",
             Self::RemainderPending => "remainder-pending",
+            Self::SecondMerge => "second-merge",
             Self::DecisionsHashReused => "decisions-hash-reused",
         }
     }
@@ -178,7 +184,7 @@ pub enum MergeBack {
 
 #[path = "mini_quipu_merge_plan.rs"]
 mod plan;
-use plan::{open_theirs, plan_member};
+use plan::{open_theirs, plan_member, verified_mini};
 
 /// Step 4: every writable member is still on the recorded home owner and
 /// generation (X4).
@@ -499,10 +505,25 @@ fn later_base(
     entry: &MiniForkEntry,
     incoming: &str,
 ) -> Result<(MergeBase, Option<String>)> {
-    let (Some(head), Some(last)) = (entry.merged_head, entry.last_merge.as_ref()) else {
-        return Ok((MergeBase::Home, None));
+    let (head, last) = match (entry.merged_head, entry.last_merge.as_ref()) {
+        (None, _) => return Ok((MergeBase::Home, None)),
+        (Some(head), Some(last)) => (head, last),
+        (Some(head), None) => {
+            return Err(refused(
+                MergeRefusal::SecondMerge,
+                &format!(
+                    "the entry was advanced to mini head {head} with no recorded \
+                     last merge (an M3-era home cut); re-fork from current home"
+                ),
+            ));
+        }
     };
     if last.incoming == incoming {
+        // A remainder reuses the earlier base. A mini base is re-verified:
+        // the history may have been rewritten since that merge.
+        if let MergeBase::Mini { head, digest } = &last.base {
+            verified_mini(mini, entry, *head, digest)?;
+        }
         return Ok((last.base.clone(), Some(last.merge_id.clone())));
     }
     if last.held > 0 {
@@ -514,18 +535,7 @@ fn later_base(
             ),
         ));
     }
-    let digest = live_digest(mini, head, &entry.writable).map_err(|_| {
-        refused(
-            MergeRefusal::BaseUnavailable,
-            "the mini-Quipu cannot rebuild its state at the merged head",
-        )
-    })?;
-    if digest != last.head_digest {
-        return Err(refused(
-            MergeRefusal::BaseMismatch,
-            "the mini-Quipu's state at the merged head differs from the recorded digest",
-        ));
-    }
+    let digest = verified_mini(mini, entry, head, &last.head_digest)?;
     Ok((
         MergeBase::Mini { head, digest },
         Some(last.merge_id.clone()),

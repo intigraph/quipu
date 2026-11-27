@@ -6,7 +6,7 @@ use std::path::Path;
 
 use rusqlite::{OptionalExtension, params};
 
-use super::super::{MergeBase, MiniForkEntry, has_table, invalid};
+use super::super::{MergeBase, MiniForkEntry, has_table, invalid, live_digest};
 use super::{MergeRefusal, refused};
 use crate::{
     Result, Store,
@@ -135,4 +135,26 @@ pub(super) fn plan_member(
         td,
     )?;
     Ok((g, merge))
+}
+
+/// The mini-Quipu's live state at `head`, checked against `expected`.
+pub(super) fn verified_mini(
+    mini: &Store,
+    entry: &MiniForkEntry,
+    head: i64,
+    expected: &str,
+) -> Result<String> {
+    let digest = live_digest(mini, head, &entry.writable).map_err(|_| {
+        refused(
+            MergeRefusal::BaseUnavailable,
+            "the mini-Quipu cannot rebuild its state at the merged head",
+        )
+    })?;
+    if digest != expected {
+        return Err(refused(
+            MergeRefusal::BaseMismatch,
+            "the mini-Quipu's state at the merged head differs from the recorded digest",
+        ));
+    }
+    Ok(digest)
 }

@@ -193,8 +193,21 @@ members at that head:
   (`remainder-pending`, naming that merge) and writes nothing. Otherwise the
   held values would equal the new base and the holds would be lost silently.
 
-The interim M3 refusals `decided-bounded-base` and `second-merge` (sattler
-rulings on #1318, 2026-11-27) are lifted by this rule. The bounded interval a
+- **A remainder on a mini base** re-verifies that base against its digest
+  first, with the same `base-mismatch` / `base-unavailable` refusals: the
+  mini's history may have been rewritten between the merge and its remainder.
+- **An entry M3 advanced** (a merged head with no recorded last merge) still
+  refuses `second-merge` and writes nothing. Its home cut already folds in
+  home-only changes, held slots and decisions, which is exactly the base this
+  rule avoids. Re-fork from current home.
+
+Rollback: the registry entry is `deny_unknown_fields`, so a binary built
+before this rule cannot read an entry that carries `last_merge`. Rolling back
+past it means retiring and re-forking such entries.
+
+The interim M3 refusal `decided-bounded-base` and the `second-merge` refusal
+for entries with a recorded last merge (sattler rulings on #1318, 2026-11-27)
+are lifted by this rule. Lifting them needs a recorded ruling on aegis-abt. The bounded interval a
 decision closes is never read into a base: the planner's base is the live view,
 and the home cut no longer advances.
 

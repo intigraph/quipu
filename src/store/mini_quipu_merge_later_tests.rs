@@ -252,3 +252,104 @@ fn later_r7_a_rewritten_mini_history_refuses_base_mismatch() {
     let path = p.path.clone();
     assert_refuses(&mut p, &path, "base-mismatch");
 }
+
+/// R8 (review 1): an entry M3 advanced (merged head, no last merge) has a
+/// home cut that already folds in home-only changes; a later merge refuses
+/// `second-merge` instead of planning on it, writing nothing.
+#[test]
+fn later_r8_an_m3_era_entry_refuses_second_merge() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = c1a(dir.path());
+    merged(&mut p, &request());
+    tamper(&p, |e| e.last_merge = None);
+    mini_write(&mut p, &[a("urn:z", ONE, "mini", TT)]);
+    let path = p.path.clone();
+    assert_refuses(&mut p, &path, "second-merge");
+}
+
+/// A decided merge, then a partial merge of a new head that holds the
+/// revisited slot: its remainder plans on a mini base.
+fn held_on_a_mini_base(dir: &Path) -> (Pair, MergeReceipt) {
+    let mut p = conflict_pair(dir);
+    let res = ForkResolutions::from([(key(&p, "urn:x", ONE), vec![Value::Str("b".into())])]);
+    merged(&mut p, &decided(&res));
+    mini_write(
+        &mut p,
+        &[
+            r("urn:x", ONE, "c"),
+            a("urn:x", ONE, "d", TT),
+            r("urn:y", ONE, "y1"),
+            a("urn:y", ONE, "y2", TT),
+        ],
+    );
+    let held = merged(&mut p, &partial());
+    assert_eq!(held.held, 1, "{held:?}");
+    let entry = mini_fork_entry(&p.home.legacy, "agent-a").unwrap().unwrap();
+    assert!(
+        matches!(
+            entry.last_merge.as_ref().unwrap().base,
+            MergeBase::Mini { .. }
+        ),
+        "{entry:?}"
+    );
+    (p, held)
+}
+
+/// R9 (review 2): a remainder re-verifies its mini base. A history rewritten
+/// between the partial merge and its remainder refuses `base-mismatch`.
+#[test]
+fn later_r9_a_remainder_on_a_rewritten_mini_base_refuses_base_mismatch() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut p, _) = held_on_a_mini_base(dir.path());
+    let forged = p
+        .mini
+        .store()
+        .conn
+        .execute(
+            "UPDATE facts SET v=?1 WHERE v=?2",
+            params![
+                Value::Str("forged".into()).to_bytes(),
+                Value::Str("y1".into()).to_bytes()
+            ],
+        )
+        .unwrap();
+    assert!(forged > 0, "the forgery touched no row");
+    let res = ForkResolutions::from([(key(&p, "urn:x", ONE), vec![Value::Str("d".into())])]);
+    let (home0, mini0) = (footprint(&p.home.legacy), footprint(p.mini.store()));
+    let path = p.path.clone();
+    let err =
+        merge_on_legacy(&p.home.catalog, &mut p.home.legacy, &path, &decided(&res)).unwrap_err();
+    assert!(err.to_string().contains("base-mismatch"), "{err}");
+    assert_eq!(
+        footprint(&p.home.legacy),
+        home0,
+        "base-mismatch wrote at home"
+    );
+    assert_eq!(
+        footprint(p.mini.store()),
+        mini0,
+        "base-mismatch wrote locally"
+    );
+}
+
+/// R10 (review 3): a later merge whose mini state at the merged head cannot
+/// be read refuses `base-unavailable`, writing nothing.
+#[test]
+fn later_r10_an_unreadable_mini_base_refuses_base_unavailable() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = c1a(dir.path());
+    merged(&mut p, &request());
+    mini_write(&mut p, &[a("urn:z", ONE, "mini", TT)]);
+    let broken = p
+        .mini
+        .store()
+        .conn
+        .execute(
+            "UPDATE facts SET v=X'FFFF' WHERE v=?1",
+            params![Value::Str("c".into()).to_bytes()],
+        )
+        .unwrap();
+    assert!(broken > 0, "the corruption touched no row");
+    let path = p.path.clone();
+    assert_refuses(&mut p, &path, "base-unavailable");
+}
