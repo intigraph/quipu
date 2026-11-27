@@ -266,9 +266,14 @@ Rules:
    Crew process rules already require the session ID in `source` for session
    captures.
 2. **Carry per fact at merge.** As in U2, the merge reads each incoming fact
-   with its mini-Quipu transaction (`local_tx`, actor, source, principal).
-   That provenance goes into the decision rows and the `receive` transaction
-   source, next to the merge id and the incoming identity of oracle §3.3.
+   with its mini-Quipu transaction (`local_tx`, actor, source and stored
+   declarations), through the same carriage code as a fork merge
+   (write-provenance-persistence.md §5.1). Each decision row names the origin
+   transactions of the values it writes; the merge entry holds the `carried`
+   object keyed by origin transaction. The `receive` and `decide` sources name
+   it by digest (`carried=sha256:<hex>`) next to the merge id and the incoming
+   identity of oracle §3.3, so the source stays bounded. The mini-Quipu's
+   `transaction_auth` is local credential evidence and is never carried.
 3. **Never impersonate.** The home transactions belong to the applier (and the
    reviewer for `decide`). Home `transaction_auth` records the principal that
    authenticated at home. The mini-Quipu writer's principal is carried as data
@@ -276,9 +281,21 @@ Rules:
    and never satisfies home authority.
 4. **Nothing is invented.** If a field was not stored in the mini-Quipu, it is
    absent after merge. It is not reconstructed from headers on the merge
-   request. If the structured header fields must survive verbatim, the store
-   must persist them per transaction. That is a generic store change for
-   every store (slice M4), not a mini-Quipu special case.
+   request.
+
+   **Decision (slice M4, 2026-11-27): persisted per transaction, in every
+   store.** The declared `agent`, `harness`, `host`, `session` and `model`
+   values are stored in `transaction_declarations`, written inside the fact
+   transaction's savepoint by the normal commit path
+   (`write_provenance::record`). The table is created for every store from
+   the common schema, so a mini-Quipu has it and a mini-Quipu write under a
+   provenance scope keeps its values with no mini-Quipu code. The
+   completeness class is **not** stored: it is derived on read from the
+   values and `transaction_auth`, so a later change to the class definition
+   cannot leave stale stored classes. Reasons and read precedence are in
+   [write provenance persistence](write-provenance-persistence.md) §1 and §3.
+   A transaction with no declaration row carries as unknown (`unknown-no-row`),
+   never as "nothing was declared".
 5. **Signed operations.** A mini-Quipu has no replay ledger for a home
    signature domain. A signed home operation cannot be performed in a
    mini-Quipu and then replayed at merge (X10). Per-graph design: one

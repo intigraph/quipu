@@ -168,6 +168,16 @@ pub struct MergeReceipt {
     pub decide_tx: Vec<i64>,
     /// Slots a partial mode held back.
     pub held: usize,
+    /// Per written slot, the mini-Quipu transactions that wrote its incoming
+    /// values (slice M4). Absent from a receipt written before M4.
+    #[serde(default)]
+    pub rows: Vec<MergeRow>,
+    /// The carried writer provenance, keyed by mini-Quipu transaction, read
+    /// from the file through the fork merge's carriage code (slice M4). It is
+    /// data about the origin, never the home transactions' identity. `None`
+    /// on a receipt written before M4: unknown, not empty.
+    #[serde(default)]
+    pub carried: Option<crate::merge_carriage::Carriage>,
 }
 
 /// The outcome of a merge back.
@@ -184,9 +194,14 @@ pub enum MergeBack {
     Refused(crate::shacl::ValidationFeedback),
 }
 
+#[path = "mini_quipu_merge_provenance.rs"]
+mod provenance;
+pub use provenance::MergeRow;
+use provenance::carriage;
+
 #[path = "mini_quipu_merge_plan.rs"]
 mod plan;
-use plan::{open_theirs, plan_member, verified_mini};
+use plan::{later_base, open_theirs, plan_member};
 
 /// Step 4: every writable member is still on the recorded home owner and
 /// generation (X4).
@@ -355,7 +370,7 @@ fn write(
     let cut = entry.base.local_tx;
     let mut plans = Vec::new();
     for graph in &entry.writable {
-        let (g, plan) = plan_member(
+        let (g, mg, plan) = plan_member(
             home,
             mini,
             graph,
@@ -371,8 +386,14 @@ fn write(
         if let Some(feedback) = gate(home, g, &plan)? {
             return Ok(MergeBack::Refused(feedback));
         }
-        plans.push((g, plan));
+        plans.push((g, mg, graph.clone(), plan));
     }
+    let (rows, carried) = carriage(home, mini, &plans)?;
+    let carried_digest = crate::share::sha256(
+        serde_json::to_string(&carried)
+            .map_err(|e| Error::Serialization(e.to_string()))?
+            .as_bytes(),
+    );
     let mut source = format!(
         "mini-quipu-merge:{};merge={merge_id};incoming={incoming}",
         req.name
@@ -384,15 +405,19 @@ fn write(
     if let Some(earlier) = at.after {
         source.push_str(&format!(";after={earlier}"));
     }
+    // Slice M4: the carried provenance by digest; the object is in the entry.
+    source.push_str(&format!(";carried={carried_digest}"));
     let mut receipt = MergeReceipt {
         merge_id: merge_id.to_owned(),
         incoming: incoming.to_owned(),
         receive_tx: Vec::new(),
         decide_tx: Vec::new(),
-        held: plans.iter().map(|(_, p)| p.held).sum(),
+        held: plans.iter().map(|(_, _, _, p)| p.held).sum(),
+        rows,
+        carried: Some(carried),
     };
     for (step, decide) in [("receive", false), ("decide", true)] {
-        for (g, plan) in &plans {
+        for (g, _, _, plan) in &plans {
             let datums = if decide { &plan.decide } else { &plan.receive };
             #[cfg(not(target_arch = "wasm32"))]
             crate::merge_plan_gate::datums(home, &[datums], None)?;
@@ -506,55 +531,6 @@ fn incoming_head(incoming: &str) -> Result<i64> {
 struct Later<'a> {
     base: &'a MergeBase,
     after: Option<&'a str>,
-}
-
-/// Step 2 for a later merge. The first merge plans against the home cut. A
-/// remainder (the same incoming as the last merge) reuses that merge's base.
-/// A new head plans against the mini-Quipu's own state at the last merged
-/// head, checked against the digest home recorded (`base-mismatch` if the
-/// history was rewritten, `base-unavailable` if it cannot be read), and
-/// refuses while the last merge still holds slots (`remainder-pending`).
-fn later_base(
-    mini: &Store,
-    entry: &MiniForkEntry,
-    incoming: &str,
-) -> Result<(MergeBase, Option<String>)> {
-    let (head, last) = match (entry.merged_head, entry.last_merge.as_ref()) {
-        (None, _) => return Ok((MergeBase::Home, None)),
-        (Some(head), Some(last)) => (head, last),
-        (Some(head), None) => {
-            return Err(refused(
-                MergeRefusal::SecondMerge,
-                &format!(
-                    "the entry was advanced to mini head {head} with no recorded \
-                     last merge (an M3-era home cut); re-fork from current home"
-                ),
-            ));
-        }
-    };
-    if last.incoming == incoming {
-        // A remainder reuses the earlier base. A mini base is re-verified:
-        // the history may have been rewritten since that merge.
-        if let MergeBase::Mini { head, digest } = &last.base {
-            verified_mini(mini, entry, *head, digest)?;
-        }
-        return Ok((last.base.clone(), Some(last.merge_id.clone())));
-    }
-    if last.held > 0 {
-        return Err(refused(
-            MergeRefusal::RemainderPending,
-            &format!(
-                "merge {} still holds {} slot(s); apply its remainder (the same \
-                 incoming) first, or re-fork if the mini-Quipu has written since",
-                last.merge_id, last.held
-            ),
-        ));
-    }
-    let digest = verified_mini(mini, entry, head, &last.head_digest)?;
-    Ok((
-        MergeBase::Mini { head, digest },
-        Some(last.merge_id.clone()),
-    ))
 }
 
 /// Step 5's gate: the CURRENT home reject-mode shapes over the asserted

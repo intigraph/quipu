@@ -151,7 +151,7 @@ fn mini_plan(p: &Pair, res: Option<&ForkResolutions>, mode: Mode) -> String {
     let entry = mini_fork_entry(&p.home.legacy, "agent-a").unwrap().unwrap();
     let theirs = open_theirs(&p.path, &entry).unwrap();
     let s = &p.home.legacy;
-    let (_, m) = plan_member(
+    let (_, _, m) = plan_member(
         s,
         &theirs,
         ROOT_GRAPH_IRI,
@@ -607,3 +607,6 @@ fn different_resolutions_never_share_an_r7_key() {
 
 #[path = "mini_quipu_merge_later_tests.rs"]
 mod later;
+
+#[path = "mini_quipu_merge_carriage_tests.rs"]
+mod carriage;
