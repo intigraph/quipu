@@ -496,9 +496,17 @@ still active until the owner is retired.
 `quipu::store::retire_pilot_owner` (an `ownership-witness-s3` build, Unix
 only, like enrollment) retires the reversed owner's witness authority, so the
 owner is RETIRED rather than merely unrouted. It takes the owner journal, the
-owner file, the legacy database, catalog revisions R and R+1, the existing
-legacy ROOT writer principal and an existing operator principal. The sealed
-source cut is never supplied: it is derived from the owner file.
+owner file, the legacy database, catalog revisions R and R+1, the legacy ROOT
+writer principal and the operator principal. The sealed source cut is never
+supplied: it is derived from the owner file.
+
+The two principals are command-line input, the same as `pilot enroll
+--principal`. Nothing mints a principal. Each one must be a well-formed
+identifier: nonempty, at most 512 bytes, with no leading or trailing
+whitespace and no control characters. Each is recorded verbatim in the witness
+record and the journal, so it can be audited. A root principal equal to the
+pilot owner's own principal is refused. Quipu does not yet check either
+principal against a principal registry.
 `quipu pilot retire` wraps it, with the same `--witness-config` file as
 `pilot enroll`:
 
@@ -527,9 +535,11 @@ whole-store fact-cut digest over every current fact (domain tag
 `quipu-owner-cut-facts/v1`), and the SHA-256 of a consistent serialized image
 of the owner database. Then it runs, in order:
 
-1. refuse unless the configured profile equals the witness profile, the
-   destination is the legacy ROOT placement of that legacy database, and the
-   witness head and the journal both name the owner's exact tuple;
+1. refuse unless the configured profile equals the witness profile, both
+   principals are well-formed identifiers, the root principal is not the
+   owner's, the destination is the legacy ROOT placement of that legacy
+   database, and the witness head and the journal both name the owner's exact
+   tuple;
 2. witness reserve (one conditional create), then journal Active to Retiring;
 3. witness retire with the derived cut, then journal Retiring to Retired.
 

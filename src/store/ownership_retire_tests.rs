@@ -5,9 +5,10 @@
 //! still routes the owner, owner lock held), plus an owner that changed after
 //! its reverse. R5: the cut is derived from the owner file, and a re-run with
 //! a different derived cut refuses. Sabotage: an enroll-tagged ROOT placement
-//! and a profile mismatch refuse with nothing written. Faults: UNKNOWN (500)
-//! and `LostReply` on the reserve PUT and on the retire PUT stop, and a re-run
-//! resumes to RETIRED.
+//! and a profile mismatch refuse with nothing written, as do a non-identifier
+//! operator or root principal and a root principal naming the owner itself.
+//! Faults: UNKNOWN (500) and `LostReply` on the reserve PUT and on the retire
+//! PUT stop, and a re-run resumes to RETIRED.
 use super::*;
 use crate::graph_catalog::{Budget, Route};
 use crate::ownership_handoff_model::AuthorityUnit;
@@ -226,6 +227,15 @@ fn reversed_pilot_owner_reads_back_retired_not_active_unretired() {
         ],
         "reserve then retire, and no activate"
     );
+    // Q1: the CLI principals are recorded verbatim in the witness record.
+    let Journal::Retired { certificate } = f.journal() else {
+        panic!("journal is not Retired")
+    };
+    assert_eq!(certificate.request.operator, "pilot-operator");
+    assert_eq!(
+        certificate.request.destination.principal,
+        "legacy-root-writer"
+    );
     // Exact re-run is idempotent; the Retired record is terminal.
     assert_eq!(retire_owner(&f.ok()).unwrap(), receipt);
     // Admission refuses the retired handle by role.
@@ -385,4 +395,50 @@ fn a_different_cut_after_retired_refuses() {
         .unwrap();
     let err = refusal(&f.ok());
     assert!(err.contains("different cut"), "{err}");
+}
+
+/// Q1 (dearing ruling 2 on #1370): CLI-supplied principals must be model
+/// identifiers, and ROOT must never name the pilot owner. Each refusal is
+/// local, before the lock or any witness call, so nothing is written.
+#[test]
+fn cli_principals_are_identifiers_and_root_never_names_the_owner() {
+    let f = Fixture::new(3);
+    let before = (f.listing(), f.journal());
+    for bad in [
+        "",
+        " pilot-operator",
+        "pilot-operator\n",
+        "pilot\u{7}operator",
+    ] {
+        let mut req = f.ok();
+        req.operator = bad;
+        let err = refusal(&req);
+        assert!(
+            err.contains("operator") && err.contains("identifier"),
+            "{bad:?}: {err}"
+        );
+    }
+    for bad in ["", "legacy-root-writer ", "legacy\troot"] {
+        let mut dest = f.root();
+        dest.principal = bad.into();
+        let err = refusal(&f.request(PROFILE, dest));
+        assert!(
+            err.contains("root principal") && err.contains("identifier"),
+            "{bad:?}: {err}"
+        );
+    }
+    let mut owner_named = f.root();
+    owner_named.principal = "pilot-owner".into();
+    let err = refusal(&f.request(PROFILE, owner_named.clone()));
+    assert!(err.contains("pilot owner's own principal"), "{err}");
+    let err = plan_retirement(&f.request(PROFILE, owner_named))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("pilot owner's own principal"),
+        "dry run too: {err}"
+    );
+    assert_eq!((f.listing(), f.journal()), before, "refusals wrote nothing");
+    // Positive control: the same fixture still retires.
+    f.assert_retired(&retire_owner(&f.ok()).expect("retired"));
 }

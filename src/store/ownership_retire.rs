@@ -22,7 +22,8 @@
 //! replacement-owner grant. The Retired record is terminal for this tuple; a
 //! later re-enrollment is a new genesis with a new store tuple.
 //!
-//! UNSIGNED: the request names an existing operator and the configured
+//! UNSIGNED: the request names the operator (an identifier recorded
+//! verbatim, never minted; registry existence is aegis-m88) and the configured
 //! profile, and the transition's authority is the witness's create-only
 //! conditional write plus that profile match, the same basis as genesis. No
 //! signature is produced or claimed.
@@ -46,7 +47,7 @@ use crate::graph_catalog::Catalog;
 use crate::ownership_handoff_model::witness::objects::Objects;
 use crate::ownership_handoff_model::witness::{AuthorityWitness, ObjectWitness, Reply};
 use crate::ownership_handoff_model::{
-    Authority, Certificate, Cut, Journal, Placement, Request, WitnessHead,
+    Authority, Certificate, Cut, Journal, Placement, Request, WitnessHead, identifier,
 };
 
 /// Domain tag for a legacy ROOT native binding. Deliberately distinct from
@@ -68,7 +69,7 @@ pub(crate) struct RetireRequest<'a, B: Objects> {
     pub(crate) next: &'a Catalog,
     /// Profile named by the operator's configuration; must equal the witness.
     pub(crate) profile: &'a str,
-    /// Existing operator principal; never minted here.
+    /// Operator principal, recorded verbatim; never minted here.
     pub(crate) operator: &'a str,
     /// Destination; must be exactly [`legacy_root_placement`] of `legacy_db`.
     pub(crate) destination: Placement,
@@ -127,6 +128,21 @@ fn plan(req: &RetireRequest<'_, impl Objects>, journal: &Journal) -> Result<Requ
         Journal::Retired { certificate } => certificate.request.source.clone(),
         Journal::Pending { .. } => return Err(refused("journal is PENDING, not an owner")),
     };
+    // Q1 (dearing ruling 2): both principals are CLI input, like genesis
+    // `--principal`, so each must be a model identifier and is recorded
+    // verbatim. Existence against a registry is aegis-m88, not checked here.
+    for (name, value) in [
+        ("operator", req.operator),
+        ("root principal", req.destination.principal.as_str()),
+    ] {
+        identifier(value).map_err(|e| refused(format!("{name} {value:?}: {e}")))?;
+    }
+    // Sabotage guard: "retire to ROOT" naming the pilot owner itself.
+    if req.destination.principal == source.owner.principal {
+        return Err(refused(
+            "root principal is the pilot owner's own principal; retiring to ROOT never names the owner",
+        ));
+    }
     let successor_generation = source
         .generation
         .checked_add(1)

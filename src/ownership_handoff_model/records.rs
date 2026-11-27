@@ -9,7 +9,7 @@ pub const MAX_RECORD_BYTES: usize = 65_536;
 /// SHA-256 identity of model content or an externally inspected artifact.
 pub type Digest = [u8; 32];
 
-pub(super) fn identifier(value: &str) -> ModelResult<()> {
+pub(crate) fn identifier(value: &str) -> ModelResult<()> {
     require(
         !value.is_empty()
             && value.len() <= 512
