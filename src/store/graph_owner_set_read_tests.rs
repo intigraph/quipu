@@ -347,3 +347,6 @@ fn physical_manifest_does_not_grant_logical_graphs_or_weaken_ordinary_admission(
 
 #[path = "graph_owner_set_read_matrix_tests.rs"]
 mod matrix;
+
+#[path = "graph_owner_set_read_cut_tests.rs"]
+mod cut;
