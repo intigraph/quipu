@@ -373,27 +373,29 @@ fn sabotage_an_r3_update_sent_to_legacy_writes_nothing_in_any_file() {
     assert_eq!(after, before);
 }
 
-/// Seconds held on `/update` by `client` (or the overflow bucket it may have
-/// been folded into), read from the rendered exposition.
-fn update_held(client: &str) -> f64 {
-    quipu::metrics::metrics()
+/// Seconds held on `/update` by exactly `client`, read from the rendered
+/// exposition; `None` when that client has no series (never recorded, or
+/// folded into the overflow bucket by other tests in this process).
+fn update_held(client: &str) -> Option<f64> {
+    let label = format!("client=\"{client}\"");
+    let series: Vec<f64> = quipu::metrics::metrics()
         .render_with_graph_counts(None, None)
         .lines()
         .filter(|line| line.starts_with("quipu_store_held_seconds_total{"))
-        .filter(|line| line.contains("endpoint=\"/update\""))
-        .filter(|line| {
-            line.contains(&format!("client=\"{client}\"")) || line.contains("client=\"other\"")
-        })
+        .filter(|line| line.contains("endpoint=\"/update\"") && line.contains(&label))
         .filter_map(|line| line.rsplit(' ').next()?.parse::<f64>().ok())
-        .sum()
+        .collect();
+    (!series.is_empty()).then(|| series.iter().sum())
 }
 
 /// H2a: a routed write records store time for its client like a legacy write
 /// does. Before, `apply_routed` built its phase timings and dropped them.
+/// Only this client's own series counts: the shared overflow bucket can be
+/// raised by other tests, so it would let a dropped observation pass.
 #[test]
 fn h2a_a_routed_update_records_store_time_for_its_client() {
     let f = fx();
-    let before = update_held("h2a-routed");
+    let before = update_held("h2a-routed").unwrap_or(0.0);
     let created = dispatch(
         Some(&f.router),
         &f.legacy,
@@ -403,8 +405,12 @@ fn h2a_a_routed_update_records_store_time_for_its_client() {
     )
     .unwrap();
     assert_eq!(report(created)["owner"]["store_id"], f.tracker_id.as_str());
+    let after = update_held("h2a-routed").expect(
+        "no h2a-routed /update series: the routed write recorded nothing, or the \
+         client was folded and this test cannot judge",
+    );
     assert!(
-        update_held("h2a-routed") > before,
+        after > before,
         "the routed write held the owner's writer and must say so"
     );
 }
