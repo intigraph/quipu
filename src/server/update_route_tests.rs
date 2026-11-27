@@ -474,7 +474,8 @@ fn h2b_a_write_that_committed_nothing_has_no_cut() {
 #[test]
 fn h2b_a_refused_capture_leaves_the_committed_receipt_with_a_null_cut() {
     let f = fx();
-    let Ok(Route::Owner(owner, _)) = super::route(Some(&f.router), &format!("{BASE}{CREATE}")) else {
+    let Ok(Route::Owner(owner, _)) = super::route(Some(&f.router), &format!("{BASE}{CREATE}"))
+    else {
         panic!("CREATE routes to the tracker owner");
     };
     let mut receipt = serde_json::json!({"owner": {"local_tx": 7}});
