@@ -524,3 +524,98 @@ fn r7_retry_reports_already_applied_and_the_base_advances() {
     );
     assert_eq!(footprint(&p.home.legacy), before, "a retry wrote");
 }
+
+fn merged(p: &mut Pair, req: &MergeRequest<'_>) -> MergeReceipt {
+    let path = p.path.clone();
+    match merge_on_legacy(&p.home.catalog, &mut p.home.legacy, &path, req).unwrap() {
+        MergeBack::Merged(r) => r,
+        other => panic!("expected a merge, got {other:?}"),
+    }
+}
+
+/// Review (#1318, eph-review-7f44b0) 1: once a merge wrote at home the base
+/// sits at the home head, so a later merge would land the mini's stale values
+/// as one-sided changes (reverting home-only work, dropping held slots).
+#[test]
+fn a_second_merge_after_a_written_one_refuses_naming_the_earlier_merge() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = c1a(dir.path());
+    let first = merged(&mut p, &request());
+    // Home changes a slot the mini never touched, then the mini writes again.
+    write_home(&mut p.home.legacy, 0, &[a("urn:y", ONE, "home", TO)], TO);
+    let d = datums(p.mini.store(), &[a("urn:z", ONE, "mini", TT)]);
+    p.mini.transact(ROOT_GRAPH_IRI, &d, TT, None).unwrap();
+    let (home0, mini0) = (footprint(&p.home.legacy), footprint(p.mini.store()));
+    let path = p.path.clone();
+    let err = merge_on_legacy(&p.home.catalog, &mut p.home.legacy, &path, &request()).unwrap_err();
+    let text = err.to_string();
+    assert!(
+        text.contains("second-merge") && text.contains(&first.merge_id),
+        "{text}"
+    );
+    assert_eq!(footprint(&p.home.legacy), home0);
+    assert_eq!(footprint(p.mini.store()), mini0);
+}
+
+/// Review 2: the mode is part of the R7 key and of a partial merge's id.
+#[test]
+fn the_same_input_under_another_mode_is_not_already_applied() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = c1a(dir.path());
+    let entity = MergeRequest {
+        mode: MergeMode::PartialEntity,
+        ..request()
+    };
+    let first = merged(&mut p, &entity);
+    let path = p.path.clone();
+    let again = merge_on_legacy(&p.home.catalog, &mut p.home.legacy, &path, &entity).unwrap();
+    assert!(
+        matches!(again, MergeBack::AlreadyApplied(ref r) if *r == first),
+        "{again:?}"
+    );
+    let slot = MergeRequest {
+        mode: MergeMode::PartialSlot,
+        ..request()
+    };
+    let other = merge_on_legacy(&p.home.catalog, &mut p.home.legacy, &path, &slot);
+    assert!(
+        !matches!(other, Ok(MergeBack::AlreadyApplied(_))),
+        "another mode reused the old receipt: {other:?}"
+    );
+    // A partial mode's id differs from the atomic one for the same input.
+    let dir = tempfile::tempdir().unwrap();
+    let mut atomic = c1a(dir.path());
+    assert_ne!(merged(&mut atomic, &request()).merge_id, first.merge_id);
+}
+
+/// Review 3: the R7 key carries a digest of the resolutions themselves, so
+/// different resolutions under one caller hash never share a key. (An
+/// end-to-end decided merge cannot be built here yet: deciding a conflict
+/// closes a value, and advancing the base over that bounded interval refuses,
+/// a pre-existing limit reported on #1318.)
+#[test]
+fn different_resolutions_never_share_an_r7_key() {
+    let key = (1, 2);
+    let one = ForkResolutions::from([(key, vec![Value::Str("a".into())])]);
+    let two = ForkResolutions::from([(key, vec![Value::Str("z".into())])]);
+    let both = ForkResolutions::from([
+        (key, vec![Value::Str("a".into()), Value::Str("b".into())]),
+        ((3, 4), vec![Value::Str("c".into())]),
+    ]);
+    let swapped = ForkResolutions::from([
+        ((3, 4), vec![Value::Str("c".into())]),
+        (key, vec![Value::Str("b".into()), Value::Str("a".into())]),
+    ]);
+    assert_ne!(
+        super::resolved_digest(Some(&one)),
+        super::resolved_digest(Some(&two))
+    );
+    assert_ne!(
+        super::resolved_digest(Some(&one)),
+        super::resolved_digest(None)
+    );
+    assert_eq!(
+        super::resolved_digest(Some(&both)),
+        super::resolved_digest(Some(&swapped))
+    );
+}

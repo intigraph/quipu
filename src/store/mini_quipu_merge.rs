@@ -28,8 +28,10 @@ const MERGES: &str = "CREATE TABLE IF NOT EXISTS mini_quipu_merges (
     name       TEXT NOT NULL,
     incoming   TEXT NOT NULL,
     decisions  TEXT NOT NULL,
+    mode       TEXT NOT NULL,
+    resolved   TEXT NOT NULL,
     receipt    TEXT NOT NULL,
-    UNIQUE (name, incoming, decisions)
+    UNIQUE (name, incoming, decisions, mode, resolved)
 )";
 const SAVEPOINT: &str = "quipu_mini_merge";
 
@@ -43,6 +45,35 @@ pub enum MergeMode {
     PartialEntity,
     /// Only the held slot is held.
     PartialSlot,
+}
+
+impl MergeMode {
+    fn code(self) -> &'static str {
+        match self {
+            Self::Atomic => "atomic",
+            Self::PartialEntity => "partial-entity",
+            Self::PartialSlot => "partial-slot",
+        }
+    }
+}
+
+/// A digest of the resolutions themselves, so the R7 key never trusts the
+/// caller's decisions hash alone (the fork promote contract keeps that hash).
+fn resolved_digest(resolutions: Option<&ForkResolutions>) -> String {
+    let mut rows: Vec<_> = resolutions
+        .into_iter()
+        .flatten()
+        .map(|(&(e, a), values)| {
+            let mut values: Vec<String> = values
+                .iter()
+                .map(|v| v.to_bytes().iter().map(|b| format!("{b:02x}")).collect())
+                .collect();
+            values.sort();
+            (e, a, values)
+        })
+        .collect();
+    rows.sort();
+    crate::share::sha256(serde_json::json!(rows).to_string().as_bytes())
 }
 
 impl From<MergeMode> for Mode {
@@ -68,6 +99,11 @@ pub enum MergeRefusal {
     BaseMismatch,
     /// Writable members moved off the recorded home owner or generation.
     X4MovedOwner,
+    /// An earlier merge of this entry wrote at home. Its base advanced to the
+    /// home head, which folds in home-only changes the mini never saw (and
+    /// keeps any held slot at ours), so a second merge would land the mini's
+    /// stale values as one-sided changes. Re-fork from current home.
+    SecondMerge,
 }
 
 impl MergeRefusal {
@@ -79,6 +115,7 @@ impl MergeRefusal {
             Self::BaseUnavailable => "base-unavailable",
             Self::BaseMismatch => "base-mismatch",
             Self::X4MovedOwner => "x4-multi-file",
+            Self::SecondMerge => "second-merge",
         }
     }
 }
@@ -227,12 +264,15 @@ fn merge(
     let decisions = req
         .decided
         .map_or_else(|| crate::share::sha256(b"[]"), |d| d.1.to_owned());
+    let mode = req.mode.code();
+    let resolved = resolved_digest(req.decided.map(|d| d.0));
     if super::has_table(home, "mini_quipu_merges")?
         && let Some(r) = home
             .conn
             .query_row(
-                "SELECT receipt FROM mini_quipu_merges WHERE name=?1 AND incoming=?2 AND decisions=?3",
-                params![req.name, incoming, decisions],
+                "SELECT receipt FROM mini_quipu_merges WHERE name=?1 AND incoming=?2 \
+                 AND decisions=?3 AND mode=?4 AND resolved=?5",
+                params![req.name, incoming, decisions, mode, resolved],
                 |r| r.get::<_, String>(0),
             )
             .optional()?
@@ -240,17 +280,51 @@ fn merge(
         let receipt = serde_json::from_str(&r).map_err(|e| Error::Serialization(e.to_string()))?;
         return Ok(MergeBack::AlreadyApplied(receipt));
     }
+    if entry.merged_head.is_some() {
+        let earlier: Option<String> = if super::has_table(home, "mini_quipu_merges")? {
+            home.conn
+                .query_row(
+                    "SELECT merge_id FROM mini_quipu_merges WHERE name=?1 \
+                     ORDER BY rowid DESC LIMIT 1",
+                    [req.name],
+                    |r| r.get(0),
+                )
+                .optional()?
+        } else {
+            None
+        };
+        return Err(refused(
+            MergeRefusal::SecondMerge,
+            &format!(
+                "merge {} already wrote this entry at home; a second merge would revert \
+                 home-only changes and drop held slots, so re-fork from current home",
+                earlier.as_deref().unwrap_or("UNKNOWN")
+            ),
+        ));
+    }
     let base = format!(
         "{}@{}#{}:{}",
         entry.base.store_id, entry.base.log_epoch, entry.base.local_tx, entry.base_digest
     );
-    let merge_id = crate::merge_core::merge_id("fork", &incoming, &base, &decisions);
+    // Atomic keeps the fork path's exact id; a partial mode is part of it.
+    let keyed = if req.mode == MergeMode::Atomic {
+        decisions.clone()
+    } else {
+        format!("{decisions};mode={mode}")
+    };
+    let merge_id = crate::merge_core::merge_id("fork", &incoming, &base, &keyed);
     home.ownership_operation(|home| {
         // Step 3: current home write authority. The fence is checked here,
         // and every gate of the write pipeline binds `receive` and `decide`.
         home.ensure_ownership_writable()?;
         home.conn.execute_batch(&format!("SAVEPOINT {SAVEPOINT}"))?;
-        match write(home, &mini, &entry, req, &merge_id, &incoming, &decisions) {
+        let key = [
+            incoming.as_str(),
+            decisions.as_str(),
+            mode,
+            resolved.as_str(),
+        ];
+        match write(home, &mini, &entry, req, &merge_id, key) {
             Ok(MergeBack::Merged(r)) => {
                 crate::store::release::release(&home.conn, SAVEPOINT)?;
                 Ok(MergeBack::Merged(r))
@@ -271,8 +345,7 @@ fn write(
     entry: &MiniForkEntry,
     req: &MergeRequest<'_>,
     merge_id: &str,
-    incoming: &str,
-    decisions: &str,
+    [incoming, decisions, mode, resolved]: [&str; 4],
 ) -> Result<MergeBack> {
     let cut = entry.base.local_tx;
     let mut plans = Vec::new();
@@ -331,13 +404,15 @@ fn write(
     advance(home, entry, &receipt, mini.latest_tx_id()?)?;
     home.conn.execute_batch(MERGES)?;
     home.conn.execute(
-        "INSERT INTO mini_quipu_merges (merge_id, name, incoming, decisions, receipt) \
-         VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO mini_quipu_merges (merge_id, name, incoming, decisions, mode, resolved, \
+         receipt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             merge_id,
             req.name,
             incoming,
             decisions,
+            mode,
+            resolved,
             serde_json::to_string(&receipt).map_err(|e| Error::Serialization(e.to_string()))?
         ],
     )?;
