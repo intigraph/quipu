@@ -86,11 +86,13 @@ contract.
 | Input | Option 1 (resolvable base) | Option 2 (location-free) |
 | --- | --- | --- |
 | `mode` | `"base"` | `"urn-uuid"` |
-| `base` | absolute `https://` IRI ending in `/` (private owner-local bases may use `http://`), no query, credentials or fragment content | must be absent |
+| `base` | absolute `https://` IRI ending in `/` (`http://` only when `visibility = "private"`), no query, credentials or fragment content | must be absent |
+| `visibility` | `"public"` or `"private"`, the registry's existing field and test: `public` requires `https://` and audience `public` (`src/entity_namespaces.rs` `Namespace::validate`) | not used |
 | `install_uuid` | not used | an RFC 9562 UUID chosen once per install; the UUIDv5 namespace for deterministic classes |
 
 Proposed environment names for non-quipu writers: `INTIGRAPH_INSTANCE_MODE`,
-`INTIGRAPH_INSTANCE_BASE`, `INTIGRAPH_INSTANCE_UUID`. A per-tool override
+`INTIGRAPH_INSTANCE_BASE`, `INTIGRAPH_INSTANCE_VISIBILITY`,
+`INTIGRAPH_INSTANCE_UUID`. A per-tool override
 (e.g. `SHUTTLE_ENTITY_NS`) remains accepted only if it agrees with the shared
 value; disagreement refuses.
 
@@ -102,14 +104,26 @@ value; disagreement refuses.
   is either the deterministic key (lower-case hex digest or the native opaque
   26-char base32 key) or a fresh opaque key.
 - **Option 2:** `urn:uuid:<uuid>`, where deterministic classes use
-  `UUIDv5(install_uuid, "<scope>\n<class>\n<canonical key input>")` and random
+  `UUIDv5(install_uuid, "<scope>\nv1\n<class>\n<key input>")` (exact form
+  below) and random
   classes use UUIDv4 from OS entropy (entropy failure refuses). Scope and class
   are **not** recoverable from the IRI, so the record must carry them as facts
   (section 3.2).
 
-The canonical key input for deterministic classes is the same input each
-writer hashes today (e.g. chaski `label\nevent_id`), versioned with a leading
-`v1\n` so a later change mints a new version rather than colliding.
+The key input for deterministic classes is the same input each writer hashes
+today (e.g. chaski `label\nevent_id`). The **canonical key string** is exactly
+the UTF-8 bytes of
+
+```text
+<scope> LF v1 LF <class> LF <key input>
+```
+
+with `LF` a single U+000A, no trailing newline, `scope` and `class` the fixed
+ASCII segments of sections 3.1 and above, and `key input` unchanged from
+today's writer. Option 2 hashes this string with UUIDv5 under `install_uuid`;
+option 1 uses the writer's existing digest of `key input` as `{key}` (the
+scope and class are already in the path). The version segment `v1` lets a
+later change of key input mint a new version rather than collide.
 
 ### Validation and refusals (before any write)
 
@@ -118,12 +132,20 @@ exits non-zero with a message naming the missing input when:
 
 1. `mode` is missing or not one of the two values;
 2. `mode = "base"` and `base` is missing, relative, has query/credentials/
-   fragment content, does not end in `/`, or is a public base not using HTTPS;
-3. `mode = "base"` and `base` equals or lies under a **former-name** base
-   (`http://aegis.gastown.local/ontology/`, `urn:shuttle:`, `https://camayoc.local/ontology/`).
-   Former names are read aliases, never new-allocation bases;
-4. `mode = "base"` and `base` overlaps the rt9f.5 `aegis-infra` base or any
-   other registered namespace's base (the quipu registry rule);
+   fragment content, does not end in `/`, `visibility` is missing or not
+   `public`/`private`, or `visibility = "public"` and `base` is not `https://`
+   (the registry's existing test, so it is checkable by the same code);
+3. `mode = "base"` and `base` equals or lies under a **former-name** HTTP(S)
+   base (`http://aegis.gastown.local/ontology/`,
+   `https://camayoc.local/ontology/`). Former names are read aliases, never
+   new-allocation bases. (`urn:shuttle:` needs no entry here: refusal 2
+   already rejects any non-HTTP(S) base);
+4. `mode = "base"` and `base` overlaps the base of any registered namespace
+   **other than this install's own scope entries** `{base}{scope}/`
+   (section 3.2) — in particular the rt9f.5 `aegis-infra` base. The scope
+   entries lie under `{base}` by construction and are exempt; they are checked
+   against each other and against every other entry by the registry's
+   ordinary two-way overlap rule (`src/entity_namespaces.rs` `insert`);
 5. `mode = "urn-uuid"` and `base` is set, or `install_uuid` is missing or not a
    valid UUID (deterministic classes cannot converge without it);
 6. the writer's bearer for the guarded write path is unset or empty. The writer
@@ -139,9 +161,16 @@ configuration still recalls every stored record.
 ### Recorded install declaration
 
 Before any allocation, an operator records one declaration per install
-(mode, base or install UUID, timestamp, principal) in the protected namespace
-registry graph `urn:quipu:graph:namespaces` through the existing local,
-explicit `quipu namespaces apply` path. That path is local CLI only and the
+(mode, base or install UUID, visibility, timestamp, principal) in the
+protected namespace registry graph `urn:quipu:graph:namespaces` through the
+existing local, explicit `quipu namespaces apply` path.
+
+The declaration is a **distinct record kind** (proposed subject
+`<urn:quipu:instance-identity>`), **not** a `[[quipu.namespaces]]` entry with
+base `{base}`. It holds no prefix, mints nothing and does not take part in
+the namespace overlap test. Were it a namespace entry, the registry's two-way
+`starts_with` test would refuse every scope entry `{base}{scope}/` beneath it.
+Only the per-scope entries of section 3.2 are namespace entries. That path is local CLI only and the
 registry already requires `apply` before a mint, so the declaration is a
 **precondition**, not a side effect of the first write: a writer that finds
 no declaration refuses (refusal 8). Neither startup nor a writer ever writes
@@ -251,7 +280,7 @@ canonical new IRI per entity, so a writer that later re-emits the entity
 converges on the alias target instead of minting a second `urn:uuid`:
 
 - **Deterministic class:** the alias target is the ordinary new-mint value,
-  `UUIDv5(install_uuid, "<scope>\n<class>\n<canonical key input>")`, computed
+  `UUIDv5(install_uuid, <canonical key string>)` (section 2), computed
   from the entity's original key input (section 2), **not** from the legacy
   IRI string. A migrated firing and a freshly re-emitted firing for the same
   key are therefore the same IRI. If the key input cannot be recovered from
@@ -314,8 +343,10 @@ it is option C in the ASK below, and it still requires a recorded
 
 ## 8. Acceptance for implementation items (per repo)
 
-1. Before → after counts of `aegis.gastown.local` / `scbrown.github.io/quechua`
-   occurrences by class (section 1), measured with `git grep` on non-test,
+1. Before → after counts of `aegis.gastown.local` occurrences, and of the
+   legacy vocabulary base `https://scbrown.github.io/quechua/ns#` (the
+   current `quechua:` prefix, a vocabulary term base in section 1's sense,
+   reported separately and changed only under m5s.1), by class (section 1), measured with `git grep` on non-test,
    non-doc source.
 2. Fresh disposable install, option 1: one real write per writer mints under
    `{base}{scope}/`, zero legacy triples written; read-back per 3.5 passes.
@@ -323,13 +354,20 @@ it is option C in the ASK below, and it still requires a recorded
    scope facts; a repeated deterministic write converges; a repeated random
    write is distinct.
 4. Negative controls: unset mode refuses with no write; former-name base
-   refuses; base overlapping `aegis-infra` refuses; mode disagreeing with the
+   refuses; base overlapping `aegis-infra` refuses; a public `http://` base
+   refuses; a scope entry overlapping another scope entry or another install's
+   namespace refuses; an install declaration that carries a base prefix
+   (i.e. was written as a namespace entry) is refused; mode disagreeing with the
    recorded declaration refuses; no recorded declaration refuses; a principal
    writing into another scope refuses.
-5. Legacy control: a store holding legacy-IRI records still recalls them after
+5. Positive overlap control: on an option-1 install, the install declaration
+   plus all four scope entries `{base}chaski/` … `{base}camayoc/` apply
+   together without an overlap refusal, and each writer then mints under its
+   own scope.
+6. Legacy control: a store holding legacy-IRI records still recalls them after
    the change; a signed legacy payload still verifies.
-6. rt9f.5 control: its six-type A/B gates and keyed shapes are unchanged.
-7. Alias convergence (when a migration is run): a migrated deterministic
+7. rt9f.5 control: its six-type A/B gates and keyed shapes are unchanged.
+8. Alias convergence (when a migration is run): a migrated deterministic
    entity and a fresh re-emission for the same key produce one IRI, not two.
 
 ## 9. ASK Stiwi (one card, routed via the lead)
@@ -343,7 +381,13 @@ design does not pick it.
   `id/` (the segment name is part of this decision; `id/` itself cannot host
   the scopes because `aegis-infra` owns that base and the registry refuses
   overlap), then per-writer scopes `…/<segment>/chaski/`, `…/shuttle/`,
-  `…/shantytown/`, `…/camayoc/`, each its own namespace entry. *For:* one public naming decision
+  `…/shantytown/`, `…/camayoc/`, each its own namespace entry. **Constraint
+  on the segment:** it must not be `ns`, and must not equal or prefix any
+  m5s.1 vocabulary path under `https://w3id.org/intigraph/aegis/`, because
+  section 1 forbids deriving vocabulary from the instance base and an
+  overlapping segment would mix terms and instances under one path. The card
+  asks Stiwi to name the segment (suggestion: `rec/`) subject to that check
+  against the m5s.1 ownership ledger. *For:* one public naming decision
   already accepted for infra; public HTTPS; no second authority. *Against:*
   the w3id route/resolver still needs its separate target proof and upstream
   public-send step before it resolves; memory records under a public authority
