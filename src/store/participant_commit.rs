@@ -291,7 +291,7 @@ pub fn commit_derived(
             })?;
             crash(CrashPoint::AfterPrepare(index))?;
         }
-        Ok(())
+        derive::recheck_shapes(&order, &mut guards, &pin_plan)
     })();
     if let Err(error) = prepared {
         if !crashed() {
@@ -420,7 +420,7 @@ fn reconcile(
                 intents.push((row, payload));
             }
             let mut receipts = Vec::with_capacity(guards.len());
-            for (index, (store, (row, payload))) in guards.iter_mut().zip(intents).enumerate() {
+            for (index, (store, (row, payload))) in guards.iter_mut().zip(&intents).enumerate() {
                 let heads = match row.state.as_str() {
                     "applied" | "published" => serde_json::from_str(
                         row.heads
@@ -428,7 +428,7 @@ fn reconcile(
                             .ok_or_else(|| refuse("applied intent lacks heads"))?,
                     )
                     .map_err(|_| refuse("damaged intent heads"))?,
-                    "prepared" => apply(store, batch_id, &row, &payload)?,
+                    "prepared" => apply(store, batch_id, row, payload)?,
                     _ => return Err(refuse("committed batch has an aborted intent")),
                 };
                 if row.state == "prepared" {
@@ -457,6 +457,7 @@ fn reconcile(
             })?;
             crash(CrashPoint::AfterPublish)?;
             release(guards, batch_id)?;
+            derive::audit(guards, batch_id, &members, &intents);
             Ok(Recovery::Published(vector))
         }
         "published" => {
@@ -503,7 +504,7 @@ fn apply(
             .execute_batch("SAVEPOINT quipu_participant_apply")?;
         let outcome = (|| {
             let graphs_before = graphs_digest(store)?;
-            let txs = store.with_derived_type_context(&payload.pins.context, |store| {
+            let txs = derive::replay(store, &payload.pins, |store| {
                 store.transact_graph_batches_tx(
                     &native,
                     &payload.timestamp,

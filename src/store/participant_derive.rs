@@ -24,6 +24,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
+#[path = "participant_replay.rs"]
+mod replay;
+use replay::budget;
+pub(super) use replay::{audit, recheck_shapes, replay};
+#[cfg(test)]
+pub use replay::{with_before_decision, with_prepare_budget, with_slow_dry_run};
+
 /// One derived triple, the source (index in canonical order) and graph it
 /// was read from.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -127,13 +134,28 @@ pub(super) fn prepare_members(
             .map(|v| v.checks.len() + v.absences.len())
             .sum();
         let mut derived: BTreeSet<(String, [String; 3])> = BTreeSet::new();
+        let started = std::time::Instant::now();
+        let over_budget = || {
+            (started.elapsed() > budget()).then(|| {
+                refuse(format!(
+                    "prepare validation exceeded {:?} under the fences; nothing prepared",
+                    budget()
+                ))
+            })
+        };
         for member in members {
             let at = position(member.owner)?;
             let file = member.owner.owner.catalog_route().file_id.clone();
             let Some(shapes) = guards[at].write_reject_shapes()? else {
                 continue;
             };
-            let first = match dry_run(&mut guards[at], &member.batch, &[]) {
+            plan.entry(file.clone()).or_default().shapes =
+                Some((sha256(shapes.as_bytes()), shapes.clone()));
+            let outcome = dry_run(&mut guards[at], &Delta::of(&member.batch), &[]);
+            if let Some(error) = over_budget() {
+                return Err(error);
+            }
+            let first = match outcome {
                 Ok(()) => continue,
                 Err(error @ Error::ValidationFailed { .. }) => error,
                 Err(error) => {
@@ -185,7 +207,11 @@ pub(super) fn prepare_members(
                      source types: {unresolved}; nothing prepared"
                 )));
             }
-            if let Err(error) = dry_run(&mut guards[at], &member.batch, &context) {
+            let outcome = dry_run(&mut guards[at], &Delta::of(&member.batch), &context);
+            if let Some(error) = over_budget() {
+                return Err(error);
+            }
+            if let Err(error) = outcome {
                 return Err(refuse(format!(
                     "member {file} refused at prepare with derived types: {error}; values no \
                      enlisted type source types: {unresolved}; nothing prepared"
@@ -224,10 +250,32 @@ pub(super) fn prepare_members(
     }
 }
 
+/// The parts of a member delta a dry run replays: from a caller batch at
+/// PREPARE, or from a decoded intent in the post-commit audit.
+#[cfg_attr(not(feature = "shacl"), allow(dead_code))]
+pub(super) struct Delta<'a> {
+    pub(super) graphs: &'a [(String, Vec<crate::store::Datum>)],
+    pub(super) timestamp: &'a str,
+    pub(super) actor: Option<&'a str>,
+    pub(super) source: Option<&'a str>,
+}
+
+#[cfg_attr(not(feature = "shacl"), allow(dead_code))]
+impl<'a> Delta<'a> {
+    fn of(batch: &'a GraphSetBatch) -> Self {
+        Delta {
+            graphs: &batch.graphs,
+            timestamp: &batch.timestamp,
+            actor: batch.actor.as_deref(),
+            source: batch.source.as_deref(),
+        }
+    }
+}
+
 /// Apply `batch` to `store` inside a savepoint that is always rolled back:
 /// the exact local gate a later apply runs, with nothing kept.
 #[cfg(feature = "shacl")]
-fn dry_run(store: &mut Store, batch: &GraphSetBatch, context: &[[String; 3]]) -> Result<()> {
+pub(super) fn dry_run(store: &mut Store, batch: &Delta<'_>, context: &[[String; 3]]) -> Result<()> {
     let native = batch
         .graphs
         .iter()
@@ -238,18 +286,15 @@ fn dry_run(store: &mut Store, batch: &GraphSetBatch, context: &[[String; 3]]) ->
             Ok((id, datums.clone()))
         })
         .collect::<Result<Vec<_>>>()?;
+    #[cfg(test)]
+    replay::test_delay();
     store.ownership_operation(|store| {
         store
             .conn
             .execute_batch("SAVEPOINT quipu_participant_dry_run")?;
         let outcome = store.with_derived_type_context(context, |store| {
             store
-                .transact_graph_batches_tx(
-                    &native,
-                    &batch.timestamp,
-                    batch.actor.as_deref(),
-                    batch.source.as_deref(),
-                )
+                .transact_graph_batches_tx(&native, batch.timestamp, batch.actor, batch.source)
                 .map(|_| ())
         });
         crate::store::release::rollback_release(&store.conn, "quipu_participant_dry_run")?;

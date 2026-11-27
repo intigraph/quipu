@@ -16,8 +16,13 @@
 //!
 //! Slice B derives dependencies from a member's own sh:class shapes (see
 //! `participant_derive.rs`); a subclass axiom it relies on is pinned as a
-//! [`SubclassPin`] with the same removal guard. Not provided: unbounded or
-//! global constraints.
+//! [`SubclassPin`] with the same removal guard (dearing c69: BLOCK, never
+//! record-only). Who may clear a pin: whoever can run a participant batch with
+//! writer authority over BOTH the pinning (source) file and the dependent
+//! file, enlisting the dependent with a reference-absence check. When that
+//! needs the dependent file's owner and the owner is gone or stopped, the
+//! remedy is an administrator escalation; there is no bypass. Not provided:
+//! unbounded or global constraints.
 use super::*;
 
 /// The most dependency checks one batch may declare.
@@ -482,9 +487,19 @@ fn check_pinned_axioms(
             });
         if removes {
             return Err(refuse(format!(
-                "axiom {} subClassOf {} in {} is pinned by dependent file {} (for {}); change \
-                 it in a participant batch that enlists that file with a reference-absence check",
-                pin.class, pin.parent, pin.graph, pin.dependent_file_id, pin.via
+                "axiom {class} subClassOf {parent} in {graph} is pinned by dependent file \
+                 {dependent}, whose committed batch relies on it for {via}. To release it, run \
+                 ONE participant batch with this file as a member (the retraction) and \
+                 {dependent} enlisted with ReferenceAbsence {{ entity: {via} }} (as a member \
+                 retracting its references to {via}, or as a validation participant once it \
+                 holds none). That batch needs writer authority over both files; if \
+                 {dependent}'s owner is gone or stopped, escalate to an administrator. There \
+                 is no bypass.",
+                class = pin.class,
+                parent = pin.parent,
+                graph = pin.graph,
+                dependent = pin.dependent_file_id,
+                via = pin.via
             )));
         }
     }

@@ -34,6 +34,15 @@ pub(super) const SUBCLASS_PINS: &str = "CREATE TABLE IF NOT EXISTS subclass_pins
     dependent_file_id TEXT NOT NULL, \
     PRIMARY KEY (graph, class, parent, via, dependent_file_id))";
 
+/// Slice B audit records (dearing c71): post-commit facts about a judged
+/// member, never a fence. kind = 'shapes-delta' (judged under X, current Y)
+/// or 'verify-failed' (the applied member does not verify under the carried
+/// shapes: a corrupt intent or a replay bug; loud, stays applied).
+pub(super) const AUDIT: &str = "CREATE TABLE IF NOT EXISTS participant_audit (\
+    batch_id TEXT NOT NULL, kind TEXT NOT NULL, judged_sha256 TEXT NOT NULL, \
+    current_sha256 TEXT, detail TEXT NOT NULL, \
+    PRIMARY KEY (batch_id, kind))";
+
 pub(super) fn table_exists(store: &Store, name: &str) -> Result<bool> {
     Ok(store.conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
@@ -106,6 +115,10 @@ pub(super) struct PinChanges {
     pub(super) axioms: Vec<super::deps::SubclassPin>,
     /// Slice B: derived type context this (member) file's apply is judged with.
     pub(super) context: Vec<[String; 3]>,
+    /// Slice B (malcolm C1, dearing c71): (sha256, exact bytes) of the write
+    /// shapes this member was judged by at PREPARE. Re-checked before the
+    /// COMMIT decision; carried so recovery can audit under them after a reload.
+    pub(super) shapes: Option<(String, String)>,
 }
 
 impl PinChanges {
@@ -114,6 +127,7 @@ impl PinChanges {
             && self.release.is_empty()
             && self.axioms.is_empty()
             && self.context.is_empty()
+            && self.shapes.is_none()
     }
 }
 
@@ -165,6 +179,10 @@ pub(super) fn encode_payload_with(batch: &GraphSetBatch, pins: &PinChanges) -> V
         }
         if !pins.context.is_empty() {
             value["pins"]["context"] = serde_json::json!(pins.context);
+        }
+        if let Some((sha, bytes)) = &pins.shapes {
+            value["pins"]["shapes_sha256"] = serde_json::json!(sha);
+            value["pins"]["shapes"] = serde_json::json!(bytes);
         }
     }
     value.to_string().into_bytes()
@@ -239,6 +257,15 @@ pub(super) fn decode_payload(bytes: &[u8]) -> Result<Decoded> {
             pins.context
                 .push([field(row, 0)?, field(row, 1)?, field(row, 2)?]);
         }
+        if let Some(sha) = changes.get("shapes_sha256") {
+            // Bytes may be absent or altered: recovery still applies, and its
+            // audit reports the shapes it could not verify under.
+            let bytes = changes
+                .get("shapes")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            pins.shapes = Some((sha.as_str().ok_or_else(bad)?.to_owned(), bytes.to_owned()));
+        }
     }
     Ok(Decoded {
         timestamp: text("timestamp").ok_or_else(bad)?,
@@ -286,6 +313,7 @@ pub(super) fn durable<T>(
         store.conn.execute_batch(INTENTS)?;
         store.conn.execute_batch(PINS)?;
         store.conn.execute_batch(SUBCLASS_PINS)?;
+        store.conn.execute_batch(AUDIT)?;
         work(store)
     })
 }

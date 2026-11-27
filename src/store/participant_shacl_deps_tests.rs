@@ -23,6 +23,8 @@ const ACTION: &str = "urn:type:Action";
 const SUB_ACTION: &str = "urn:type:SubAction";
 const OTHER: &str = "urn:type:Other";
 const OTHER_SHARED: &str = "urn:shared:other-action";
+const CYCLE_A: &str = "urn:type:CycleA";
+const CYCLE_B: &str = "urn:type:CycleB";
 
 /// Alpha's pinned shapes: an Action's blockedOn values must be Actions and
 /// its relates values Others, and an Other must be a blank node. Every Other
@@ -62,6 +64,8 @@ fn fixture_iris() -> Vec<String> {
         SUB_ACTION,
         OTHER,
         OTHER_SHARED,
+        CYCLE_A,
+        CYCLE_B,
     ]
     .iter()
     .map(|iri| (*iri).to_owned())
@@ -103,8 +107,14 @@ fn shacl_files(root: &Path) -> Files {
 
 /// (Re)open one owner with write SHACL on, as a configured server would.
 fn open_shacl(files: &Files, index: usize) -> GraphSetOwner {
+    open_shacl_with(files, index, None)
+}
+
+/// [`open_shacl`] with extra runtime (explicit) write shapes.
+fn open_shacl_with(files: &Files, index: usize, explicit: Option<&str>) -> GraphSetOwner {
     let mut store = Store::open(path(files, index).to_str().unwrap()).unwrap();
     store.shacl_config_mut().validate_on_write = true;
+    store.write_shapes = explicit.map(str::to_owned);
     let allocation = files
         .catalog
         .physical()
@@ -564,4 +574,335 @@ fn ordinary_single_file_writes_are_unchanged_by_slice_b() {
     assert!(alpha.transact(&member.requests, &member.batch).is_err());
     let local = alpha_member(&files, &alpha, &[SHARED], &[(SHARED, RDF_TYPE, ACTION)]);
     alpha.transact(&local.requests, &local.batch).unwrap();
+}
+
+/// Shapes that refuse every Action (an IRI is never a blank node): what a
+/// reload to different bytes looks like to an already judged member.
+const REFUSING: &str = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+<urn:shape:Action> a sh:NodeShape ; sh:targetClass <urn:type:Action> ;
+  sh:nodeKind sh:BlankNode .
+"#;
+
+fn audit_rows(files: &Files) -> Vec<(String, String)> {
+    let conn = rusqlite::Connection::open_with_flags(
+        path(files, 0),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let mut stmt = conn
+        .prepare("SELECT kind, detail FROM participant_audit ORDER BY kind")
+        .unwrap();
+    stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
+}
+
+fn intent_state(files: &Files, index: usize, batch_id: &str) -> String {
+    let conn = rusqlite::Connection::open_with_flags(
+        path(files, index),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    conn.query_row(
+        "SELECT state FROM participant_intents WHERE batch_id=?1",
+        [batch_id],
+        |r| r.get(0),
+    )
+    .unwrap()
+}
+
+fn b1_batch<'a>(
+    files: &Files,
+    alpha: &'a GraphSetOwner,
+    beta: &'a GraphSetOwner,
+    id: &str,
+) -> ParticipantBatch<'a> {
+    ParticipantBatch {
+        batch_id: id.into(),
+        members: vec![
+            alpha_member(files, alpha, &[SHARED], &[]),
+            plain_member(files, beta, 1),
+        ],
+    }
+}
+
+#[test]
+fn c1_a_shapes_reload_between_prepare_and_the_decision_aborts_before_commit() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, ACTION)]);
+    let before = heads(&files);
+    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    let batch = b1_batch(&files, &alpha, &beta, "batch-c1-pre");
+    let error = as_writer(|| {
+        derive::with_before_decision(
+            |store| {
+                store
+                    .load_shapes("slice-b", REFUSING, "2026-01-02T00:00:00Z")
+                    .unwrap();
+            },
+            || commit_derived(&batch, &[], &[&gamma]),
+        )
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("before commit"), "{error}");
+    // The reload itself is a registry write in alpha; no participant facts.
+    assert_eq!(heads(&files)[1..], before[1..]);
+    assert_eq!(
+        counts(&alpha, 0).unwrap(),
+        [0, 0],
+        "an aborted batch wrote no facts"
+    );
+    assert_eq!(intent_state(&files, 0, "batch-c1-pre"), "aborted");
+    // No pending-batch fence anywhere: the plain files take ordinary writes.
+    local_write(&files, &beta, 1, "after").unwrap();
+    local_write(&files, &gamma, 2, "after").unwrap();
+    assert!(dependency_pins(&gamma).unwrap().is_empty());
+}
+
+/// Commit B1's batch with a crash right after the COMMIT decision.
+fn crashed_after_decision(files: &Files, id: &str) {
+    seed(files, 2, 0, &[(SHARED, RDF_TYPE, ACTION)]);
+    let (alpha, beta, gamma) = (open_shacl(files, 0), open(files, 1), open(files, 2));
+    let batch = b1_batch(files, &alpha, &beta, id);
+    let error = as_writer(|| {
+        with_crash(CrashPoint::AfterDecision, || {
+            commit_derived(&batch, &[], &[&gamma])
+        })
+    })
+    .unwrap_err();
+    assert!(injected(&error), "{error}");
+}
+
+fn recover_all(
+    files: &Files,
+    id: &str,
+    alpha: GraphSetOwner,
+) -> (GraphSetOwner, GraphSetOwner, GraphSetOwner) {
+    let (beta, gamma) = (open(files, 1), open(files, 2));
+    let Recovery::Published(_) = recover(&[&alpha, &beta, &gamma], id).unwrap() else {
+        panic!("a committed batch recovered as an abort");
+    };
+    (alpha, beta, gamma)
+}
+
+#[test]
+fn c1_post_a_recovery_after_a_reload_replays_releases_and_verifies_under_carried_bytes() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    crashed_after_decision(&files, "batch-c1-post");
+    // The server restarts judging with different shapes that would refuse
+    // this member. (A registry write into the fenced file is NOT this case:
+    // it moves the head, which the S1 expected-head guard refuses; see n0wc.5.)
+    let alpha = open_shacl_with(&files, 0, Some(REFUSING));
+    let (alpha, beta, gamma) = recover_all(&files, "batch-c1-post", alpha);
+    assert_eq!(
+        counts(&alpha, 0).unwrap(),
+        [2, 0],
+        "the decision was finished"
+    );
+    for index in 0..3 {
+        assert_eq!(intent_state(&files, index, "batch-c1-post"), "published");
+    }
+    local_write(&files, &beta, 1, "after").unwrap();
+    local_write(&files, &gamma, 2, "after").unwrap();
+    let rows = audit_rows(&files);
+    assert_eq!(
+        rows.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
+        ["shapes-delta"],
+        "{rows:?}"
+    );
+    assert!(rows[0].1.contains("bytes carried"), "{rows:?}");
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [type_pin(data(2), SHARED, ACTION, "alpha")]
+    );
+}
+
+#[test]
+fn c1_post_b_corrupt_carried_shapes_still_apply_release_and_raise_the_loud_record() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    crashed_after_decision(&files, "batch-c1-bad");
+    // Corrupt alpha's carried bytes, keeping the intent's integrity digest
+    // valid: the only defect is the carried shape set itself.
+    let conn = rusqlite::Connection::open(path(&files, 0)).unwrap();
+    let (digest, member, head, payload): (String, i64, i64, Vec<u8>) = conn
+        .query_row(
+            "SELECT batch_digest, member, expected_head, payload FROM participant_intents \
+             WHERE batch_id='batch-c1-bad'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .unwrap();
+    let mut value: Value = serde_json::from_slice(&payload).unwrap();
+    value["pins"]["shapes"] = serde_json::json!(REFUSING);
+    let payload = value.to_string().into_bytes();
+    let intent =
+        super::records::intent_digest(&digest, usize::try_from(member).unwrap(), head, &payload);
+    conn.execute(
+        "UPDATE participant_intents SET payload=?1, intent_digest=?2 WHERE batch_id='batch-c1-bad'",
+        rusqlite::params![payload, intent],
+    )
+    .unwrap();
+    drop(conn);
+    let (alpha, beta, _gamma) = recover_all(&files, "batch-c1-bad", open_shacl(&files, 0));
+    assert_eq!(counts(&alpha, 0).unwrap(), [2, 0]);
+    assert_eq!(intent_state(&files, 0, "batch-c1-bad"), "published");
+    local_write(&files, &beta, 1, "after").unwrap();
+    let rows = audit_rows(&files);
+    assert!(
+        rows.iter()
+            .any(|(k, d)| k == "verify-failed" && d.contains("member alpha")),
+        "{rows:?}"
+    );
+}
+
+#[test]
+fn c2_a_slow_validator_refuses_with_nothing_prepared_and_releases_the_fences() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, ACTION)]);
+    let before = heads(&files);
+    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    let batch = b1_batch(&files, &alpha, &beta, "batch-c2");
+    let error = as_writer(|| {
+        derive::with_prepare_budget(std::time::Duration::from_millis(20), || {
+            derive::with_slow_dry_run(std::time::Duration::from_millis(60), || {
+                commit_derived(&batch, &[], &[&gamma])
+            })
+        })
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("exceeded"), "{error}");
+    assert_nothing_prepared(&files, [&alpha, &beta, &gamma], &before);
+    // A second writer proceeds, and the same id was not consumed.
+    as_writer(|| commit_derived(&batch, &[], &[&gamma])).unwrap();
+}
+
+#[test]
+fn c3a_a_pinned_axiom_refusal_explains_itself_and_the_owner_can_clear_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, SUB_ACTION)]);
+    seed(&files, 2, 1, &[(SUB_ACTION, SUBCLASS_OF, ACTION)]);
+    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    as_writer(|| {
+        commit_derived(
+            &b1_batch(&files, &alpha, &beta, "batch-c3a"),
+            &[],
+            &[&gamma],
+        )
+    })
+    .unwrap();
+    let error = retract(&files, &gamma, 2, 1, (SUB_ACTION, SUBCLASS_OF, ACTION)).unwrap_err();
+    let text = error.to_string();
+    for part in [
+        "dependent file alpha",
+        SUB_ACTION,
+        "ReferenceAbsence { entity: urn:shared:action }",
+        "escalate to an administrator",
+        "no bypass",
+    ] {
+        assert!(text.contains(part), "{part}: {text}");
+    }
+    // The release batch the refusal names: alpha drops its reference, gamma
+    // retracts the axiom, alpha is enlisted with the absence check.
+    let release = ParticipantBatch {
+        batch_id: "batch-c3a-release".into(),
+        members: vec![
+            Member {
+                owner: &alpha,
+                requests: requests(0),
+                batch: graph_batch(
+                    &files,
+                    0,
+                    0,
+                    &[triple(&files, 0, ITEM, BLOCKED_ON, SHARED, Op::Retract)],
+                ),
+            },
+            Member {
+                owner: &gamma,
+                requests: requests(2),
+                batch: graph_batch(
+                    &files,
+                    2,
+                    1,
+                    &[triple(
+                        &files,
+                        2,
+                        SUB_ACTION,
+                        SUBCLASS_OF,
+                        ACTION,
+                        Op::Retract,
+                    )],
+                ),
+            },
+        ],
+    };
+    let validations = [Validation {
+        owner: &alpha,
+        checks: Vec::new(),
+        absences: vec![ReferenceAbsence {
+            entity: SHARED.into(),
+        }],
+    }];
+    as_writer(|| commit_validated(&release, &validations)).unwrap();
+    assert!(subclass_pins(&gamma).unwrap().is_empty());
+    assert!(dependency_pins(&gamma).unwrap().is_empty());
+}
+
+#[test]
+fn c3b_a_subclass_cycle_terminates_with_a_deterministic_chain_or_refusal() {
+    // No exit to Action: the walk terminates and refuses naming the value.
+    let temp = tempfile::tempdir().unwrap();
+    let files = shacl_files(temp.path());
+    seed(&files, 2, 0, &[(SHARED, RDF_TYPE, CYCLE_A)]);
+    seed(
+        &files,
+        2,
+        1,
+        &[
+            (CYCLE_A, SUBCLASS_OF, CYCLE_B),
+            (CYCLE_B, SUBCLASS_OF, CYCLE_A),
+        ],
+    );
+    {
+        let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+        let error = as_writer(|| {
+            commit_derived(
+                &b1_batch(&files, &alpha, &beta, "batch-c3b"),
+                &[],
+                &[&gamma],
+            )
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains(SHARED), "{error}");
+    }
+    // With an exit (B sub Action), the chain is A sub B, B sub Action: two
+    // axiom checks plus the type, each counted, each pinned once.
+    seed(&files, 2, 1, &[(CYCLE_B, SUBCLASS_OF, ACTION)]);
+    let (alpha, beta, gamma) = (open_shacl(&files, 0), open(&files, 1), open(&files, 2));
+    as_writer(|| {
+        commit_derived(
+            &b1_batch(&files, &alpha, &beta, "batch-c3b-exit"),
+            &[],
+            &[&gamma],
+        )
+    })
+    .unwrap();
+    assert_eq!(
+        subclass_pins(&gamma)
+            .unwrap()
+            .iter()
+            .map(|p| (p.class.as_str(), p.parent.as_str(), p.via.as_str()))
+            .collect::<Vec<_>>(),
+        [(CYCLE_A, CYCLE_B, SHARED), (CYCLE_B, ACTION, SHARED)]
+    );
+    assert_eq!(
+        dependency_pins(&gamma).unwrap(),
+        [type_pin(data(2), SHARED, CYCLE_A, "alpha")]
+    );
 }
