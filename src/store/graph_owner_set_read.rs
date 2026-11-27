@@ -101,6 +101,7 @@ impl GraphSetDataset {
         self.read_inner(
             graphs,
             deadline,
+            true,
             |physical| {
                 // R1: prove disjoint term spaces BEFORE anything is attached.
                 crate::store::composition::check_term_spaces(physical)?;
@@ -143,13 +144,14 @@ impl GraphSetDataset {
         deadline: Instant,
         query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
     ) -> Result<T> {
-        self.read_inner(graphs, deadline, |_| Ok(()), query)
+        self.read_inner(graphs, deadline, false, |_| Ok(()), query)
     }
 
     fn read_inner<T>(
         &self,
         graphs: &[&str],
         deadline: Instant,
+        cut: bool,
         under_fence: impl FnOnce(&[CapturedRead<'_>]) -> Result<()>,
         query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
     ) -> Result<T> {
@@ -176,7 +178,7 @@ impl GraphSetDataset {
                     .ok_or_else(|| refused("logical graph left pinned dataset"))
             })
             .collect::<Result<Vec<_>>>()?;
-        Owner::read_strict_with(&owners, deadline, under_fence, |physical| {
+        Owner::read_strict_inner(&owners, deadline, cut, under_fence, |physical| {
             let mut selected = Vec::with_capacity(routes.len());
             for route in &routes {
                 let source = physical
@@ -187,6 +189,7 @@ impl GraphSetDataset {
                     route,
                     catalog_revision: source.catalog_revision,
                     local_tx: source.local_tx,
+                    published_tx: source.published_tx,
                     store: source.store,
                     legacy: source.legacy,
                 });

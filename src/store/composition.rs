@@ -307,7 +307,7 @@ impl Checkout {
     pub(crate) fn compose(
         &mut self,
         main_graphs: &[i64],
-        attached_graphs: &[(String, Vec<i64>)],
+        attached_graphs: &[(String, Vec<i64>, Option<i64>)],
     ) -> Result<()> {
         let attachments: Vec<Attachment> = self
             .aliases
@@ -336,14 +336,36 @@ impl Checkout {
             ids(main_graphs)
         )];
         let mut contributed = Vec::new();
-        for (alias, graphs) in attached_graphs {
+        for (alias, graphs, bound) in attached_graphs {
             if !self.aliases.contains(alias) {
                 return Err(refused("composed graph names an unmounted file"));
             }
-            branches.push(format!(
-                "SELECT {cols} FROM {alias}.facts WHERE g IN ({})",
-                ids(graphs)
-            ));
+            branches.push(match bound {
+                None => format!(
+                    "SELECT {cols} FROM {alias}.facts WHERE g IN ({})",
+                    ids(graphs)
+                ),
+                // Publication cut (Phase 3 S3): only facts up to the file's
+                // published head, and a retraction made after it reads as
+                // not yet made, so an unpublished batch is wholly invisible.
+                Some(head) => format!(
+                    "SELECT {} FROM {alias}.facts WHERE g IN ({}) AND tx <= {head}",
+                    FACTS_COLUMNS
+                        .iter()
+                        // A close (gate.rs) sets valid_to AND retracted_tx, and
+                        // only closes rows whose valid_to IS NULL, so both read
+                        // NULL at a cut before the closing transaction.
+                        .map(|c| match *c {
+                            "retracted_tx" | "valid_to" => format!(
+                                "CASE WHEN retracted_tx > {head} THEN NULL ELSE {c} END AS {c}"
+                            ),
+                            _ => (*c).to_owned(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    ids(graphs)
+                ),
+            });
             contributed.extend(graphs.iter().copied());
         }
         contributed.sort_unstable();
@@ -359,7 +381,7 @@ impl Checkout {
         store
             .conn
             .execute_batch("CREATE TEMP TABLE graphs AS SELECT * FROM main.graphs;")?;
-        for (alias, graphs) in attached_graphs {
+        for (alias, graphs, _) in attached_graphs {
             let present: Vec<String> = store
                 .conn
                 .prepare(&format!(

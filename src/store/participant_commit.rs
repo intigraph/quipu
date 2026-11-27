@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 #[path = "participant_records.rs"]
 mod records;
 use records::*;
-pub(crate) use records::{check_read_fence, check_write_fence};
+pub(crate) use records::{applied_intent, check_read_fence, check_write_fence, home_published};
 
 #[path = "participant_crash.rs"]
 mod crash_points;

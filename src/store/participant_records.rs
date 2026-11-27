@@ -268,3 +268,76 @@ pub(super) fn intent(store: &Store, batch_id: &str) -> Result<Option<IntentRow>>
         Err(error) => Err(error.into()),
     }
 }
+
+/// The applied-but-unpublished batch this file holds, if any: what a composed
+/// reader needs to pick this file's publication cut (Phase 3 S3).
+pub(crate) struct AppliedIntent {
+    pub(crate) batch_id: String,
+    pub(crate) home_file_id: String,
+    pub(crate) home_store_id: String,
+    pub(crate) home_log_epoch: String,
+    /// This file's head before the batch: its last published local head.
+    pub(crate) expected_head: i64,
+}
+
+pub(crate) fn applied_intent(store: &Store) -> Result<Option<AppliedIntent>> {
+    if !table_exists(store, "participant_intents")? {
+        return Ok(None);
+    }
+    let mut statement = store.conn.prepare(
+        "SELECT batch_id, home_file_id, home_store_id, home_log_epoch, expected_head \
+         FROM participant_intents WHERE state = 'applied' LIMIT 2",
+    )?;
+    let mut rows: Vec<AppliedIntent> = statement
+        .query_map([], |row| {
+            Ok(AppliedIntent {
+                batch_id: row.get(0)?,
+                home_file_id: row.get(1)?,
+                home_store_id: row.get(2)?,
+                home_log_epoch: row.get(3)?,
+                expected_head: row.get(4)?,
+            })
+        })?
+        .collect::<std::result::Result<_, _>>()?;
+    if rows.len() > 1 {
+        return Err(refuse("file holds more than one unpublished batch"));
+    }
+    Ok(rows.pop())
+}
+
+/// Whether the home journal on `conn` records `batch_id` as PUBLISHED, after
+/// verifying `conn` is the recorded home. `None`: no journal row (UNKNOWN).
+pub(crate) fn home_published(
+    conn: &rusqlite::Connection,
+    intent: &AppliedIntent,
+) -> Result<Option<bool>> {
+    let identity: (String, String) = conn.query_row(
+        "SELECT (SELECT store_id FROM store_identity WHERE id = 1), \
+                (SELECT epoch FROM log_epoch WHERE id = 1)",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    if identity != (intent.home_store_id.clone(), intent.home_log_epoch.clone()) {
+        return Err(refuse(
+            "home participant identity differs; the old cut is not provable",
+        ));
+    }
+    let present: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' \
+         AND name='participant_journal')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !present {
+        return Ok(None);
+    }
+    match conn.query_row(
+        "SELECT state FROM participant_journal WHERE batch_id = ?1",
+        [&intent.batch_id],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(state) => Ok(Some(state == "published")),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}

@@ -59,7 +59,9 @@ impl AuthorizedRead {
         let mut bindings = BTreeMap::new();
         let mut graph_ids = Vec::new();
         let mut main_graphs = Vec::new();
-        let mut attached: BTreeMap<String, Vec<i64>> = BTreeMap::new();
+        // Per attached schema: its graph ids and, when a participant batch is
+        // applied but unpublished there, the publication-cut bound (S3).
+        let mut attached: BTreeMap<String, (Vec<i64>, Option<i64>)> = BTreeMap::new();
         for read in reads {
             let source = read.store;
             if !permit.matches(read)
@@ -83,13 +85,24 @@ impl AuthorizedRead {
                 return Err(denied());
             }
             if read.legacy {
+                // The legacy file is never a participant-commit member.
+                if read.published_tx != read.local_tx {
+                    return Err(denied());
+                }
                 main_graphs.push(graph);
             } else {
                 let schema = checkout
                     .schema_for(&read.route.store_id)
                     .ok_or_else(denied)?
                     .to_owned();
-                attached.entry(schema).or_default().push(graph);
+                let bound = (read.published_tx < read.local_tx).then_some(read.published_tx);
+                let entry = attached
+                    .entry(schema)
+                    .or_insert_with(|| (Vec::new(), bound));
+                if entry.1 != bound {
+                    return Err(denied());
+                }
+                entry.0.push(graph);
             }
             graph_ids.push(graph);
             bindings.insert(read.route.graph.clone(), (read.route.clone(), revision));
@@ -97,7 +110,11 @@ impl AuthorizedRead {
         if Instant::now() >= deadline {
             return Err(denied());
         }
-        checkout.compose(&main_graphs, &attached.into_iter().collect::<Vec<_>>())?;
+        let attached: Vec<_> = attached
+            .into_iter()
+            .map(|(schema, (graphs, bound))| (schema, graphs, bound))
+            .collect();
+        checkout.compose(&main_graphs, &attached)?;
         let store = checkout.take_store();
         let allocation = permit.allocation();
         if let Err(error) = store.apply_memory_allocation(allocation) {

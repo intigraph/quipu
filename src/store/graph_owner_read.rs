@@ -13,6 +13,10 @@ pub struct CapturedRead<'a> {
     pub catalog_revision: u64,
     /// This participant's captured committed transaction head.
     pub local_tx: i64,
+    /// The head a composed reader may see in this file (Phase 3 S3): equal
+    /// to `local_tx` unless an applied participant batch is not yet
+    /// PUBLISHED by its home, then the pre-batch head (the old cut).
+    pub published_tx: i64,
     /// Read-only connection in the snapshot that produced the coordinate.
     pub store: &'a Store,
     /// This participant is the configured legacy file (owner of ROOT), the
@@ -42,6 +46,22 @@ impl Owner {
     pub fn read_strict_with<T>(
         owners: &[&Self],
         deadline: Instant,
+        under_fence: impl FnOnce(&[CapturedRead<'_>]) -> Result<()>,
+        query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
+    ) -> Result<T> {
+        Self::read_strict_inner(owners, deadline, false, under_fence, query)
+    }
+
+    /// [`Self::read_strict_with`] when `cut` is false. With `cut` true, for a reader that honours publication cuts
+    /// (the composed ATTACH reader): a file holding an applied, unpublished
+    /// participant batch is captured, not refused, and its `published_tx` is
+    /// the pre-batch head until the batch's home journal says PUBLISHED. A
+    /// missing, foreign or undecided home refuses: the old cut is unprovable.
+    /// Callers MUST bound every fact read by `published_tx`.
+    pub(crate) fn read_strict_inner<T>(
+        owners: &[&Self],
+        deadline: Instant,
+        cut: bool,
         under_fence: impl FnOnce(&[CapturedRead<'_>]) -> Result<()>,
         query: impl FnOnce(&[CapturedRead<'_>]) -> Result<T>,
     ) -> Result<T> {
@@ -113,14 +133,29 @@ impl Owner {
             check_deadline()?;
             snapshots.push(reader.conn.unchecked_transaction()?);
             Self::check_identity(&owner.route, reader)?;
-            super::graph_set::participant::check_read_fence(reader)?;
+            if !cut {
+                super::graph_set::participant::check_read_fence(reader)?;
+            }
+            let local_tx = reader.latest_tx_id()?;
             captured.push(CapturedRead {
                 route: &owner.route,
                 catalog_revision: first.catalog.revision(),
-                local_tx: reader.latest_tx_id()?,
+                local_tx,
+                published_tx: local_tx,
                 store: reader,
                 legacy: owner.route.graph == crate::schema::ROOT_GRAPH_IRI,
             });
+        }
+        if cut {
+            // Every selected fence is held: no batch can change state now.
+            let heads = selected
+                .iter()
+                .zip(&captured)
+                .map(|(owner, read)| Self::published_head(owner, read, &captured))
+                .collect::<Result<Vec<_>>>()?;
+            for (read, head) in captured.iter_mut().zip(heads) {
+                read.published_tx = head;
+            }
         }
         check_deadline()?;
         under_fence(&captured)?;
@@ -136,5 +171,51 @@ impl Owner {
         }
         check_deadline()?;
         Ok(result)
+    }
+
+    /// This file's publication cut, decided by its batch's home journal.
+    fn published_head(
+        owner: &Self,
+        read: &CapturedRead<'_>,
+        all: &[CapturedRead<'_>],
+    ) -> Result<i64> {
+        use super::graph_set::participant::{applied_intent, home_published};
+        let Some(intent) = applied_intent(read.store)? else {
+            return Ok(read.local_tx);
+        };
+        let captured_home = all.iter().find(|other| {
+            other.route.store_id == intent.home_store_id
+                && other.route.log_epoch == intent.home_log_epoch
+        });
+        let published = match captured_home {
+            // The home is selected too: read it in its own captured snapshot.
+            Some(home) => home_published(&home.store.conn, &intent)?,
+            None => {
+                let path = owner
+                    .placement
+                    .path
+                    .parent()
+                    .ok_or_else(|| refused("participant file has no directory"))?
+                    .join(format!("{}.db", intent.home_file_id));
+                if !path.is_file() {
+                    return Err(refused(
+                        "home participant unavailable; the old cut is not provable",
+                    ));
+                }
+                let conn = rusqlite::Connection::open_with_flags(
+                    &path,
+                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+                        | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                )?;
+                home_published(&conn, &intent)?
+            }
+        };
+        match published {
+            Some(true) => Ok(read.local_tx),
+            Some(false) => Ok(intent.expected_head),
+            None => Err(refused(
+                "home participant has no decision for this batch; the old cut is not provable",
+            )),
+        }
     }
 }
