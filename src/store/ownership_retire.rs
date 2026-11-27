@@ -5,9 +5,16 @@
 //!
 //!   1. refuse unless the configured profile equals the witness's profile,
 //!      the destination is the legacy ROOT placement of the named legacy
-//!      database, and witness head and journal agree on the exact tuple;
-//!   2. witness `reserve` (create-only), then journal Active -> Retiring;
-//!   3. witness `retire` with the caller's sealed cut, then journal
+//!      database, the owner is REVERSED and unrouted (dearing R4: the owner
+//!      file is held exclusively for the whole run, every graph catalog R
+//!      routed to this owner is journaled `Lifted` in legacy, catalog R+1
+//!      routes none of them to it), and witness head and journal agree on
+//!      the exact tuple;
+//!   2. derive the sealed cut from the owner file under that lock (R5), and
+//!      prove the owner wrote nothing after its reverse: each graph's current
+//!      multiset equals the journaled Lifted `multiset_sha256`;
+//!   3. witness `reserve` (create-only), then journal Active -> Retiring;
+//!   4. witness `retire` with the derived cut, then journal
 //!      Retiring -> Retired.
 //!
 //! There is NO `activate`: legacy ROOT does not seek admission through the
@@ -30,13 +37,17 @@ use serde::Serialize;
 use sha2::{Digest as _, Sha256};
 
 use super::ownership_admission::database;
-use super::ownership_enroll::refused;
+use super::ownership_enroll::{native_digest, refused};
 use super::ownership_inventory::Database;
 use super::ownership_journal::{self, JournalState};
+use super::{OwnerLock, Store, graph_multiset_sha256, lock_owner_file};
 use crate::error::Result;
+use crate::graph_catalog::Catalog;
 use crate::ownership_handoff_model::witness::objects::Objects;
 use crate::ownership_handoff_model::witness::{AuthorityWitness, ObjectWitness, Reply};
-use crate::ownership_handoff_model::{Certificate, Cut, Journal, Placement, Request, WitnessHead};
+use crate::ownership_handoff_model::{
+    Authority, Certificate, Cut, Journal, Placement, Request, WitnessHead,
+};
 
 /// Domain tag for a legacy ROOT native binding. Deliberately distinct from
 /// the enrollment tag, so a ROOT placement is never an enrolled placement.
@@ -49,6 +60,12 @@ const ATTEMPT: u64 = 0;
 pub(crate) struct RetireRequest<'a, B: Objects> {
     /// The enrolled owner's journal (Active at the tuple being retired).
     pub(crate) journal_path: &'a Path,
+    /// The owner database file; locked exclusively for the whole run.
+    pub(crate) owner_db: &'a Path,
+    /// Catalog revision R, which routed the owner's graphs to it.
+    pub(crate) current: &'a Catalog,
+    /// Operator-published catalog R+1, which must route none of them to it.
+    pub(crate) next: &'a Catalog,
     /// Profile named by the operator's configuration; must equal the witness.
     pub(crate) profile: &'a str,
     /// Existing operator principal; never minted here.
@@ -57,8 +74,6 @@ pub(crate) struct RetireRequest<'a, B: Objects> {
     pub(crate) destination: Placement,
     /// The legacy ROOT database the graph was reversed into.
     pub(crate) legacy_db: &'a Path,
-    /// The sealed source cut (last transaction, fact and artifact digests).
-    pub(crate) cut: Cut,
     pub(crate) witness_profile: &'a str,
     pub(crate) objects: &'a B,
 }
@@ -93,6 +108,15 @@ fn legacy_root_native(db: &Database) -> [u8; 32] {
     h.update(db.device.to_be_bytes());
     h.update(db.inode.to_be_bytes());
     h.finalize().into()
+}
+
+/// What a dry run reports: the request, the derived cut, and the graphs
+/// whose Lifted reverse was checked. Nothing is written to produce it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct RetirePlan {
+    pub(crate) request: Request,
+    pub(crate) cut: Cut,
+    pub(crate) reversed_graphs: Vec<String>,
 }
 
 /// The deterministic request for retiring `source`'s tuple to `destination`.
@@ -145,9 +169,70 @@ fn unknown(step: &str) -> crate::error::Error {
     ))
 }
 
+/// R4(b)(c) and R5, under the held owner lock: the owner is this journal's
+/// placement, every graph catalog R routed to it is Lifted in legacy and
+/// unrouted in R+1, the owner is unchanged since, and the cut it derives.
+fn reversed_cut(
+    req: &RetireRequest<'_, impl Objects>,
+    source: &Authority,
+    lock: &OwnerLock,
+) -> Result<(Cut, Vec<String>)> {
+    let (_, owner) = database(req.owner_db)?;
+    if native_digest(&owner) != source.owner.native {
+        return Err(refused("owner file is not the journal's owner placement"));
+    }
+    let r = req.current.revision();
+    if r.checked_add(1) != Some(req.next.revision()) {
+        return Err(refused("catalogs must be revisions R and R+1"));
+    }
+    let routed: Vec<(String, u64)> = req
+        .current
+        .routes()
+        .filter(|route| route.store_id == source.store_id)
+        .map(|route| (route.graph.clone(), route.generation))
+        .collect();
+    if routed.is_empty() {
+        return Err(refused("catalog R routes no graph to this owner"));
+    }
+    if let Some(route) = req
+        .next
+        .routes()
+        .find(|route| route.store_id == source.store_id)
+    {
+        return Err(refused(format!(
+            "catalog R+1 still routes {} to this owner; it is not unrouted",
+            route.graph
+        )));
+    }
+    let legacy_path = req
+        .legacy_db
+        .to_str()
+        .ok_or_else(|| refused("legacy path is not UTF-8"))?;
+    let legacy = Store::open_read_only(legacy_path)?;
+    for (graph, generation) in &routed {
+        let lifted = legacy.lifted_reverse(graph, (r, *generation))?;
+        let now = graph_multiset_sha256(graph, &lock.export_routed_graph(graph)?);
+        if now != lifted {
+            return Err(refused(format!(
+                "owner changed after reverse: graph {graph} differs from its Lifted reverse"
+            )));
+        }
+    }
+    let cut = lock.owner_cut()?;
+    Ok((
+        Cut {
+            transaction: cut.transaction,
+            facts: cut.facts,
+            artifact: cut.artifact,
+        },
+        routed.into_iter().map(|(g, _)| g).collect(),
+    ))
+}
+
 /// Local preflight shared by the dry run and execution: profile match,
-/// legacy ROOT destination, and the planned request from the journal.
-fn preflight<B: Objects>(req: &RetireRequest<'_, B>) -> Result<(Journal, Request)> {
+/// legacy ROOT destination, the owner lock (R4a, held by the caller for the
+/// whole run), the reversed checks, the derived cut and the planned request.
+fn preflight<B: Objects>(req: &RetireRequest<'_, B>) -> Result<(Journal, RetirePlan, OwnerLock)> {
     if req.profile != req.witness_profile {
         return Err(refused("witness profile differs from the configuration"));
     }
@@ -168,20 +253,37 @@ fn preflight<B: Objects>(req: &RetireRequest<'_, B>) -> Result<(Journal, Request
             "journal holds a different retirement request (operator, destination or profile)",
         ));
     }
-    Ok((journal, request))
+    let owner_path = req
+        .owner_db
+        .to_str()
+        .ok_or_else(|| refused("owner path is not UTF-8"))?;
+    let lock = lock_owner_file(owner_path)?;
+    let (cut, reversed_graphs) = reversed_cut(req, &request.source, &lock)?;
+    Ok((
+        journal,
+        RetirePlan {
+            request,
+            cut,
+            reversed_graphs,
+        },
+        lock,
+    ))
 }
 
-/// Dry run: the request retirement would reserve. No witness or local write.
-pub(crate) fn plan_retirement<B: Objects>(req: &RetireRequest<'_, B>) -> Result<Request> {
+/// Dry run: every check, the request and the derived cut. No witness or
+/// local write; the owner lock is released on return.
+pub(crate) fn plan_retirement<B: Objects>(req: &RetireRequest<'_, B>) -> Result<RetirePlan> {
     Ok(preflight(req)?.1)
 }
 
 /// Retire (or resume retiring) the owner whose journal is at `journal_path`.
 pub(crate) fn retire_owner<B: Objects>(req: &RetireRequest<'_, B>) -> Result<RetireReceipt> {
-    let (journal, request) = preflight(req)?;
+    // `_lock` is held until return: no owner write can land mid-retirement.
+    let (journal, plan, _lock) = preflight(req)?;
+    let request = plan.request;
     let certificate = Certificate {
         request: request.clone(),
-        cut: req.cut.clone(),
+        cut: plan.cut,
     };
     let digest = certificate
         .digest()
@@ -227,9 +329,14 @@ pub(crate) fn retire_owner<B: Objects>(req: &RetireRequest<'_, B>) -> Result<Ret
         )?;
     }
     // The witness's own certificate, when it already holds one, is the
-    // record; a different cut cannot replace it.
+    // record; a different (re-derived) cut cannot replace it, and refuses.
     let recorded = match head {
-        WitnessHead::Retired { certificate: c } => c,
+        WitnessHead::Retired { certificate: c } if c.cut == certificate.cut => c,
+        WitnessHead::Retired { .. } => {
+            return Err(refused(
+                "witness already records a different cut; a different cut cannot replace it",
+            ));
+        }
         _ => {
             match witness.retire(ATTEMPT, &certificate) {
                 Reply::Ok(()) => {}
@@ -249,13 +356,6 @@ pub(crate) fn retire_owner<B: Objects>(req: &RetireRequest<'_, B>) -> Result<Ret
         }
         JournalState::Unknown(why) => return Err(refused(format!("journal is UNKNOWN: {why}"))),
     }
-    let digest = if recorded.cut == req.cut {
-        digest
-    } else {
-        recorded
-            .digest()
-            .map_err(|e| refused(format!("recorded certificate: {e:?}")))?
-    };
     Ok(RetireReceipt {
         store_id: request.source.store_id.clone(),
         generation: request.source.generation,

@@ -142,3 +142,95 @@ pub fn lock_owner_file(path: &str) -> Result<OwnerLock> {
         _lease: lease,
     })
 }
+
+/// Domain tag of the owner's whole-store canonical fact-cut digest
+/// (aegis-4qv.4 R5). Distinct from every other digest domain.
+const OWNER_CUT_FACTS_TAG: &[u8] = b"quipu-owner-cut-facts/v1\0";
+
+/// The owner's sealed cut, derived from the owner file under [`OwnerLock`]
+/// (aegis-4qv.4 R5), never supplied by a caller.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OwnerCut {
+    /// `max(transactions.id)`, zero for an empty owner.
+    pub(crate) transaction: u64,
+    /// SHA-256 over the tag and every current fact of every graph, sorted
+    /// and canonical exactly as [`super::graph_multiset_sha256`] lines.
+    pub(crate) facts: [u8; 32],
+    /// SHA-256 of a consistent serialized image of the owner database, read
+    /// through the locked connection (WAL content included), never the live
+    /// file bytes.
+    pub(crate) artifact: [u8; 32],
+}
+
+impl OwnerLock {
+    /// Derive the owner's cut while the exclusive lock is held.
+    pub(crate) fn owner_cut(&self) -> Result<OwnerCut> {
+        use sha2::{Digest as _, Sha256};
+        let s = &self.store;
+        let tx: i64 =
+            s.conn
+                .query_row("SELECT COALESCE(MAX(id), 0) FROM transactions", [], |r| {
+                    r.get(0)
+                })?;
+        let graphs: Vec<i64> = s
+            .conn
+            .prepare("SELECT DISTINCT g FROM facts WHERE op = 1 AND valid_to IS NULL ORDER BY g")?
+            .query_map([], |r| r.get(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        let mut lines = Vec::new();
+        for g in graphs {
+            let iri = s.resolve(g)?;
+            lines.extend(s.graph_facts(g)?.iter().map(|f| f.canonical(&iri)));
+        }
+        lines.sort();
+        let mut facts = Sha256::new();
+        facts.update(OWNER_CUT_FACTS_TAG);
+        for line in lines {
+            facts.update(line.as_bytes());
+            facts.update(b"\n");
+        }
+        let image = s.conn.serialize(rusqlite::MAIN_DB)?;
+        Ok(OwnerCut {
+            transaction: u64::try_from(tx).map_err(refused)?,
+            facts: facts.finalize().into(),
+            artifact: Sha256::digest(&*image).into(),
+        })
+    }
+}
+
+impl Store {
+    /// aegis-4qv.4 R4(b): the journaled whole-graph digest of `graph`'s
+    /// reverse, only when that reverse is `Lifted` from exactly `from = (R, G)`
+    /// to `(R+1, G+1)` and legacy no longer fences the graph. Any other state,
+    /// or no row, refuses naming the graph and its state.
+    pub(crate) fn lifted_reverse(&self, graph: &str, from: (u64, u64)) -> Result<String> {
+        let plan = ReversePlan {
+            graph,
+            catalog_revision: from.0,
+            generation: from.1,
+        };
+        let to = plan.next()?;
+        let Some(row) = self.journal_row(graph)? else {
+            return Err(refused(format!(
+                "graph {graph} has no journaled reverse (state: none); the owner is not reversed"
+            )));
+        };
+        let as_u64 = |(a, b): (i64, i64)| (a.cast_unsigned(), b.cast_unsigned());
+        if as_u64(row.from) != from || as_u64(row.to) != to {
+            return Err(refused(format!(
+                "graph {graph}: the journaled reverse is for another (R, G)"
+            )));
+        }
+        let state = super::ReverseState::parse(&row.state)?;
+        if state != super::ReverseState::Lifted {
+            return Err(refused(format!(
+                "graph {graph} reverse is {}, not lifted; the owner is not reversed",
+                state.as_str()
+            )));
+        }
+        if self.routed_graph_fence_rows()?.iter().any(|r| r.0 == graph) {
+            return Err(refused(format!("graph {graph} is still fenced in legacy")));
+        }
+        Ok(row.sha)
+    }
+}

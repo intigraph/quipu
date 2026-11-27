@@ -16,8 +16,9 @@ use super::ownership_retire::{
 };
 use crate::config::IngestPilotConfig;
 use crate::error::Result;
+use crate::graph_catalog::Catalog;
+use crate::ownership_handoff_model::AuthorityUnit;
 use crate::ownership_handoff_model::witness::s3::{Credentials, Location, S3Objects};
-use crate::ownership_handoff_model::{AuthorityUnit, Cut};
 
 /// One enrollment invocation. `execute == false` is the dry run: read-only
 /// preflight plus the planned authority, with no local or remote write.
@@ -119,12 +120,13 @@ pub struct PilotRetire<'a> {
     pub root_principal: &'a str,
     /// Existing operator principal recorded on the request.
     pub operator: &'a str,
-    /// Sealed source cut: last owner transaction.
-    pub transaction: u64,
-    /// Sealed source cut: canonical fact-cut digest.
-    pub facts: [u8; 32],
-    /// Sealed source cut: full owner artifact digest.
-    pub artifact: [u8; 32],
+    /// The owner database file; held exclusively for the whole run. The
+    /// sealed cut is derived from it, never supplied.
+    pub owner_db: &'a Path,
+    /// Catalog revision R that routed the owner's graphs.
+    pub current: &'a Catalog,
+    /// Published catalog R+1 that routes none of them to the owner.
+    pub next: &'a Catalog,
     /// Perform the retirement; otherwise plan only.
     pub execute: bool,
 }
@@ -139,15 +141,13 @@ pub fn retire_pilot_owner(
     let (_, legacy) = super::ownership_admission::database(request.legacy_db)?;
     let req = RetireRequest {
         journal_path: request.journal,
+        owner_db: request.owner_db,
+        current: request.current,
+        next: request.next,
         profile: &config.profile,
         operator: request.operator,
         destination: legacy_root_placement(request.root_principal, &legacy),
         legacy_db: request.legacy_db,
-        cut: Cut {
-            transaction: request.transaction,
-            facts: request.facts,
-            artifact: request.artifact,
-        },
         witness_profile: &config.profile,
         objects: &backend,
     };
@@ -156,6 +156,6 @@ pub fn retire_pilot_owner(
         Ok(serde_json::json!({"mode": "executed", "receipt": receipt}))
     } else {
         let plan = plan_retirement(&req)?;
-        Ok(serde_json::json!({"mode": "dry-run", "request": plan, "signed": false}))
+        Ok(serde_json::json!({"mode": "dry-run", "plan": plan, "signed": false}))
     }
 }

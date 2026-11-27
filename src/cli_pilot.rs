@@ -78,7 +78,7 @@ usage: quipu pilot <verb> [--execute]   (dry run unless --execute)
   pilot catalog --write FILE --from INPUT [--execute]
   pilot enroll --db DB --journal J --unit full-store --principal P --witness-config F [--execute]
   pilot reverse --db LEGACY --owner-file OWNER --graph IRI --revision R --generation G --catalog CAT_R --next-catalog CAT_R1 [--execute]
-  pilot retire --journal J --legacy-db LEGACY --root-principal P --operator O --transaction N --facts HEX --artifact HEX --witness-config F [--execute]";
+  pilot retire --journal J --legacy-db LEGACY --root-principal P --operator O --owner-file OWNER --catalog CAT_R --next-catalog CAT_R1 --witness-config F [--execute]";
 
 /// Parse `rest` against an exact allow-list. Values never echo into errors.
 pub(super) struct Flags {
