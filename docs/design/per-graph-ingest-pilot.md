@@ -196,12 +196,14 @@ the request future disappears. Request deadlines, identity, provenance and write
 kind still cross the same blocking boundary. Status reads reserve an existing
 owner reader before dispatch, refuse when busy, and never queue behind a writer.
 
-The first durable contract supports stable authenticated, unsigned, unscoped
-single-graph requests. Exact graph, catalog, generation and policy pins must
-match before admission. Scoped v2 refuses before consuming an ID: its existing
-outer writer-scope transaction does not compose with the current outermost
-ticketed effect contract. Ordinary scoped v1 keeps its writer-scope guards;
-it does not gain a durable transport contract from this boundary.
+The durable contract supports stable authenticated, unsigned single-graph
+requests. Exact graph, catalog, generation and policy pins must match before
+admission. A scoped writer is admitted only with a live `Knot` grant on the
+owner store's instance of the graph. Its writer-scope `BEGIN IMMEDIATE` is the
+v2 ticket's commit boundary: the effect and commit witness remain atomic, with
+the capability rechecked before the single `COMMIT`. Without a matching live
+grant, the scoped writer refuses before consuming an ID or sealing an attempt.
+Ordinary scoped v1 keeps its existing writer-scope guards.
 
 Admission, atomic commit evidence and terminal completion all live in the owner
 file. The original wire write ID remains the ledger primary key. An owner-context

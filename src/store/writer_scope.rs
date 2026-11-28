@@ -204,6 +204,20 @@ impl Store {
         }
     }
 
+    /// Read-only admission check for adapters that must refuse before they
+    /// consume an ID (aegis-4qv.9.1). Unscoped requests pass unchanged; the
+    /// capability itself is installed only by `with_writer_scope`.
+    pub fn check_writer_capability(
+        &self,
+        op: WriteOperation,
+        graphs: &BTreeSet<String>,
+    ) -> Result<()> {
+        if !crate::writer_scope::is_scoped_request() {
+            return Ok(());
+        }
+        self.writer_capability(op, graphs).map(|_| ())
+    }
+
     fn writer_capability(
         &self,
         op: WriteOperation,

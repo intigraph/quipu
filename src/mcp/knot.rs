@@ -115,7 +115,10 @@ fn tool_knot_bound(
     ticket: Option<&crate::store::knot_completion::Ticket>,
 ) -> Result<JsonValue> {
     if let Some(ticket) = ticket {
-        if !store.conn.is_autocommit() {
+        // The outermost boundary is either autocommit (this effect commits
+        // itself) or the scoped writer's own BEGIN IMMEDIATE, which holds the
+        // write lock until its single COMMIT (aegis-4qv.9.1).
+        if !store.conn.is_autocommit() && !crate::writer_scope::in_scoped_transaction(store) {
             return Err(Error::InvalidValue(
                 "knot completion: bound write requires an outermost commit boundary".into(),
             ));
