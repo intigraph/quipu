@@ -360,6 +360,7 @@ impl Store {
     /// facts. A hot node (one repository named by every GitHub delivery) can
     /// carry 10^5 facts no loaded shape constrains; loading them made every
     /// small write re-validate them (2.49 s per delivery at 44.6k:67.6k).
+    #[cfg(feature = "shacl")]
     pub(super) fn append_bounded_entity_in(
         &self,
         facts: &mut Vec<crate::Fact>,
