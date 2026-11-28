@@ -155,6 +155,35 @@ fn mount(
         })))
 }
 
+/// The authority a recheck judges against, re-read from disk (never the
+/// admission-time copy): the separate policy file and the registry identity.
+/// Runs the test barrier first, so a test changes authority at this point.
+fn current_authority(
+    serving: &Serving,
+    header: &str,
+    evidence: &quipu::transaction_auth::Identity,
+) -> quipu::Result<(
+    quipu::read_authorization::ReadPolicy,
+    quipu::read_authorization::ReadIdentity,
+)> {
+    run_barrier(serving);
+    separate_policy_files(&serving.files, &serving.config)?;
+    let current = serving.config.policy.open_policy()?.snapshot()?;
+    let who = identity(&serving.config.registry, header, evidence)?;
+    Ok((current, who))
+}
+
+/// The test barrier before a recheck; nothing outside tests.
+#[cfg(test)]
+fn run_barrier(serving: &Serving) {
+    if let Some(barrier) = &serving.before_recheck {
+        barrier();
+    }
+}
+
+#[cfg(not(test))]
+fn run_barrier(_: &Serving) {}
+
 fn refuse(message: &str) -> AppError {
     quipu::Error::PolicyDenied(format!("graph-set reads: {message}")).into()
 }
@@ -233,27 +262,20 @@ async fn query(
         separate_policy_files(&serving.files, config)?;
         let policy = config.policy.open_policy()?.snapshot()?;
         let authorized = policy.authorize(&who, ReadOperation::Query, Some(&selected), now)?;
-        let barrier = || {
-            #[cfg(test)]
-            if let Some(barrier) = &serving.before_recheck {
-                barrier();
-            }
-        };
         // Every outcome that is not an answer is rechecked like an answer
         // (#1375 security review): a caller revoked mid-request must not
         // learn a head, a cut kind or a selection's placement.
-        let recheck_authority = || -> quipu::Result<()> {
-            barrier();
-            separate_policy_files(&serving.files, &serving.config)?;
-            let current = serving.config.policy.open_policy()?.snapshot()?;
-            let who = identity(&serving.config.registry, &header, &evidence)?;
-            current.authorize(
-                &who,
-                ReadOperation::Query,
-                Some(&selected),
-                quipu::time::epoch_secs(),
-            )?;
-            Ok(())
+        let recheck_authority = || {
+            current_authority(&serving, &header, &evidence).and_then(|(current, who)| {
+                current
+                    .authorize(
+                        &who,
+                        ReadOperation::Query,
+                        Some(&selected),
+                        quipu::time::epoch_secs(),
+                    )
+                    .map(|_| ())
+            })
         };
         let refusal = |outcome: Outcome| -> quipu::Result<Outcome> {
             Ok(revoked(recheck_authority())?.unwrap_or(outcome))
@@ -289,13 +311,10 @@ async fn query(
                 }
                 let view = authorized.open_composed_cut(reads, permit, now, deadline)?;
                 let output = view.query(&input.query, false, now)?;
-                barrier();
-                let checked = (|| -> quipu::Result<()> {
-                    separate_policy_files(&serving.files, &serving.config)?;
-                    let current = serving.config.policy.open_policy()?.snapshot()?;
-                    let who = identity(&serving.config.registry, &header, &evidence)?;
-                    view.recheck(&current, &who, reads, quipu::time::epoch_secs())
-                })();
+                let checked =
+                    current_authority(&serving, &header, &evidence).and_then(|(current, who)| {
+                        view.recheck(&current, &who, reads, quipu::time::epoch_secs())
+                    });
                 // A revoked caller is a denial (403), not UNKNOWN (503).
                 Ok(revoked(checked)?.unwrap_or(Outcome::Answer(output, at.to_token())))
             })
