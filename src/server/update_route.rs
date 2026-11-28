@@ -246,7 +246,8 @@ fn attach_cut(
 
 /// Test seam for other server tests (aegis-n0wc.5.2): one routed `/update`
 /// through the real dispatch, attributed to `actor`, returning its receipt.
-#[cfg(all(test, unix))]
+/// Its one caller (`graph_set_read_tests`) exists only with the S3 feature.
+#[cfg(all(test, unix, feature = "ownership-witness-s3"))]
 pub(crate) fn routed_update_for_test(
     router: &quipu::store::graph_owner::GraphSetRouter,
     legacy: &crate::SharedStore,

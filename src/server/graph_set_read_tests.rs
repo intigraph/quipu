@@ -740,7 +740,7 @@ async fn t3b_missing_authorization_and_oversize_requests_refuse() {
 }
 
 /// W1 (#1375 review finding 2): the production wiring. Merged by
-/// `mount_graph_set_reads` and wrapped in the real `protected_app`, the route
+/// `graph_sets_startup::mount_reads` and wrapped in the real `protected_app`, the route
 /// needs a bearer and answers a named one; `None` mounts nothing.
 #[tokio::test]
 async fn w1_the_mounted_reads_sit_behind_the_real_auth_layer() {
@@ -755,7 +755,7 @@ async fn w1_the_mounted_reads_sit_behind_the_real_auth_layer() {
                 .unwrap()
                 .with_named(registry);
         crate::protected_app(
-            crate::mount_graph_set_reads(axum::Router::new(), reads),
+            crate::graph_sets_startup::mount_reads(axum::Router::new(), reads),
             &crate::process_pool::in_process(),
             None,
             f.legacy.clone(),

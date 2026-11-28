@@ -81,6 +81,19 @@ pub(crate) fn start(config: &quipu::QuipuConfig, legacy: &SharedStore) -> Option
     }
 }
 
+/// Merge the optional `/graph-sets/query` routes (aegis-n0wc.5.2) into the
+/// API routes. The caller wraps the result in `protected_app`, so the reads
+/// keep the ordinary auth layer; `None` mounts nothing.
+pub(crate) fn mount_reads(
+    app: axum::Router<SharedStore>,
+    reads: Option<axum::Router>,
+) -> axum::Router<SharedStore> {
+    match reads {
+        Some(routes) => app.merge(routes.with_state(())),
+        None => app,
+    }
+}
+
 /// Composed-read admission over the graph sets' one memory budget: the
 /// legacy participant and each owner hold a writer, a fence and readers.
 #[cfg(all(unix, feature = "ownership-witness-s3"))]
