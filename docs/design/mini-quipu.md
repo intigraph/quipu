@@ -324,7 +324,9 @@ slot is now divergent against the new home value, so it is a C4 conflict that
 needs a decision. `atomic` mode holds the whole merge, and `partial-slot` holds
 only that slot. Neither agent's local claim was a home claim before its merge,
 so no home scheduling decision ever rested on mini-Quipu state. A generic
-fixture with any `card: one` slot shows the same behaviour.
+fixture with any `card: one` slot shows the same behaviour. The
+[generic reference walkthrough](../examples/mini-quipu.md) runs this lifecycle
+with two different graph-name sets and checks B1, B3, B4 and B7 plus retirement.
 
 ## 6. Refusals
 

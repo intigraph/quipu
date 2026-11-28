@@ -61,6 +61,8 @@ pub(super) struct ForkMerge {
     /// Bounded slots both sides changed incompatibly. Non-empty means the
     /// caller must write nothing.
     pub(super) conflicts: Vec<DecisionRecord>,
+    /// Conflicting or changed-convergent slots that can accept a decision.
+    pub(super) resolution_slots: BTreeSet<(i64, i64)>,
     /// Slots a partial mode held back (oracle §6). Always `0` in atomic
     /// mode, where any conflict writes nothing.
     pub(super) held: usize,
@@ -168,6 +170,15 @@ impl Store {
             out.sort();
             Ok(out)
         };
+        let mut resolution_slots: BTreeSet<_> = held.iter().map(|c| *c.slot).collect();
+        for key in b.keys().chain(o.keys()).chain(t.keys()) {
+            let bv = b.get(key).unwrap_or(&empty);
+            let ov = o.get(key).unwrap_or(&empty);
+            let tv = t.get(key).unwrap_or(&empty);
+            if ov == tv && ov != bv {
+                resolution_slots.insert(*key);
+            }
+        }
         let mut conflicts = Vec::with_capacity(held.len());
         let mut used = 0;
         for c in &held {
@@ -207,6 +218,7 @@ impl Store {
             added: Vec::new(),
             removed: Vec::new(),
             conflicts,
+            resolution_slots,
             held: 0,
         };
         let Some(td) = timestamp.filter(|_| out.conflicts.is_empty() || mode != Mode::Atomic)

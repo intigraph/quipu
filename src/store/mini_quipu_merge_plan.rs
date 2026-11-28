@@ -125,15 +125,30 @@ pub(super) fn plan_member(
         }
         Ok(out)
     };
-    let merge = home.fork_merge(
-        base,
-        home.current_facts_in_graph(g)?,
-        theirs,
-        resolved,
-        &closes,
-        mode,
-        td,
-    )?;
+    let ours = home.current_facts_in_graph(g)?;
+    // A request spans members; the fork core still judges one graph at a time.
+    // Its own accepted-slot set scopes decisions without accepting unrelated keys.
+    let scoped = if let Some(resolved) = resolved {
+        let preview = home.fork_merge(
+            base.clone(),
+            ours.clone(),
+            theirs.clone(),
+            None,
+            &closes,
+            mode,
+            None,
+        )?;
+        Some(
+            resolved
+                .iter()
+                .filter(|(key, _)| preview.resolution_slots.contains(key))
+                .map(|(key, values)| (*key, values.clone()))
+                .collect::<ForkResolutions>(),
+        )
+    } else {
+        None
+    };
+    let merge = home.fork_merge(base, ours, theirs, scoped.as_ref(), &closes, mode, td)?;
     Ok((g, mg, merge))
 }
 
