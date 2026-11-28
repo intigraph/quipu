@@ -45,6 +45,19 @@ impl Store {
                 }
             }
         }
+        // A routed /update's commit witness rides this same savepoint, so the
+        // data and the witness commit or roll back together (aegis-n0wc.5 H3).
+        #[cfg(unix)]
+        if let Some(&(_, tx)) = txs.last()
+            && let Some(ticket) = crate::store::knot_completion::update::take_pending()
+        {
+            let witnessed = self.commit_update_attempt(&ticket, tx);
+            if let Err(error) = witnessed {
+                crate::store::release::rollback_release(&self.conn, "quipu_multi_graph")?;
+                self.read_model.borrow_mut().clear();
+                return Err(error);
+            }
+        }
         crate::store::release::release(&self.conn, "quipu_multi_graph")?;
         Ok(txs)
     }

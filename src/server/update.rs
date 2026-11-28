@@ -130,18 +130,124 @@ pub(crate) async fn update_post(
     let base = format!("http://{host}{}", uri.path());
     let client = super::query_usage::client(&headers);
     let update = format!("BASE <{base}>\n{update}");
+    // aegis-n0wc.5 H3: the /knot v2 completion contract, routed updates only.
+    let write_id = crate::knot_durable::write_id(&headers)?;
     #[cfg(unix)]
     let router = update_route::router();
+    #[cfg(unix)]
+    let dispatched = blocking(move || {
+        update_route::dispatch_with_write_id(
+            router,
+            &store,
+            &update,
+            &attribution,
+            &client,
+            write_id.as_deref(),
+        )
+    })
+    .await?;
     #[cfg(not(unix))]
-    let router = None;
-    match blocking(move || update_route::dispatch(router, &store, &update, &attribution, &client))
-        .await?
-    {
+    let dispatched = {
+        if write_id.is_some() {
+            return Err(quipu::Error::InvalidValue(
+                "a write ID is served only for routed graph-set updates".into(),
+            )
+            .into());
+        }
+        blocking(move || update_route::dispatch(None, &store, &update, &attribution, &client))
+            .await?
+    };
+    match dispatched {
         update_route::Dispatched::Refused(message) => {
             Ok((StatusCode::CONFLICT, message).into_response())
         }
         update_route::Dispatched::Report(report) => Ok(axum::Json(report).into_response()),
+        update_route::Dispatched::Retried(status) => Ok(retried(status)),
     }
+}
+
+/// A repeated write ID's answer: the original complete receipt when the
+/// attempt finished, the commit witness when it committed but its receipt was
+/// never recorded, else 409 with its state (admitted = UNKNOWN custody).
+fn retried(status: serde_json::Value) -> axum::response::Response {
+    match status["state"].as_str() {
+        Some("finished") if status.get("receipt").is_some() => {
+            axum::Json(status["receipt"].clone()).into_response()
+        }
+        Some("committed") => axum::Json(status).into_response(),
+        _ => (StatusCode::CONFLICT, axum::Json(status)).into_response(),
+    }
+}
+
+/// `/update/status` and `/update/seal` input: the original write ID and the
+/// exact update text (aegis-n0wc.5 H3). The text is re-based on `/update` as
+/// the original request was, so the binding matches only the same Host.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WriteIdInput {
+    write_id: String,
+    update: String,
+}
+
+#[cfg(unix)]
+fn rebased(headers: &HeaderMap, update: &str) -> String {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost");
+    format!("BASE <http://{host}/update>\n{update}")
+}
+
+/// Exact recorded status of a routed update's write ID; `unknown` for any
+/// other binding, principal or a non-routed update. Never a replay.
+pub(crate) async fn update_status_post(
+    headers: HeaderMap,
+    axum::Json(input): axum::Json<WriteIdInput>,
+) -> Result<axum::Json<serde_json::Value>, AppError> {
+    #[cfg(not(unix))]
+    {
+        let _ = (headers, input);
+        return Err(quipu::Error::InvalidValue("routed write IDs need a unix build".into()).into());
+    }
+    #[cfg(unix)]
+    let update = rebased(&headers, &input.update);
+    #[cfg(unix)]
+    blocking(move || {
+        Ok(axum::Json(
+            match update_route::routed_binding(update_route::router(), &input.write_id, &update)? {
+                Some((owner, binding)) => owner.update_status(&binding)?,
+                None => serde_json::json!({
+                    "contract": quipu::store::knot_completion::update::STATUS_CONTRACT,
+                    "write_id": input.write_id, "state": "unknown"}),
+            },
+        ))
+    })
+    .await
+}
+
+/// Seal a routed update's UNKNOWN (admitted, uncommitted) write ID so a late
+/// worker can never commit it; the caller may then retry with a NEW ID.
+pub(crate) async fn update_seal_post(
+    headers: HeaderMap,
+    axum::Json(input): axum::Json<WriteIdInput>,
+) -> Result<axum::Json<serde_json::Value>, AppError> {
+    #[cfg(not(unix))]
+    {
+        let _ = (headers, input);
+        return Err(quipu::Error::InvalidValue("routed write IDs need a unix build".into()).into());
+    }
+    #[cfg(unix)]
+    let update = rebased(&headers, &input.update);
+    #[cfg(unix)]
+    blocking(move || {
+        let (owner, binding) =
+            update_route::routed_binding(update_route::router(), &input.write_id, &update)?
+                .ok_or_else(|| {
+                    quipu::Error::InvalidValue("write ID absent, committed or terminal".into())
+                })?;
+        Ok(axum::Json(owner.seal_update(&binding)?))
+    })
+    .await
 }
 
 static UPDATES_SLICED: AtomicU64 = AtomicU64::new(0);
