@@ -20,7 +20,7 @@
 //! it. The reverse order could leave a writable file behind a closed entry.
 use std::path::Path;
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 
 use super::{GraphSetOwner, MiniForkEntry, Owner, has_table, merge::MergeReceipt};
 use crate::{Error, Result, Store};
@@ -138,6 +138,10 @@ pub fn fenced(store: &Store) -> Result<Option<(String, String, i64)>> {
 /// Step 1: record the retirement in the file and install the write fence.
 /// Rerunning it for the same retirement is a no-op.
 fn fence_writer(mini: &Store, r: &Retirement) -> Result<()> {
+    // Reserve SQLite's writer before observing the head or installing triggers.
+    // A second MiniQuipu connection may have committed since retire's initial
+    // check; a deferred transaction leaves that check/fence race open.
+    let tx = Transaction::new_unchecked(&mini.conn, TransactionBehavior::Immediate)?;
     if let Some(found) = fenced(mini)? {
         return if found == (r.name.clone(), r.last_merge.clone(), r.fenced_head) {
             Ok(())
@@ -148,7 +152,12 @@ fn fence_writer(mini: &Store, r: &Retirement) -> Result<()> {
             ))
         };
     }
-    let tx = mini.conn.unchecked_transaction()?;
+    if mini.latest_tx_id()? != r.fenced_head {
+        return Err(refused(
+            RetireRefusal::Unmerged,
+            "the file head changed before fencing; merge the new work or retry abandonment",
+        ));
+    }
     tx.execute_batch(FENCE)?;
     tx.execute(
         "INSERT INTO mini_quipu_fence (id, name, last_merge, head) VALUES (1, ?1, ?2, ?3)",

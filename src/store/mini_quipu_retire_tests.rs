@@ -370,3 +370,55 @@ fn reopening_a_retired_entry_refuses() {
         .unwrap();
     assert_eq!(status, "retired");
 }
+
+#[test]
+fn review_final_merge_must_not_strand_a_write_between_head_check_and_fence() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut f = fixture(dir.path());
+    merged(&mut f);
+    f.mini = None;
+    let path = f.path.clone();
+    let entry = mini_fork_entry(&f.home.legacy, "agent-a").unwrap().unwrap();
+    let outcome = retire(
+        &mut f.home.legacy,
+        &f.path,
+        &retire_req(RetireReason::FinalMerge),
+        |mini, retirement| {
+            let mut racer = MiniQuipu::open(&path, &entry)?;
+            let data = datum(racer.store(), "racing-local");
+            racer.transact(ROOT_GRAPH_IRI, &data, TR, Some("concurrent-writer"))?;
+            assert!(racer.store().latest_tx_id()? > retirement.fenced_head);
+            fence_writer(mini, retirement)
+        },
+    );
+    let raw = Store::open(path.to_str().unwrap()).unwrap();
+    let local = format!(
+        "{:?}",
+        raw.entity_history(raw.intern("urn:x").unwrap()).unwrap()
+    );
+    assert!(local.contains("racing-local"), "racer must have committed");
+    assert!(
+        !history(&f.home.legacy).contains("racing-local"),
+        "racing work was not merged home"
+    );
+    assert!(
+        outcome.is_err(),
+        "FinalMerge retired after a local write landed between its head check and writer fence: outcome={outcome:?}, actual_head={:?}, fence={:?}, registry={:?}",
+        raw.latest_tx_id(),
+        fenced(&raw),
+        retirement(&f.home.legacy, "agent-a")
+    );
+    assert!(
+        outcome
+            .unwrap_err()
+            .to_string()
+            .contains("unmerged-local-writes")
+    );
+    assert!(fenced(&raw).unwrap().is_none());
+    assert!(retirement(&f.home.legacy, "agent-a").unwrap().is_none());
+    assert_eq!(
+        mini_fork_entry(&f.home.legacy, "agent-a").unwrap().unwrap(),
+        entry
+    );
+    assert!(!has_table(&raw, "mini_quipu_fence").unwrap());
+}

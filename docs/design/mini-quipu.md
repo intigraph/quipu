@@ -227,7 +227,10 @@ merge records its head too. Resolve the remainder first, or explicitly abandon
 the fork; abandonment records "abandoned" and may discard held local work.
 This refusal precedes the writer fence and every home registry write.
 
-1. Fence the mini-Quipu writer, so the file becomes read-only.
+1. Reserve the mini-Quipu SQLite writer, recheck its head, and install the
+   fence in that same write transaction. A head moved since validation refuses
+   before any fence or home registry write; merge the new work or retry explicit
+   abandonment. The file then becomes read-only.
 2. Mark the home registry entry retired, recording the last merge id or
    "abandoned". Retirement writes nothing to home member graphs.
 3. Keep the file until its merge receipts are verified at home. Deleting the
