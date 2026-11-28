@@ -57,7 +57,7 @@ async fn dropping_polled_pending_future_accounts_once() {
     let text = metrics.render(0, 0, 0, None);
     assert!(text.contains("quipu_http_requests_total{endpoint=\"/pending\",status=\"499\"} 1"));
     assert!(text.contains("quipu_http_request_duration_seconds_count{endpoint=\"/pending\"} 1"));
-    assert!(text.contains("quipu_http_client_requests_total{client=\"test-client\",task=\"unattributed\",endpoint=\"/pending\"} 1"));
+    assert!(text.contains("quipu_http_client_requests_total{client=\"test-client\",task=\"unattributed\",endpoint=\"/pending\",outcome=\"client_closed\"} 1"));
     assert_eq!(
         *counters
             .0
@@ -205,4 +205,45 @@ fn query_completion_counts_its_declared_operation_once_even_when_cancelled() {
     assert!(metrics.render(0, 0, 0, None).contains(
         "quipu_http_operation_query_requests_total{client=\"test-client\",operation=\"unlabelled\"} 1\n"
     ));
+}
+
+#[test]
+fn terminal_status_reaches_the_client_outcome_counter_once() {
+    for (status, outcome) in [
+        (101, "ok"),
+        (202, "ok"),
+        (401, "client_error"),
+        (408, "timeout"),
+        (499, "client_closed"),
+        (503, "unavailable"),
+        (500, "server_error"),
+    ] {
+        let metrics = quipu::metrics::Metrics::default();
+        let counters = Cancellations::default();
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        let mut guard = completion(&metrics, &counters, logs);
+        guard.finish(
+            status,
+            quipu::request_usage::AuthOutcome::NotRequired,
+            None,
+            false,
+        );
+        guard.finish(
+            200,
+            quipu::request_usage::AuthOutcome::NotRequired,
+            None,
+            false,
+        );
+        drop(guard);
+        let text = metrics.render(0, 0, 0, None);
+        let lines: Vec<_> = text
+            .lines()
+            .filter(|l| l.starts_with("quipu_http_client_requests_total{"))
+            .collect();
+        assert_eq!(lines.len(), 6, "status {status}: {lines:?}");
+        let lines: Vec<_> = lines.into_iter().filter(|l| l.ends_with(" 1")).collect();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains(&format!("outcome=\"{outcome}\"")));
+        assert!(lines[0].ends_with(" 1"));
+    }
 }
