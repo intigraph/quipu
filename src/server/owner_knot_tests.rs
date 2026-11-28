@@ -20,6 +20,12 @@ fn identity(class: &str) -> quipu::transaction_auth::Identity {
 }
 
 fn fixture() -> (tempfile::TempDir, Store, Arc<PreparedOwner>, Pin, Value) {
+    fixture_with_scoped_grant(false)
+}
+
+fn fixture_with_scoped_grant(
+    granted: bool,
+) -> (tempfile::TempDir, Store, Arc<PreparedOwner>, Pin, Value) {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
     let path = root.join("owner.db");
@@ -29,6 +35,24 @@ fn fixture() -> (tempfile::TempDir, Store, Arc<PreparedOwner>, Pin, Value) {
         .unwrap();
     Store::adopt(path.to_str().unwrap()).unwrap();
     let store = Store::open(path.to_str().unwrap()).unwrap();
+    if granted {
+        use quipu::writer_scope::{WriteGrant, WriteOperation};
+        store
+            .writer_grant_apply(&WriteGrant {
+                version: 1,
+                id: "transport-grant".into(),
+                principal: "urn:test:transport".into(),
+                credential_id: "transport-key".into(),
+                instance: store.writer_graph_instance(GRAPH).unwrap(),
+                operations: std::collections::BTreeSet::from([WriteOperation::Knot]),
+                valid_from: 0,
+                valid_until: quipu::time::epoch_secs() + 3600,
+                revision: 1,
+                revoked: false,
+                mint_scope: None,
+            })
+            .unwrap();
+    }
     let route = Route {
         graph: GRAPH.into(),
         file_id: "owner".into(),
@@ -313,4 +337,128 @@ fn disabled_initializer_never_resolves_invalid_config_or_credentials() {
         .unwrap()
         .is_none()
     );
+}
+
+/// Exercise the real bearer classifier, scoped middleware and durable owner
+/// together. Synthetic credentials and temporary owner/legacy files only.
+#[tokio::test]
+async fn scoped_owner_http_grant_admission_and_refusal_leave_legacy_untouched() {
+    use axum::{body::Body, http::Request, middleware, response::IntoResponse};
+    use quipu::{
+        crew_credentials::CredentialRegistry,
+        http_auth::{AccessDecision, BearerPolicy},
+    };
+    use sha2::{Digest, Sha256};
+    use tower::ServiceExt;
+    for granted in [false, true] {
+        let (dir, legacy, owner, _pin, input) = fixture_with_scoped_grant(granted);
+        let registry = CredentialRegistry::parse(&serde_json::to_vec(&json!({
+            "version":1,"credentials":[{
+                "credential_id":"transport-key","principal":"urn:test:transport",
+                "audience":"quipu","token_sha256":format!("{:x}",Sha256::digest(b"fixture-owner"))
+            }]
+        })).unwrap(), "quipu").unwrap();
+        let policy = BearerPolicy::new(Some("fixture-operator".into()), None, None, 0)
+            .unwrap()
+            .with_scoped_writers(registry)
+            .unwrap();
+        let app = super::http::routes(owner).layer(middleware::from_fn(
+            move |req: axum::extract::Request, next| {
+                let policy = policy.clone();
+                async move {
+                    let (header, authorization) =
+                        crate::auth::authorize_request(&req, &policy, false);
+                    if authorization.decision != AccessDecision::Allow {
+                        return (axum::http::StatusCode::UNAUTHORIZED, "invalid credential")
+                            .into_response();
+                    }
+                    crate::auth::run_authorized(
+                        req,
+                        next,
+                        &policy,
+                        authorization,
+                        header.as_deref(),
+                    )
+                    .await
+                }
+            },
+        ));
+        let request = |path: &str, body: Value, token: &str| {
+            Request::post(path)
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json")
+                .header("x-quipu-completion-contract", crate::knot_durable::CONTRACT)
+                .header("x-quipu-write-id", ID)
+                .header("x-quipu-catalog-revision", "7")
+                .header("x-quipu-owner-generation", "4")
+                .header("x-quipu-owner-policy", "policy-v1")
+                .body(Body::from(body.to_string()))
+                .unwrap()
+        };
+        // A forged/absent credential never reaches owner admission.
+        let response = app
+            .clone()
+            .oneshot(request("/owner/knot", input.clone(), "invalid"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+        let response = app
+            .clone()
+            .oneshot(request("/owner/knot", input.clone(), "fixture-owner"))
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        assert_eq!(
+            status.is_success(),
+            granted,
+            "granted={granted}: {}",
+            String::from_utf8_lossy(&bytes)
+        );
+        let binding = json!({"write_id":ID,"request":input});
+        let response = app
+            .clone()
+            .oneshot(request(
+                "/owner/knot/status",
+                binding.clone(),
+                "fixture-owner",
+            ))
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        let proof: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(proof["state"], if granted { "finished" } else { "unknown" });
+        let response = app
+            .oneshot(request("/owner/knot/seal", binding, "fixture-owner"))
+            .await
+            .unwrap();
+        assert!(
+            !response.status().is_success(),
+            "seal needs a grant and an admitted, uncommitted attempt"
+        );
+        let conn = rusqlite::Connection::open(dir.path().join("owner.db")).unwrap();
+        let ledger: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name='knot_attempts'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ledger, i64::from(granted), "refusal must consume no ID");
+        let legacy_conn = rusqlite::Connection::open(dir.path().join("legacy.db")).unwrap();
+        let ledger: i64 = legacy_conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name='knot_attempts'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ledger, 0);
+        legacy.verify_routed_fence().unwrap();
+    }
 }
