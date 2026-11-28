@@ -595,7 +595,11 @@ fn r1_a_repeated_write_id_returns_the_original_receipt_and_writes_once() {
         assert_eq!(receipt["owner"][key], first["owner"][key], "owner.{key}");
     }
     assert_eq!(again["commit"]["tx_id"], first["owner"]["local_tx"]);
-    assert_eq!(head(&f.root, "tracker.db"), after, "the retry wrote nothing");
+    assert_eq!(
+        head(&f.root, "tracker.db"),
+        after,
+        "the retry wrote nothing"
+    );
     assert_eq!(ledger_rows(&f.root), Some(1));
 }
 
@@ -609,7 +613,10 @@ fn r2_r7_a_reused_write_id_with_other_bytes_or_principal_is_one_refusal() {
     let before = head(&f.root, "tracker.db");
     let other_bytes = refusal(durable(&f, "alice", Some(&id), &edit(1, 2, "urn:w2")));
     let other_principal = refusal(durable(&f, "mallory", Some(&id), CREATE));
-    assert!(other_bytes.contains("write ID already used"), "{other_bytes}");
+    assert!(
+        other_bytes.contains("write ID already used"),
+        "{other_bytes}"
+    );
     assert_eq!(other_bytes, other_principal, "the refusal reveals nothing");
     assert!(!other_principal.contains(first["owner"]["store_id"].as_str().unwrap()));
     assert_eq!(head(&f.root, "tracker.db"), before);

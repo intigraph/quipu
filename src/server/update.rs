@@ -189,7 +189,6 @@ pub(crate) struct WriteIdInput {
     update: String,
 }
 
-#[cfg(unix)]
 fn rebased(headers: &HeaderMap, update: &str) -> String {
     let host = headers
         .get(header::HOST)
@@ -204,25 +203,8 @@ pub(crate) async fn update_status_post(
     headers: HeaderMap,
     axum::Json(input): axum::Json<WriteIdInput>,
 ) -> Result<axum::Json<serde_json::Value>, AppError> {
-    #[cfg(not(unix))]
-    {
-        let _ = (headers, input);
-        return Err(quipu::Error::InvalidValue("routed write IDs need a unix build".into()).into());
-    }
-    #[cfg(unix)]
     let update = rebased(&headers, &input.update);
-    #[cfg(unix)]
-    blocking(move || {
-        Ok(axum::Json(
-            match update_route::routed_binding(update_route::router(), &input.write_id, &update)? {
-                Some((owner, binding)) => owner.update_status(&binding)?,
-                None => serde_json::json!({
-                    "contract": quipu::store::knot_completion::update::STATUS_CONTRACT,
-                    "write_id": input.write_id, "state": "unknown"}),
-            },
-        ))
-    })
-    .await
+    blocking(move || write_id_status(&input.write_id, &update)).await
 }
 
 /// Seal a routed update's UNKNOWN (admitted, uncommitted) write ID so a late
@@ -231,23 +213,42 @@ pub(crate) async fn update_seal_post(
     headers: HeaderMap,
     axum::Json(input): axum::Json<WriteIdInput>,
 ) -> Result<axum::Json<serde_json::Value>, AppError> {
-    #[cfg(not(unix))]
-    {
-        let _ = (headers, input);
-        return Err(quipu::Error::InvalidValue("routed write IDs need a unix build".into()).into());
-    }
-    #[cfg(unix)]
     let update = rebased(&headers, &input.update);
-    #[cfg(unix)]
-    blocking(move || {
-        let (owner, binding) =
-            update_route::routed_binding(update_route::router(), &input.write_id, &update)?
-                .ok_or_else(|| {
-                    quipu::Error::InvalidValue("write ID absent, committed or terminal".into())
-                })?;
-        Ok(axum::Json(owner.seal_update(&binding)?))
-    })
-    .await
+    blocking(move || write_id_seal(&input.write_id, &update)).await
+}
+
+#[cfg(unix)]
+fn write_id_status(
+    write_id: &str,
+    update: &str,
+) -> Result<axum::Json<serde_json::Value>, AppError> {
+    Ok(axum::Json(
+        match update_route::routed_binding(update_route::router(), write_id, update)? {
+            Some((owner, binding)) => owner.update_status(&binding)?,
+            None => serde_json::json!({
+                "contract": quipu::store::knot_completion::update::STATUS_CONTRACT,
+                "write_id": write_id, "state": "unknown"}),
+        },
+    ))
+}
+
+#[cfg(unix)]
+fn write_id_seal(write_id: &str, update: &str) -> Result<axum::Json<serde_json::Value>, AppError> {
+    let (owner, binding) = update_route::routed_binding(update_route::router(), write_id, update)?
+        .ok_or_else(|| {
+            quipu::Error::InvalidValue("write ID absent, committed or terminal".into())
+        })?;
+    Ok(axum::Json(owner.seal_update(&binding)?))
+}
+
+#[cfg(not(unix))]
+fn write_id_status(_: &str, _: &str) -> Result<axum::Json<serde_json::Value>, AppError> {
+    Err(quipu::Error::InvalidValue("routed write IDs need a unix build".into()).into())
+}
+
+#[cfg(not(unix))]
+fn write_id_seal(_: &str, _: &str) -> Result<axum::Json<serde_json::Value>, AppError> {
+    Err(quipu::Error::InvalidValue("routed write IDs need a unix build".into()).into())
 }
 
 static UPDATES_SLICED: AtomicU64 = AtomicU64::new(0);
