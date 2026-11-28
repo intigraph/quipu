@@ -178,9 +178,26 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
             assert code == 200 and raw['count'] >= 1, raw
             assert raw['ranking'] == 'keyword' and 'similarity' not in raw['results'][0], raw
             projected = tool_body(call('quipu_search', {'query': 'fixture', 'mode': 'keyword'}))
-            assert projected['context']['candidate_count'] >= 1, projected
-            assert projected['context']['reason'] == 'similarity_unavailable', projected
-            assert projected['results'] == projected['context_results'] == [], projected
+            # Keyword-only results are admitted by rank and terms (#1325,
+            # keyword-ranked-terms/v1), never by the cosine floor.
+            context = projected['context']
+            assert context['candidate_count'] >= 1, projected
+            assert context['outcome'] == 'CONTEXT', projected
+            assert context['admission'] == 'keyword-ranked-terms/v1', projected
+            assert context['admitted_count'] >= 1, projected
+            assert context.get('reason') != 'similarity_unavailable', projected
+            admitted = projected['context_results']
+            assert admitted and len(admitted) == context['admitted_count'], projected
+            for row in admitted:
+                assert row['ranking_reason'] == 'keyword', projected
+                assert 1 <= row['keyword_rank'] <= 20, projected
+                assert row['score'] >= 0, projected
+            # Control: the same hit under a query it covers poorly (1 of 3 terms)
+            # stays NO CONTEXT, and is not reported as similarity_unavailable.
+            weak = tool_body(call('quipu_search', {'query': 'fixture zebra quartz', 'mode': 'keyword'}))
+            assert weak['context']['outcome'] == 'NO CONTEXT', weak
+            assert weak['context'].get('reason') != 'similarity_unavailable', weak
+            assert weak['context_results'] == [], weak
             lexical = tool_body(call('quipu_search', {'query': 'fixture'}))
             assert lexical['count'] >= 1, lexical
             assert lexical['retrieval']['mode'] == 'lexical', lexical
