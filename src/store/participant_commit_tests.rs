@@ -656,3 +656,7 @@ fn a_missing_non_home_participant_refuses_recovery_and_the_home_stays_fenced() {
         Recovery::Published(_)
     ));
 }
+
+#[cfg(feature = "shacl")]
+#[path = "participant_prepare_shacl_tests.rs"]
+mod prepare_shacl_tests;
