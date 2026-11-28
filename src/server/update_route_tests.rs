@@ -575,7 +575,7 @@ fn ledger_rows(root: &Path) -> Option<i64> {
 }
 
 /// R1: the same ID and bytes return the original receipt; the data changed
-/// once and exactly one transaction was written.
+/// once, with exactly the transactions of the same update without an ID.
 #[test]
 fn r1_a_repeated_write_id_returns_the_original_receipt_and_writes_once() {
     let f = fx();
@@ -583,7 +583,17 @@ fn r1_a_repeated_write_id_returns_the_original_receipt_and_writes_once() {
     let first = report(durable(&f, "alice", Some(&id), CREATE));
     assert_eq!(first["asserted"], 3);
     let after = head(&f.root, "tracker.db");
-    assert_eq!(after.1, before.1 + 1, "one transaction");
+    // The same update without a write ID: a write ID adds no transaction
+    // (one per changed graph, here P and PROV; the witness rides the last).
+    let control = fx();
+    let control_before = head(&control.root, "tracker.db").1;
+    report(durable(&control, "alice", None, CREATE));
+    let control_txs = head(&control.root, "tracker.db").1 - control_before;
+    assert_eq!(
+        after.1 - before.1,
+        control_txs,
+        "same transactions as without an ID"
+    );
     let again = retried_status(durable(&f, "alice", Some(&id), CREATE));
     assert_eq!(again["state"], "finished");
     assert_eq!(http(&again), axum::http::StatusCode::OK);
