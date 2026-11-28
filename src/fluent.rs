@@ -19,6 +19,7 @@ mod shapes;
 // Source-only protocol core; no runtime witness grant loader or import adapter.
 #[allow(dead_code)]
 pub(crate) mod source_witness;
+pub mod subscription;
 mod targets;
 mod valid_time;
 pub(crate) mod writer;
