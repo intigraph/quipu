@@ -361,8 +361,10 @@ async fn query(
                 "kind":"behind-head", "requested": requested, "head": head,
             }),
         ),
-        Ok(Ok(Outcome::Revoked))
-        | Ok(Err(quipu::Error::PolicyDenied(_) | quipu::Error::InvalidValue(_))) => deny(),
+        Ok(
+            Ok(Outcome::Revoked)
+            | Err(quipu::Error::PolicyDenied(_) | quipu::Error::InvalidValue(_)),
+        ) => deny(),
         _ => unavailable(),
     }
 }
