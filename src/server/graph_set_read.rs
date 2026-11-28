@@ -204,7 +204,12 @@ impl AsRef<[u8]> for Output {
 }
 
 fn status(code: StatusCode, body: serde_json::Value) -> Response {
-    (code, Json(body)).into_response()
+    (
+        code,
+        [(header::CACHE_CONTROL, "private, no-store")],
+        Json(body),
+    )
+        .into_response()
 }
 
 fn unavailable() -> Response {

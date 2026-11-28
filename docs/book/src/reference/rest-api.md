@@ -2517,6 +2517,39 @@ N-Triples output is lexically sorted and duplicate-free. Blank-node dataset
 canonicalization belongs to the share-bundle layer; raw export preserves blank
 node labels.
 
+## Routed graph-set reads (opt-in)
+
+`POST /graph-sets/query` is mounted only in a Unix
+`ownership-witness-s3` server with enabled `[quipu.graph_sets]` and an explicit
+`[quipu.graph_sets.reads]` table. Absent read configuration mounts no endpoint.
+It does not change legacy `/query` or authorize a production cutover.
+
+The read table uses the same required fields as the owner read pilot:
+`policy_file`, `owner`, `registry_file`, `timeout_secs` (1–30), `concurrency`
+(nonzero), `runtime_mib`, `view_mib`, `query_mib`, and `max_response_mib`.
+The existing policy file must be separate from every owner and legacy data
+file. The registry must admit the request's single named bearer, and an active
+query grant must cover every requested graph. Admission shares the owners'
+memory allocation and is held through the blocking queue. Identity, file
+separation and grants are rechecked after evaluation and before returning
+cut or selection refusals.
+
+```json
+{"query":"ASK {}","graphs":["urn:example:project"],"cut":"qcut1.…"}
+```
+
+Omit `cut` to read the current published head. All selected graphs must belong
+to one routed owner. A routed `/update` receipt's `owner.cut` may be supplied
+to read that exact head: success returns the SPARQL result and the
+`Quipu-Composition-Cut` header. A second write makes the old token refuse
+HTTP 409 with `kind: behind-head`, `requested`, and `head`; historical vector
+reads are unavailable. Malformed cuts return 400; foreign lineage or catalog
+mismatches return 409 with the admission refusal kind. Unauthorized requests
+return 403 without cut details, and unavailable reads return 503 with
+`outcome: UNKNOWN`. Answers and JSON refusals use `Cache-Control: private,
+no-store`. No refusal falls back to legacy storage. Cut tokens are never
+accepted on legacy `/query` by this feature.
+
 ## Share Import and Composition
 
 ### `POST /import`

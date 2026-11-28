@@ -40,6 +40,7 @@ struct Fx {
     root: std::path::PathBuf,
     legacy: SharedStore,
     router: &'static GraphSetRouter,
+    catalog: Arc<GraphSetCatalog>,
     admission: ComposedReadAdmission,
     files: Vec<PathBuf>,
     config: ReadConfig,
@@ -145,7 +146,7 @@ fn fx() -> Fx {
         .unwrap(),
     ];
     let router: &'static GraphSetRouter = Box::leak(Box::new(
-        GraphSetRouter::admit(catalog, &legacy, owners).unwrap(),
+        GraphSetRouter::admit(catalog.clone(), &legacy, owners).unwrap(),
     ));
     let files = ["tracker", "other", "legacy"]
         .iter()
@@ -187,6 +188,7 @@ fn fx() -> Fx {
         root,
         legacy: Arc::new(StoreHandle::writer_only(legacy)),
         router,
+        catalog,
         admission,
         files,
         config,
@@ -318,7 +320,8 @@ async fn t5_a_cut_behind_head_refuses_409_naming_requested_and_head() {
         .unwrap()
         .to_owned();
     assert_ne!(first, second);
-    let (status, _, body) = read(&app, with_cut(ask_title(), &first)).await;
+    let (status, headers, body) = read(&app, with_cut(ask_title(), &first)).await;
+    assert_eq!(headers["cache-control"], "private, no-store");
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["kind"], "behind-head");
     assert_eq!(body["requested"], first.as_str());
@@ -478,6 +481,21 @@ async fn t2_an_unusable_read_authority_refuses_to_mount() {
         timeout.timeout = Duration::from_secs(secs);
         assert!(mount(timeout), "timeout {secs}s");
     }
+    let reads = quipu::config::PilotReadsConfig {
+        policy_file: f.config.policy.policy_path.clone().into(),
+        owner: "urn:owner".into(),
+        registry_file: f.config.registry.clone().into(),
+        timeout_secs: 10,
+        concurrency: 0,
+        runtime_mib: 16,
+        view_mib: 16,
+        query_mib: 256,
+        max_response_mib: 1,
+    };
+    assert!(
+        crate::graph_sets_startup::read_admission(&f.catalog, 1024, &reads).is_err(),
+        "startup must reject zero read scratch concurrency"
+    );
     assert!(!mount(f.config.clone()), "the fixture authority mounts");
     drop(f.dir);
 }
