@@ -41,6 +41,24 @@ pub(crate) fn requested(headers: &HeaderMap) -> Result<bool, AppError> {
     Ok(true)
 }
 
+/// The durable write ID of a request that asked for the v2 completion
+/// contract, or `None` when it did not ask (aegis-n0wc.5 H3 reuses this for
+/// routed `/update`). Asking without exactly one ID refuses.
+pub(crate) fn write_id(headers: &HeaderMap) -> Result<Option<String>, AppError> {
+    if !requested(headers)? {
+        return Ok(None);
+    }
+    headers
+        .get(ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .filter(|_| headers.get_all(ID_HEADER).iter().count() == 1)
+        .map(|id| Some(id.to_owned()))
+        .ok_or_else(|| {
+            quipu::Error::InvalidValue("one write ID is required for durable admission".into())
+                .into()
+        })
+}
+
 fn binding(id: String, request: &Value) -> Result<Binding, AppError> {
     Ok(quipu::transaction_auth::with_identity(
         super::auth::request_identity(),

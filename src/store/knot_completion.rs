@@ -355,3 +355,12 @@ mod tests;
 
 #[path = "knot_completion_owner.rs"]
 mod owner_context;
+
+/// Routed `/update` write IDs (aegis-n0wc.5 H3), in their own ledger table.
+#[cfg(unix)]
+#[path = "update_completion.rs"]
+pub mod update;
+
+#[cfg(all(test, unix))]
+#[path = "completion_conformance_tests.rs"]
+mod conformance;

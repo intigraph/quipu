@@ -384,6 +384,12 @@
   "/update": [
     "post"
   ],
+  "/update/seal": [
+    "post"
+  ],
+  "/update/status": [
+    "post"
+  ],
   "/validate": [
     "post"
   ],

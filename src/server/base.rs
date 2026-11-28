@@ -263,6 +263,7 @@ pub(crate) async fn version() -> impl IntoResponse {
             quipu::episode::STRICT_NEW_CONTRACT,
         ],
         "features": compiled_features(),
+        "routed_update_completion": crate::update::write_id::capability(),
     }))
 }
 

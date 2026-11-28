@@ -17,7 +17,7 @@ pub fn classify(path: &str, method: &str) -> RouteClass {
         ("POST", "/export" | "/acquire") => RouteClass::Scoped(ReadOperation::Export),
         ("GET", "/graphs") => RouteClass::Scoped(ReadOperation::Metadata),
         // Completion receipts are bound to the authenticated original writer.
-        (_, "/knot/status" | "/owner/knot/status") => RouteClass::OwnerOnly,
+        (_, "/knot/status" | "/update/status" | "/owner/knot/status") => RouteClass::OwnerOnly,
         // Writer pins are owner-local authority metadata, never tenant reads.
         (_, "/graph/writer-instance") => RouteClass::OwnerOnly,
         _ if !CENSUS.contains(&path) => RouteClass::Unclassified,
@@ -158,6 +158,8 @@ const CENSUS: &[&str] = &[
     "/unified_search",
     "/unravel",
     "/update",
+    "/update/seal",
+    "/update/status",
     "/validate",
     "/vendor/three.module.min.js",
     "/verdict/verify",

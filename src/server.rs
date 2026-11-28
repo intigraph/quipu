@@ -527,6 +527,8 @@ fn api_routes() -> Router<SharedStore> {
         .merge(fluents::routes())
         .merge(query_endpoint::routes())
         .route("/update", post(update::update_post))
+        .route("/update/status", post(update::write_id::update_status_post))
+        .route("/update/seal", post(update::write_id::update_seal_post))
         .route("/patch", post(patch::patch_post))
         .route("/diff", get(patch::diff_get))
         .route("/export", post(publication::export))

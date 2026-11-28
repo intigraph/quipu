@@ -226,9 +226,30 @@ impl GraphSetOwner {
         members: &BTreeSet<String>,
         work: impl FnOnce(&mut Store) -> Result<T>,
     ) -> (Result<T>, OwnerHold) {
+        self.update_observed_ticketed(members, None, work)
+    }
+
+    /// [`Self::update_observed`] with a durable write-ID ticket (aegis-n0wc.5
+    /// H3): the update's multi-graph commit records the ticket's witness in
+    /// its own savepoint.
+    #[cfg(unix)]
+    pub fn update_observed_ticketed<T>(
+        &self,
+        members: &BTreeSet<String>,
+        ticket: Option<&crate::store::knot_completion::update::UpdateTicket>,
+        work: impl FnOnce(&mut Store) -> Result<T>,
+    ) -> (Result<T>, OwnerHold) {
         let started = std::time::Instant::now();
         let mut hold = OwnerHold::default();
-        let result = self.update_timed(members, work, started, &mut hold);
+        let result = match ticket {
+            Some(ticket) => {
+                crate::store::knot_completion::update::with_update_ticket(ticket, || {
+                    self.update_timed(members, work, started, &mut hold)
+                })
+                .0
+            }
+            None => self.update_timed(members, work, started, &mut hold),
+        };
         if hold.held.is_none() {
             hold.wait = started.elapsed();
         }
@@ -275,6 +296,56 @@ impl GraphSetOwner {
         })();
         hold.held = Some(acquired.elapsed());
         result
+    }
+
+    /// Run one write-ID ledger operation on this owner's file under the same
+    /// admission, placement, identity and participant-fence gates as an
+    /// update, holding the writer only for the ledger write (aegis-n0wc.5 H3).
+    #[cfg(unix)]
+    fn ledger<T>(&self, op: impl FnOnce(&mut Store) -> Result<T>) -> Result<T> {
+        let _admission = self.owner.admit()?;
+        let mut store = self.owner.writer.owned()?;
+        self.owner.placement.verify()?;
+        Owner::check_identity(self.owner.catalog_route(), &store)?;
+        participant::check_write_fence(&store)?;
+        op(&mut store)
+    }
+
+    /// Admit a routed update's write ID in this owner's file BEFORE its effect.
+    #[cfg(unix)]
+    pub fn admit_update(
+        &self,
+        binding: &crate::store::knot_completion::Binding,
+    ) -> Result<crate::store::knot_completion::update::UpdateAdmission> {
+        self.ledger(|store| store.admit_update_attempt(binding))
+    }
+
+    /// Record the complete receipt (or `None` on failure) after the effect.
+    #[cfg(unix)]
+    pub fn finish_update(
+        &self,
+        ticket: &crate::store::knot_completion::update::UpdateTicket,
+        receipt: Option<&serde_json::Value>,
+    ) -> Result<()> {
+        self.ledger(|store| store.finish_update_attempt(ticket, receipt))
+    }
+
+    /// Seal an UNKNOWN (admitted, uncommitted) attempt.
+    #[cfg(unix)]
+    pub fn seal_update(
+        &self,
+        binding: &crate::store::knot_completion::Binding,
+    ) -> Result<serde_json::Value> {
+        self.ledger(|store| store.seal_update_binding(binding))
+    }
+
+    /// Exact recorded status of one binding in this owner's file.
+    #[cfg(unix)]
+    pub fn update_status(
+        &self,
+        binding: &crate::store::knot_completion::Binding,
+    ) -> Result<serde_json::Value> {
+        self.ledger(|store| store.update_attempt_status(binding))
     }
 
     /// A strict composition cut of `members` in this owner, at its published

@@ -130,17 +130,39 @@ pub(crate) async fn update_post(
     let base = format!("http://{host}{}", uri.path());
     let client = super::query_usage::client(&headers);
     let update = format!("BASE <{base}>\n{update}");
+    // aegis-n0wc.5 H3: the /knot v2 completion contract, routed updates only.
+    let write_id = crate::knot_durable::write_id(&headers)?;
     #[cfg(unix)]
     let router = update_route::router();
+    #[cfg(unix)]
+    let dispatched = blocking(move || {
+        update_route::dispatch_with_write_id(
+            router,
+            &store,
+            &update,
+            &attribution,
+            &client,
+            write_id.as_deref(),
+        )
+    })
+    .await?;
     #[cfg(not(unix))]
-    let router = None;
-    match blocking(move || update_route::dispatch(router, &store, &update, &attribution, &client))
-        .await?
-    {
+    let dispatched = {
+        if write_id.is_some() {
+            return Err(quipu::Error::InvalidValue(
+                "a write ID is served only for routed graph-set updates".into(),
+            )
+            .into());
+        }
+        blocking(move || update_route::dispatch(None, &store, &update, &attribution, &client))
+            .await?
+    };
+    match dispatched {
         update_route::Dispatched::Refused(message) => {
             Ok((StatusCode::CONFLICT, message).into_response())
         }
         update_route::Dispatched::Report(report) => Ok(axum::Json(report).into_response()),
+        update_route::Dispatched::Retried(status) => Ok(write_id::retried(status)),
     }
 }
 
@@ -478,6 +500,8 @@ mod update_gates;
 mod update_observe;
 #[path = "update_route.rs"]
 pub(crate) mod update_route;
+#[path = "update_write_id.rs"]
+pub(crate) mod write_id;
 
 #[cfg(test)]
 #[path = "update_bench.rs"]

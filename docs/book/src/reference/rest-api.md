@@ -587,6 +587,61 @@ temporal/graph fields are refused on a federated query (they only shape the
 local evaluator's context). See
 [Federation](../architecture/federation.md).
 
+#### Durable write IDs on routed updates
+
+Before opting in, read `GET /version`'s `routed_update_completion` object.
+It names the `/update` operation, `request_contract`, `status_contract`,
+`status` and `seal` paths, and `enabled` (true only with an installed graph-set
+router). A missing object or `enabled: false` is not write admission. The
+general `/knot` v2 advertisement alone does not establish `/update` support.
+Clients must separately verify their configured composed-read credential and
+graph selection; this capability object grants no authority.
+
+An update whose graphs all belong to ONE enrolled graph-set owner
+(`[quipu.graph_sets]`) may opt in to the same durable completion contract as
+`/knot` v2: send `X-Quipu-Completion-Contract: quipu.knot-completion/v2` and
+exactly one `X-Quipu-Write-Id` (64 lowercase hex characters). It needs the same
+named, stable authenticated credential. The binding is the write ID, that
+credential (principal, credential ID, authentication class) and the SHA-256 of
+the exact update text as the server received it, re-based on
+`http://<Host>/update`. A write ID on an update that is not routed is refused
+(`400`): the legacy writer keeps no ledger, so it never claims durability it
+does not have. Without the headers `/update` is unchanged.
+
+The ID is admitted in the owner's file before the effect, in its own
+`update_attempts` ledger (existing `/knot` attempts are untouched). The commit
+witness is recorded inside the update's own multi-graph commit, so data,
+provenance and witness commit or roll back together. The complete receipt is
+recorded after the effect. Sending the same ID again never re-runs the update:
+
+| Retry finds | Response |
+| --- | --- |
+| `finished` with a receipt | `200` with the original receipt |
+| `committed` (receipt never recorded) | `200` with the status, carrying `commit.tx_id` |
+| `admitted`, `stopped` or `sealed` | `409` with the status |
+
+The same ID with other bytes, or the same bytes from another principal, is one
+`409` refusal (`write ID already used`) that reveals nothing about the original
+and carries no receipt. At 65,536 admissions per owner file a new ID is refused
+before any effect; existing IDs still answer.
+
+`POST /update/status` reads one binding without admitting or running anything.
+`POST /update/seal` fences an `admitted` attempt (UNKNOWN custody, for example
+after a crash before commit) so that no late worker can commit it; the caller
+may then retry the intent with a NEW write ID. A committed or terminal attempt
+cannot be sealed. Both take the original ID and update text, from the same
+credential and Host:
+
+```json
+{"write_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ "update": "INSERT DATA { GRAPH <https://example.test/project/p> { <urn:i> <urn:p> 1 } }"}
+```
+
+Status answers `{"contract": "quipu.update-completion/v1", "write_id": ..., "state": ...}`
+with `store_id`, `log_epoch` and, when recorded, `commit.tx_id` and `receipt`.
+A binding this owner does not hold, or an update that is not routed, is
+`unknown`, which is never proof that nothing ran.
+
 ### `GET /diff` and `POST /patch`
 
 Change-sets in the store-wide `quipu-changeset` v1 format: parent-bound SPARQL

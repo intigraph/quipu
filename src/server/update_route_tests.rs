@@ -128,13 +128,16 @@ fn report(d: Dispatched) -> serde_json::Value {
     match d {
         Dispatched::Report(r) => r,
         Dispatched::Refused(m) => panic!("unexpected refusal: {m}"),
+        Dispatched::Retried(s) => panic!("unexpected retry status: {s}"),
     }
 }
 
 fn refusal(d: Dispatched) -> String {
     match d {
         Dispatched::Refused(m) => m,
-        Dispatched::Report(r) => panic!("expected a 409 refusal, got {r}"),
+        Dispatched::Report(r) | Dispatched::Retried(r) => {
+            panic!("expected a 409 refusal, got {r}")
+        }
     }
 }
 
@@ -489,5 +492,278 @@ fn h2b_a_refused_capture_leaves_the_committed_receipt_with_a_null_cut() {
             .as_str()
             .is_some_and(|why| why.contains("not a graph of this owner")),
         "{receipt}"
+    );
+}
+
+// ---- H3 (aegis-n0wc.5): durable write IDs on routed `/update` ----
+
+use quipu::store::knot_completion::update::{UpdateAdmission, UpdateTicket};
+use quipu::transaction_auth::{Identity, with_identity};
+
+fn who(name: &str) -> Option<Identity> {
+    Some(Identity {
+        principal: format!("urn:crew:{name}"),
+        credential_id: Some(name.into()),
+        auth_class: "named_bearer".into(),
+        attestation: Default::default(),
+    })
+}
+
+fn wid(c: char) -> String {
+    c.to_string().repeat(64)
+}
+
+/// One `/update` dispatch as `name`, carrying `write_id`.
+fn durable(f: &Fx, name: &str, write_id: Option<&str>, update: &str) -> Dispatched {
+    with_identity(who(name), || {
+        dispatch_with_write_id(
+            Some(&f.router),
+            &f.legacy,
+            &format!("{BASE}{update}"),
+            &seeds(),
+            "test",
+            write_id,
+        )
+    })
+    .unwrap()
+}
+
+fn retried_status(d: Dispatched) -> serde_json::Value {
+    match d {
+        Dispatched::Retried(s) => s,
+        Dispatched::Report(r) => panic!("expected a retry status, got a fresh report {r}"),
+        Dispatched::Refused(m) => panic!("expected a retry status, got refusal {m}"),
+    }
+}
+
+/// The HTTP status a retried write ID answers with.
+fn http(status: &serde_json::Value) -> axum::http::StatusCode {
+    super::super::write_id::retried(status.clone()).status()
+}
+
+/// Admit `write_id` for CREATE as `name` without running it (a crash before
+/// the effect), returning the owner's ticket.
+fn admit_only(f: &Fx, name: &str, write_id: &str) -> UpdateTicket {
+    let text = format!("{BASE}{CREATE}");
+    let Ok(Route::Owner(owner, _)) = super::route(Some(&f.router), &text) else {
+        panic!("CREATE routes to the tracker owner");
+    };
+    with_identity(who(name), || {
+        match owner.admit_update(&update_binding(write_id, &text).unwrap()) {
+            Ok(UpdateAdmission::Fresh(ticket)) => ticket,
+            other => panic!("expected a fresh admission, got {other:?}"),
+        }
+    })
+}
+
+/// Run CREATE under an already-admitted ticket, never recording its finish.
+fn effect_only(f: &Fx, name: &str, ticket: &UpdateTicket) -> Result<serde_json::Value, AppError> {
+    let text = format!("{BASE}{CREATE}");
+    let Ok(Route::Owner(owner, members)) = super::route(Some(&f.router), &text) else {
+        panic!("CREATE routes to the tracker owner");
+    };
+    with_identity(who(name), || {
+        apply_routed_ticketed(owner, &members, &text, &seeds(), "test", Some(ticket))
+    })
+}
+
+fn ledger_rows(root: &Path) -> Option<i64> {
+    rusqlite::Connection::open(root.join("tracker.db"))
+        .unwrap()
+        .query_row("SELECT count(*) FROM update_attempts", [], |r| r.get(0))
+        .ok()
+}
+
+/// R1: the same ID and bytes return the original receipt; the data changed
+/// once, with exactly the transactions of the same update without an ID.
+#[test]
+fn r1_a_repeated_write_id_returns_the_original_receipt_and_writes_once() {
+    let f = fx();
+    let (id, before) = (wid('a'), head(&f.root, "tracker.db"));
+    let first = report(durable(&f, "alice", Some(&id), CREATE));
+    assert_eq!(first["asserted"], 3);
+    let after = head(&f.root, "tracker.db");
+    // The same update without a write ID: a write ID adds no transaction
+    // (one per changed graph, here P and PROV; the witness rides the last).
+    let control = fx();
+    let control_before = head(&control.root, "tracker.db").1;
+    report(durable(&control, "alice", None, CREATE));
+    let control_txs = head(&control.root, "tracker.db").1 - control_before;
+    assert_eq!(
+        after.1 - before.1,
+        control_txs,
+        "same transactions as without an ID"
+    );
+    let again = retried_status(durable(&f, "alice", Some(&id), CREATE));
+    assert_eq!(again["state"], "finished");
+    assert_eq!(http(&again), axum::http::StatusCode::OK);
+    let receipt = &again["receipt"];
+    for key in ["asserted", "retracted", "tx"] {
+        assert_eq!(receipt[key], first[key], "{key}");
+    }
+    for key in ["store_id", "local_tx", "cut"] {
+        assert_eq!(receipt["owner"][key], first["owner"][key], "owner.{key}");
+    }
+    assert_eq!(again["commit"]["tx_id"], first["owner"]["local_tx"]);
+    assert_eq!(
+        head(&f.root, "tracker.db"),
+        after,
+        "the retry wrote nothing"
+    );
+    assert_eq!(ledger_rows(&f.root), Some(1));
+}
+
+/// R2 and R7: the same ID with other bytes, or the same bytes from another
+/// principal, is ONE identical refusal with no receipt and no write.
+#[test]
+fn r2_r7_a_reused_write_id_with_other_bytes_or_principal_is_one_refusal() {
+    let f = fx();
+    let id = wid('b');
+    let first = report(durable(&f, "alice", Some(&id), CREATE));
+    let before = head(&f.root, "tracker.db");
+    let other_bytes = refusal(durable(&f, "alice", Some(&id), &edit(1, 2, "urn:w2")));
+    let other_principal = refusal(durable(&f, "mallory", Some(&id), CREATE));
+    assert!(
+        other_bytes.contains("write ID already used"),
+        "{other_bytes}"
+    );
+    assert_eq!(other_bytes, other_principal, "the refusal reveals nothing");
+    assert!(!other_principal.contains(first["owner"]["store_id"].as_str().unwrap()));
+    assert_eq!(head(&f.root, "tracker.db"), before);
+    assert!(!holds(&f.root, "tracker.db", P, "urn:i", "urn:status"));
+}
+
+/// R3: an ID admitted whose effect never ran is UNKNOWN custody: a retry
+/// answers 409 `admitted` and never runs the update.
+#[test]
+fn r3_an_admitted_id_with_no_effect_retries_as_409_admitted() {
+    let f = fx();
+    let id = wid('c');
+    admit_only(&f, "alice", &id);
+    let before = head(&f.root, "tracker.db");
+    let status = retried_status(durable(&f, "alice", Some(&id), CREATE));
+    assert_eq!(status["state"], "admitted");
+    assert!(status.get("commit").is_none() && status.get("receipt").is_none());
+    assert_eq!(http(&status), axum::http::StatusCode::CONFLICT);
+    assert_eq!(head(&f.root, "tracker.db"), before, "never re-run");
+    assert!(!holds(&f.root, "tracker.db", P, "urn:i", "urn:rev"));
+}
+
+/// R4: the commit witness rides the update's own commit, so an effect whose
+/// receipt was never recorded retries as 200 `committed` with its tx.
+#[test]
+fn r4_a_committed_effect_without_its_receipt_retries_as_committed() {
+    let f = fx();
+    let id = wid('d');
+    let ticket = admit_only(&f, "alice", &id);
+    let done = effect_only(&f, "alice", &ticket).unwrap();
+    let local_tx = done["owner"]["local_tx"].as_i64().unwrap();
+    let before = head(&f.root, "tracker.db");
+    let status = retried_status(durable(&f, "alice", Some(&id), CREATE));
+    assert_eq!(status["state"], "committed");
+    assert_eq!(status["commit"]["tx_id"], local_tx);
+    assert_eq!(http(&status), axum::http::StatusCode::OK);
+    assert_eq!(head(&f.root, "tracker.db"), before);
+}
+
+/// R5: without the header nothing changes: no ledger, the ordinary report;
+/// and a write ID on a legacy update refuses rather than claim durability.
+#[test]
+fn r5_no_write_id_is_the_unchanged_path_and_legacy_refuses_one() {
+    let f = fx();
+    let created = report(durable(&f, "alice", None, CREATE));
+    assert_eq!(created["asserted"], 3);
+    assert_eq!(ledger_rows(&f.root), None, "no update_attempts table");
+    let legacy = format!("INSERT DATA {{ GRAPH <{LEG}> {{ <urn:s> <urn:p> 1 }} }}");
+    let before = head(&f.root, "legacy.db");
+    let refused = with_identity(who("alice"), || {
+        dispatch_with_write_id(
+            Some(&f.router),
+            &f.legacy,
+            &format!("{BASE}{legacy}"),
+            &seeds(),
+            "test",
+            Some(&wid('e')),
+        )
+    });
+    assert!(refused.is_err(), "legacy has no ledger");
+    assert_eq!(head(&f.root, "legacy.db"), before);
+    report(durable(&f, "alice", None, &legacy));
+}
+
+/// R6: admission is bounded; at capacity a fresh ID refuses before any
+/// effect while an admitted ID still retries.
+#[test]
+fn r6_a_full_ledger_refuses_a_fresh_id_before_the_effect() {
+    let f = fx();
+    let first = wid('f');
+    report(durable(
+        &f,
+        "alice",
+        Some(&first),
+        &format!("INSERT DATA {{ GRAPH <{P}> {{ <urn:z> <urn:p> 1 }} }}"),
+    ));
+    rusqlite::Connection::open(f.root.join("tracker.db"))
+        .unwrap()
+        .execute_batch(
+            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 65535) \
+             INSERT INTO update_attempts(write_id,owner,body,store_id,epoch,nonce,phase) \
+             SELECT printf('%064x', i),'x','x','x','x','x','sealed' FROM n",
+        )
+        .unwrap();
+    let before = head(&f.root, "tracker.db");
+    let full = with_identity(who("alice"), || {
+        dispatch_with_write_id(
+            Some(&f.router),
+            &f.legacy,
+            &format!("{BASE}{CREATE}"),
+            &seeds(),
+            "test",
+            Some(&wid('e')),
+        )
+    });
+    assert!(full.is_err(), "capacity refuses");
+    assert_eq!(head(&f.root, "tracker.db"), before);
+    let again = retried_status(durable(
+        &f,
+        "alice",
+        Some(&first),
+        &format!("INSERT DATA {{ GRAPH <{P}> {{ <urn:z> <urn:p> 1 }} }}"),
+    ));
+    assert_eq!(again["state"], "finished");
+}
+
+/// R8: a sealed UNKNOWN attempt never commits, even from a late worker that
+/// still holds its ticket; a NEW ID may then run the intent once.
+#[test]
+fn r8_a_sealed_id_never_runs_and_a_new_id_may_retry_the_intent() {
+    let f = fx();
+    let (old, new) = (wid('1'), wid('2'));
+    let ticket = admit_only(&f, "alice", &old);
+    let text = format!("{BASE}{CREATE}");
+    let Ok(Route::Owner(owner, _)) = super::route(Some(&f.router), &text) else {
+        panic!("CREATE routes to the tracker owner");
+    };
+    let sealed = with_identity(who("alice"), || {
+        owner.seal_update(&update_binding(&old, &text).unwrap())
+    })
+    .unwrap();
+    assert_eq!(sealed["state"], "sealed");
+    let before = head(&f.root, "tracker.db");
+    assert!(
+        effect_only(&f, "alice", &ticket).is_err(),
+        "the late worker's write rolls back"
+    );
+    assert_eq!(head(&f.root, "tracker.db"), before, "nothing committed");
+    let status = retried_status(durable(&f, "alice", Some(&old), CREATE));
+    assert_eq!(status["state"], "sealed");
+    assert_eq!(http(&status), axum::http::StatusCode::CONFLICT);
+    let fresh = report(durable(&f, "alice", Some(&new), CREATE));
+    assert_eq!(fresh["asserted"], 3, "the intent ran exactly once");
+    // A committed attempt cannot be sealed.
+    assert!(
+        with_identity(who("alice"), || owner
+            .seal_update(&update_binding(&new, &text).unwrap()))
+        .is_err()
     );
 }

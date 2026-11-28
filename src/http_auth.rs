@@ -129,6 +129,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
     "/datasets",      // named-dataset registry create/remove (quipu #69) + meta-graph mirror
     "/update",        // SPARQL 1.1 Update mutates default and named graphs
+    "/update/seal",   // seals an UNKNOWN routed /update write ID (aegis-n0wc.5 H3)
     "/patch",         // aegis-4mk: applies a change-set through the /update gates
     "/queries",       // stored named-query registry load/remove (quipu #79)
     // aegis-06q1r: OWL ontology load/list/remove. `load` both PERSISTS the
@@ -171,6 +172,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // aegis-25k: exact attested-write receipt lookup by nonce; no write.
     "/attest/receipt",
     "/knot/status",
+    // aegis-n0wc.5 H3: routed /update write-ID status, bound to the original writer.
+    "/update/status",
     // aegis-4qv: owner completion proof, bound to the original writer identity.
     "/owner/knot/status",
     // aegis-4qv.8: pilot composed reads over explicit graphs; per-request
@@ -290,7 +293,12 @@ pub fn is_write_endpoint(path: &str) -> bool {
 pub fn requires_read_identity(path: &str) -> bool {
     matches!(
         path,
-        "/identity" | "/knot/status" | "/owner/knot/status" | "/owner/query" | "/graph-sets/query"
+        "/identity"
+            | "/knot/status"
+            | "/update/status"
+            | "/owner/knot/status"
+            | "/owner/query"
+            | "/graph-sets/query"
     )
 }
 

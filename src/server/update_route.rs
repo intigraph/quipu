@@ -35,6 +35,8 @@ pub(crate) enum Dispatched {
     Refused(String),
     /// The legacy or routed report.
     Report(serde_json::Value),
+    /// A retried write ID: its recorded status (aegis-n0wc.5 H3). Never re-run.
+    Retried(serde_json::Value),
 }
 
 /// Route and apply one update: the whole `/update` decision, so tests drive
@@ -59,6 +61,85 @@ pub(super) fn dispatch(
             Dispatched::Report(apply_routed(owner, &members, update, attribution, client)?)
         }
     })
+}
+
+/// [`dispatch`] with an optional durable write ID (aegis-n0wc.5 H3, the
+/// `/knot` v2 completion contract). Only a routed update can carry one: the
+/// legacy writer has no ledger, so a write ID there refuses rather than claim
+/// durability it does not have. A fresh ID is admitted in the owner's file
+/// BEFORE the effect, its witness rides the update's own commit, and the
+/// complete receipt is recorded after it; a repeated ID returns that record.
+#[cfg(unix)]
+pub(super) fn dispatch_with_write_id(
+    router: Option<&quipu::store::graph_owner::GraphSetRouter>,
+    shared: &crate::SharedStore,
+    update: &str,
+    attribution: &super::Attribution,
+    client: &str,
+    write_id: Option<&str>,
+) -> Result<Dispatched, AppError> {
+    use quipu::store::knot_completion::update::UpdateAdmission;
+    let Some(write_id) = write_id else {
+        return dispatch(router, shared, update, attribution, client);
+    };
+    let (owner, members) = match route(router, update) {
+        Err(message) => return Ok(Dispatched::Refused(message)),
+        Ok(Route::Legacy) => {
+            return Err(quipu::Error::InvalidValue(
+                "a write ID is served only for routed graph-set updates".into(),
+            )
+            .into());
+        }
+        Ok(Route::Owner(owner, members)) => (owner, members),
+    };
+    let binding = update_binding(write_id, update)?;
+    let ticket = match owner.admit_update(&binding) {
+        Ok(UpdateAdmission::Fresh(ticket)) => ticket,
+        Ok(UpdateAdmission::Retry(status)) => return Ok(Dispatched::Retried(status)),
+        // The same refusal for another principal or other bytes: no receipt.
+        Err(error) if error.to_string().contains("write ID already used") => {
+            return Ok(Dispatched::Refused(error.to_string()));
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let result = apply_routed_ticketed(owner, &members, update, attribution, client, Some(&ticket));
+    // A ledger failure here keeps the atomic witness; never claim a receipt
+    // the ledger could not record.
+    owner.finish_update(&ticket, result.as_ref().ok())?;
+    result.map(Dispatched::Report)
+}
+
+/// The write-ID binding of one exact update text and the authenticated
+/// writer, through the `/knot` v2 binding (the text rides a JSON object).
+#[cfg(unix)]
+pub(super) fn update_binding(
+    write_id: &str,
+    update: &str,
+) -> Result<quipu::store::knot_completion::Binding, AppError> {
+    Ok(quipu::store::knot_completion::Binding::for_request(
+        write_id.to_owned(),
+        &serde_json::json!({ "update": update }),
+    )?)
+}
+
+/// The routed owner of `update` and the write-ID binding for status/seal.
+/// `None` when the update is not routed (it can have no write ID).
+#[cfg(unix)]
+pub(super) fn routed_binding<'a>(
+    router: Option<&'a quipu::store::graph_owner::GraphSetRouter>,
+    write_id: &str,
+    update: &str,
+) -> Result<
+    Option<(
+        &'a quipu::store::graph_owner::GraphSetOwner,
+        quipu::store::knot_completion::Binding,
+    )>,
+    AppError,
+> {
+    match route(router, update) {
+        Ok(Route::Owner(owner, _)) => Ok(Some((owner, update_binding(write_id, update)?))),
+        _ => Ok(None),
+    }
 }
 
 /// Without unix owners every update is legacy.
@@ -188,10 +269,24 @@ pub(super) fn apply_routed(
     attribution: &super::Attribution,
     client: &str,
 ) -> Result<serde_json::Value, AppError> {
+    apply_routed_ticketed(owner, members, update, attribution, client, None)
+}
+
+/// [`apply_routed`] with an optional write-ID ticket whose commit witness
+/// rides the update's own multi-graph commit (aegis-n0wc.5 H3).
+#[cfg(unix)]
+fn apply_routed_ticketed(
+    owner: &quipu::store::graph_owner::GraphSetOwner,
+    members: &BTreeSet<String>,
+    update: &str,
+    attribution: &super::Attribution,
+    client: &str,
+    ticket: Option<&quipu::store::knot_completion::update::UpdateTicket>,
+) -> Result<serde_json::Value, AppError> {
     let plan = super::update_slice::plan(update);
     let mut times = super::update_observe::UpdateTimes::default();
     let mut seen = super::update_observe::RoutedSeen::default();
-    let (result, hold) = owner.update_observed(members, |store| {
+    let (result, hold) = owner.update_observed_ticketed(members, ticket, |store| {
         seen.store_id = store.store_id().ok();
         seen.shacl_validate_on_write = Some(store.shacl_config().validate_on_write);
         Ok(
@@ -261,6 +356,7 @@ pub(crate) fn routed_update_for_test(
     match dispatch(Some(router), legacy, update, &attribution, "test").unwrap() {
         Dispatched::Report(report) => report,
         Dispatched::Refused(message) => panic!("routed update refused: {message}"),
+        Dispatched::Retried(status) => panic!("unexpected retry status: {status}"),
     }
 }
 
