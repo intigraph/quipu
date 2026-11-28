@@ -538,7 +538,7 @@ fn retried_status(d: Dispatched) -> serde_json::Value {
 
 /// The HTTP status a retried write ID answers with.
 fn http(status: &serde_json::Value) -> axum::http::StatusCode {
-    super::super::retried(status.clone()).status()
+    super::super::write_id::retried(status.clone()).status()
 }
 
 /// Admit `write_id` for CREATE as `name` without running it (a crash before
