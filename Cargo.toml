@@ -282,7 +282,7 @@ oxicompare = ["dep:oxigraph", "oxigraph/rocksdb"]
 # naming the rebuild, instead of silently serving from the SQLite table. Build
 # with `--features full,lancedb` to ship it. `--all-features` is therefore NOT
 # what a release is built with.
-full = ["shacl", "owl", "onnx", "reactive-reasoner", "server"]
+full = ["shacl", "owl", "onnx", "reactive-reasoner", "server", "ownership-witness-s3"]
 # Test/benchmark utilities (seed-fixtures, quipu-shacl-conformance). OFF by
 # default and outside `full`, so `cargo install quipu-ai` puts only quipu and
 # quipu-server on a user's PATH (aegis-wd3m38). Build them with
