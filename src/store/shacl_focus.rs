@@ -30,7 +30,13 @@ pub(super) struct ValueSetOwnership {
 }
 
 impl ValueSetOwnership {
-    pub(super) fn owns(&self, component: &str, focus: &str, path: Option<&str>) -> bool {
+    pub(super) fn owns(
+        &self,
+        component: &str,
+        focus: &str,
+        path: Option<&str>,
+        plan: &CardinalityPlan,
+    ) -> bool {
         if self.whole.contains(focus) {
             return true;
         }
@@ -40,32 +46,11 @@ impl ValueSetOwnership {
         ) {
             return self.gained.contains(focus);
         }
-        path.map(path_key)
-            .is_some_and(|path| self.paths.contains(&(focus.to_owned(), path)))
-    }
-}
-
-/// The ownership key of a rendered result path: `<p>` or `p` is `p`, and
-/// `^(<p>)` is `^p`. Only those two shapes are parsed, never stripped: an IRI
-/// may legally contain parentheses (grant, #732), and stripping them made a
-/// new value under `<…/p(x)>` look unowned. Any other path matches no key;
-/// the plan already refuses value-set constraints on such paths.
-fn path_key(rendered: &str) -> String {
-    let (inverse, body) = match rendered
-        .strip_prefix("^(")
-        .and_then(|r| r.strip_suffix(')'))
-    {
-        Some(inner) => (true, inner),
-        None => (false, rendered),
-    };
-    let iri = body
-        .strip_prefix('<')
-        .and_then(|r| r.strip_suffix('>'))
-        .unwrap_or(body);
-    if inverse {
-        format!("^{iri}")
-    } else {
-        iri.to_owned()
+        path.and_then(|path| plan.value_set_paths.get(path))
+            .is_some_and(|keys| {
+                keys.iter()
+                    .any(|key| self.paths.contains(&(focus.to_owned(), key.clone())))
+            })
     }
 }
 

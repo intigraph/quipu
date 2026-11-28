@@ -208,7 +208,7 @@ impl Store {
                     };
                     let focus = issue.focus_node.trim_matches(['<', '>']);
                     let mine = if VALUE_SETS.contains(&component) {
-                        owned.owns(component, focus, issue.path.as_deref())
+                        owned.owns(component, focus, issue.path.as_deref(), &plan)
                     } else {
                         complete_values
                             && COMPONENTS.contains(&component)

@@ -1,7 +1,7 @@
 //! Capability obligations follow the same compiled shape identities and
 //! deactivation semantics as batch validation, including shared references.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use rudof_rdf::rdf_core::term::literal::Literal as _;
 use rudof_rdf::rdf_core::{Rdf, SHACLPath};
@@ -13,6 +13,9 @@ use super::Validator;
 use crate::{Error, Result};
 
 pub(crate) struct CardinalityPlan {
+    /// Rendered result path to its forward/inverse ownership keys, derived
+    /// from the compiled path rather than reparsing an IRI-containing string.
+    pub(crate) value_set_paths: BTreeMap<String, BTreeSet<String>>,
     pub(crate) has_value_set_constraint: bool,
     pub(crate) has_value_constraint: bool,
     pub(crate) has_class_constraint: bool,
@@ -49,6 +52,7 @@ impl Validator {
             .collect();
         let mut seen = HashSet::new();
         let mut plan = CardinalityPlan {
+            value_set_paths: BTreeMap::new(),
             has_value_set_constraint: false,
             has_value_constraint: false,
             has_class_constraint: false,
@@ -168,7 +172,8 @@ impl Validator {
                     | IRComponent::LessThanOrEquals(_) => {
                         plan.has_value_set_constraint = true;
                         if let Some(path) = shape.path() {
-                            plan_value_set_path(path, &mut plan.incoming_predicates)?;
+                            let keys = plan_value_set_path(path, &mut plan.incoming_predicates)?;
+                            plan.value_set_paths.insert(path.to_string(), keys);
                         }
                     }
                     IRComponent::And(value) => pending.extend(value.shapes().iter().copied()),
@@ -223,26 +228,30 @@ fn plan_subject_path(path: &SHACLPath, plan: &mut CardinalityPlan) {
 /// context. A predicate path needs only the focus's own facts; an inverse
 /// predicate also needs the facts pointing at it; an alternative of those is
 /// the union of its members. Any other path cannot be checked incrementally.
-fn plan_value_set_path(path: &SHACLPath, incoming: &mut BTreeSet<String>) -> Result<()> {
+fn plan_value_set_path(
+    path: &SHACLPath,
+    incoming: &mut BTreeSet<String>,
+) -> Result<BTreeSet<String>> {
     match path {
-        SHACLPath::Predicate { .. } => Ok(()),
+        SHACLPath::Predicate { pred } => Ok(BTreeSet::from([pred.as_str().to_owned()])),
         SHACLPath::Inverse { path: inner } => match inner.as_ref() {
             SHACLPath::Predicate { pred } => {
                 incoming.insert(pred.as_str().to_owned());
-                Ok(())
+                Ok(BTreeSet::from([format!("^{}", pred.as_str())]))
             }
             _ => Err(unsupported_path(path)),
         },
         SHACLPath::Alternative { paths } => {
+            let mut keys = BTreeSet::new();
             for member in paths {
                 match member {
                     SHACLPath::Predicate { .. } | SHACLPath::Inverse { .. } => {
-                        plan_value_set_path(member, incoming)?;
+                        keys.extend(plan_value_set_path(member, incoming)?);
                     }
                     _ => return Err(unsupported_path(path)),
                 }
             }
-            Ok(())
+            Ok(keys)
         }
         _ => Err(unsupported_path(path)),
     }
