@@ -49,6 +49,22 @@ ex:ActionShape a sh:NodeShape ; sh:targetClass ex:Action ;
     sh:property [ sh:path ex:kind ; sh:maxCount 1 ] .
 ex:StepShape a sh:NodeShape ; sh:targetClass ex:Step .";
 
+/// The subclass arm again, where the VALUE context must exhaust its budget:
+/// `ex:link` is constrained (`sh:class`), so its many refs stay in the base
+/// context and each target's type is looked up in the value context. The
+/// fallback then truncates the value context, so only the base-context subclass
+/// walk can still carry `ex:Step rdfs:subClassOf ex:Action`.
+const EXHAUSTING_ACTION_SHAPES: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://ex.test/> .
+ex:ActionShape a sh:NodeShape ; sh:targetClass ex:Action ;
+    sh:property [ sh:path ex:kind ; sh:maxCount 1 ] ;
+    sh:property [ sh:path ex:link ; sh:class ex:Thing ] .
+ex:StepShape a sh:NodeShape ; sh:targetClass ex:Step .
+ex:ThingShape a sh:NodeShape ; sh:targetClass ex:Thing .";
+
+/// Base context stays under the 100k budget, base + value types goes over it.
+const EXHAUSTING_LINKS: usize = 55_000;
+
 const FAN: usize = 3_000;
 
 fn hot_store(shapes: &str) -> Store {
@@ -195,4 +211,41 @@ fn the_plan_bounds_forward_paths_and_refuses_to_bound_a_closed_shape() {
         .cardinality_plan()
         .unwrap();
     assert!(!closed.subject_context_bounded);
+}
+
+#[test]
+fn a_data_graph_subclass_still_reaches_a_class_target_when_the_value_context_is_exhausted() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes(
+            "7aee-exhaust",
+            EXHAUSTING_ACTION_SHAPES,
+            "2026-11-28T00:00:00Z",
+        )
+        .unwrap();
+    knot(&mut store, "ex:Step rdfs:subClassOf ex:Action .").unwrap();
+    knot(&mut store, "ex:s a ex:Step ; ex:kind \"a\" .").unwrap();
+    let things: String = (0..EXHAUSTING_LINKS)
+        .map(|i| format!("ex:t{i} a ex:Thing . "))
+        .collect();
+    knot(&mut store, &things).unwrap();
+    // In batches: one payload of 55k new refs would make every target a focus
+    // and exhaust the BASE context of the setup write itself.
+    for batch in (0..EXHAUSTING_LINKS).collect::<Vec<_>>().chunks(5_000) {
+        let links: String = batch
+            .iter()
+            .map(|i| format!("ex:s ex:link ex:t{i} . "))
+            .collect();
+        knot(&mut store, &links).unwrap();
+    }
+    let fallbacks = store.poststate_profile.check_value_fallbacks;
+    violation(
+        knot(&mut store, "ex:s ex:kind \"b\" ."),
+        "MaxCountConstraintComponent",
+    );
+    // The arm under test really ran: the value context fell back.
+    assert!(
+        store.poststate_profile.check_value_fallbacks > fallbacks,
+        "the value context did not exhaust; this test proves nothing"
+    );
 }
