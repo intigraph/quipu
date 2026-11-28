@@ -359,6 +359,12 @@ off. With the reuse it takes 0.41 s, the same rows either way
 (`examples/absence_join_cost.rs`). A "fits" answer is never reused, so a graph
 that grows past the budget is never built from a stale count.
 
+The filtered-BGP driver selects a viable pattern and checks its bounded first
+pattern before asking whether a cold read model is affordable. A correlated
+inner FILTER with a small seeded first pattern declines without counting the
+graph for every outer row. Resident models retain their early shortcut. This
+changes plan-selection cost, not the read-model budget or query rows.
+
 Binding is shared with the SQL path through one extracted `bind_row`, so the two
 cannot drift on the subtle part: a subject resolving to a blank node binds as
 `Value::Str`, everything else re-looks-up its IRI to choose between `Ref` and

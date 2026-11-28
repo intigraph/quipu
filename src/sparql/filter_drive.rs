@@ -169,7 +169,6 @@ pub(super) fn try_eval(
         || ctx.valid_at.is_some()
         || ctx.as_of_tx.is_some()
         || ctx.row_limit.is_some()
-        || crate::store::read_model::read_model_applicable(store, ctx)
     {
         return Ok(None);
     }
@@ -178,6 +177,15 @@ pub(super) fn try_eval(
     let Some((drive, judged)) = choose_driver(patterns, &conjuncts, seed) else {
         return Ok(None);
     };
+    // Keep an already-resident model cheap; this guard cannot need a count.
+    if ctx
+        .graph
+        .single_graph()
+        .is_some_and(|g| store.read_model_is_resident_for(g))
+        && crate::store::read_model::read_model_applicable(store, ctx)
+    {
+        return Ok(None);
+    }
     // The floor below is never under MIN_DRIVER_ROWS, so a first pattern that
     // cannot exceed it always declines. Prove that with a bounded probe BEFORE
     // counting the filtered predicate: under `NOT EXISTS` this runs once per
@@ -189,6 +197,11 @@ pub(super) fn try_eval(
             .len()
             <= MIN_DRIVER_ROWS
     {
+        return Ok(None);
+    }
+    // A correlated driver's seeded first pattern can already prove it too
+    // small. Only plans that survive that probe may count the whole graph.
+    if crate::store::read_model::read_model_applicable(store, ctx) {
         return Ok(None);
     }
     #[cfg(test)]
@@ -564,3 +577,7 @@ mod tests;
 #[cfg(test)]
 #[path = "filter_drive_top_tests.rs"]
 mod top_tests;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "filter_drive_affordability_tests.rs"]
+mod affordability_tests;
