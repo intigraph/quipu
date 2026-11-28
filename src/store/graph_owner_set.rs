@@ -3,6 +3,16 @@ use super::*;
 use crate::{graph_catalog::GraphSetCatalog, store::Datum};
 use std::collections::BTreeSet;
 
+/// Where one routed update spent its time (aegis-n0wc.5 H2a).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct OwnerHold {
+    /// From the call until this owner's writer was held (admission and
+    /// writer queue), or until the refusal when it never was.
+    pub wait: std::time::Duration,
+    /// How long the writer was held; `None` when refused before holding it.
+    pub held: Option<std::time::Duration>,
+}
+
 /// A native delta planned in this exact owner's term space. Numeric term IDs
 /// are file-local; callers must not copy them from another store. This is not
 /// an HTTP payload, durable retry ticket or multi-file transaction protocol.
@@ -205,6 +215,33 @@ impl GraphSetOwner {
         members: &BTreeSet<String>,
         work: impl FnOnce(&mut Store) -> Result<T>,
     ) -> Result<T> {
+        self.update_observed(members, work).0
+    }
+
+    /// [`Self::update`], also reporting where it spent its time (aegis-n0wc.5
+    /// H2a), so a routed write is as visible to write telemetry as a legacy
+    /// one. The hold is returned on refusal too: a refused write still waited.
+    pub fn update_observed<T>(
+        &self,
+        members: &BTreeSet<String>,
+        work: impl FnOnce(&mut Store) -> Result<T>,
+    ) -> (Result<T>, OwnerHold) {
+        let started = std::time::Instant::now();
+        let mut hold = OwnerHold::default();
+        let result = self.update_timed(members, work, started, &mut hold);
+        if hold.held.is_none() {
+            hold.wait = started.elapsed();
+        }
+        (result, hold)
+    }
+
+    fn update_timed<T>(
+        &self,
+        members: &BTreeSet<String>,
+        work: impl FnOnce(&mut Store) -> Result<T>,
+        started: std::time::Instant,
+        hold: &mut OwnerHold,
+    ) -> Result<T> {
         let owned = self
             .catalog
             .owner_graphs(&self.owner.catalog_route().graph)?;
@@ -218,18 +255,26 @@ impl GraphSetOwner {
         }
         let _admission = self.owner.admit()?;
         let mut store = self.owner.writer.owned()?;
-        self.owner.placement.verify()?;
-        Owner::check_identity(self.owner.catalog_route(), &store)?;
-        Self::check_hooks(&store)?;
-        participant::check_write_fence(&store)?;
-        if participant::has_dependency_pins(&store)? {
-            return Err(refused(
-                "a routed update into a file with dependency pins is not qualified",
-            ));
-        }
-        store.ownership_operation(|store| {
-            store.with_writer_scope(crate::writer_scope::WriteOperation::Update, members, work)
-        })
+        // The writer is ours from here: `held` covers every check and the
+        // commit made while holding it, as the legacy writer's does.
+        hold.wait = started.elapsed();
+        let acquired = std::time::Instant::now();
+        let result = (|| {
+            self.owner.placement.verify()?;
+            Owner::check_identity(self.owner.catalog_route(), &store)?;
+            Self::check_hooks(&store)?;
+            participant::check_write_fence(&store)?;
+            if participant::has_dependency_pins(&store)? {
+                return Err(refused(
+                    "a routed update into a file with dependency pins is not qualified",
+                ));
+            }
+            store.ownership_operation(|store| {
+                store.with_writer_scope(crate::writer_scope::WriteOperation::Update, members, work)
+            })
+        })();
+        hold.held = Some(acquired.elapsed());
+        result
     }
 
     /// Pre-queue validation shared by local and participant batches: the

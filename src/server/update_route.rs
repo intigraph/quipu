@@ -56,7 +56,7 @@ pub(super) fn dispatch(
             client,
         )?),
         Ok(Route::Owner(owner, members)) => {
-            Dispatched::Report(apply_routed(owner, &members, update, attribution)?)
+            Dispatched::Report(apply_routed(owner, &members, update, attribution, client)?)
         }
     })
 }
@@ -177,20 +177,27 @@ pub(super) fn check_members<'q>(
 }
 
 /// Evaluate and commit a routed update in its owner. The response is the
-/// legacy shape plus `owner {store_id, log_epoch, local_tx}`.
+/// legacy shape plus `owner {store_id, log_epoch, local_tx}`. Like the legacy
+/// writer it records store time for `client` and logs one
+/// `update_observation` line, marked `"route":"graph_set"` (aegis-n0wc.5 H2a).
 #[cfg(unix)]
 pub(super) fn apply_routed(
     owner: &quipu::store::graph_owner::GraphSetOwner,
     members: &BTreeSet<String>,
     update: &str,
     attribution: &super::Attribution,
+    client: &str,
 ) -> Result<serde_json::Value, AppError> {
     let plan = super::update_slice::plan(update);
     let mut times = super::update_observe::UpdateTimes::default();
-    owner.update(members, |store| {
+    let mut seen = super::update_observe::RoutedSeen::default();
+    let (result, hold) = owner.update_observed(members, |store| {
+        seen.store_id = store.store_id().ok();
+        seen.shacl_validate_on_write = Some(store.shacl_config().validate_on_write);
         Ok(
             super::apply_locked(store, &plan, update, attribution, &mut times, Some(members))
                 .and_then(|applied| {
+                    seen.path = Some(applied.path);
                     let mut report = applied.report(store)?;
                     report["owner"] = serde_json::json!({
                         "store_id": store.store_id()?,
@@ -200,7 +207,10 @@ pub(super) fn apply_routed(
                     Ok(report)
                 }),
         )
-    })?
+    });
+    let result = result.map_err(AppError::from).and_then(|inner| inner);
+    super::update_observe::observe_routed(client, result.is_ok(), &seen, hold, &times);
+    result
 }
 
 #[cfg(all(test, unix))]
