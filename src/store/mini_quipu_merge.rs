@@ -379,14 +379,28 @@ fn write(
             req.mode.into(),
             Some(req.timestamp),
         )?;
+        plans.push((g, mg, graph.clone(), plan));
+    }
+    if let Some((resolved, _, _)) = req.decided
+        && resolved.keys().any(|key| {
+            !plans
+                .iter()
+                .any(|(_, _, _, p)| p.resolution_slots.contains(key))
+        })
+    {
+        return Err(Error::InvalidValue(
+            "fork merge: a decision names a slot that is not in conflict; nothing was written"
+                .into(),
+        ));
+    }
+    for (_g, _, _, plan) in &plans {
         if req.mode == MergeMode::Atomic && !plan.conflicts.is_empty() {
-            return Ok(MergeBack::Conflicts(plan.conflicts));
+            return Ok(MergeBack::Conflicts(plan.conflicts.clone()));
         }
         #[cfg(feature = "shacl")]
-        if let Some(feedback) = gate(home, g, &plan)? {
+        if let Some(feedback) = gate(home, *_g, plan)? {
             return Ok(MergeBack::Refused(feedback));
         }
-        plans.push((g, mg, graph.clone(), plan));
     }
     let (rows, carried) = carriage(home, mini, &plans)?;
     let carried_digest = crate::share::sha256(

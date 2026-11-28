@@ -412,3 +412,7 @@ fn a_registered_name_or_identity_is_not_recorded_twice() {
     assert!(err.contains("already registered"), "{err}");
     assert_eq!(home.owner.owner.read(mini_fork_count).unwrap(), 1);
 }
+
+#[cfg(feature = "shacl")]
+#[path = "mini_quipu_example_tests.rs"]
+mod worked_example;
