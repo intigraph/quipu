@@ -818,7 +818,8 @@ jobs:
       (github.event_name == 'workflow_dispatch' ||
        needs.release-plz.outputs.releases_created == 'true')
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    # Sized so the 90-min share wait below is never cut short (step 95, job 110).
+    timeout-minutes: 110
     permissions:
       contents: read
     steps:
@@ -844,8 +845,12 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      # Wait up to 90 min (180 x 30 s). v0.19.6's trusted producer took 69 min
+      # (01:48-02:57Z, 45 CPU-min, mostly the receiver's round-trip import), so
+      # the old 40-min wait failed a good release (run 46094036576, job
+      # 140825853871, green on re-run). Rollback: 80 attempts / step 45 / job 60.
       - name: Require the trusted repository share
-        timeout-minutes: 45
+        timeout-minutes: 95
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
@@ -856,7 +861,7 @@ jobs:
           PACK="quipu-${TAG}-repository.pendant.tar.gz"
           NATIVE="quipu-${TAG}-${TARGET}"
           complete=false
-          for attempt in $(seq 1 80); do
+          for attempt in $(seq 1 180); do
             if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$TMP" --clobber \
                 --pattern "$PACK" --pattern "$PACK.sha256" \
                 --pattern "$PACK.provenance.json" 2>/dev/null &&
@@ -865,14 +870,14 @@ jobs:
               complete=true
               break
             fi
-            [ "$attempt" = 1 ] && echo "Waiting up to 40 min for ${PACK} from the configured trusted producer."
+            [ "$attempt" = 1 ] && echo "Waiting up to 90 min for ${PACK} from the configured trusted producer."
             sleep 30
           done
           if [[ "$complete" != true ]]; then
             {
               echo "### Trusted repository share missing for ${TAG}"
               echo
-              echo "No \`${PACK}\` (+ \`.sha256\`, \`.provenance.json\`) appeared on the release within 40 minutes."
+              echo "No \`${PACK}\` (+ \`.sha256\`, \`.provenance.json\`) appeared on the release within 90 minutes."
               echo "It is uploaded by the configured trusted producer, not by this workflow."
               echo "Check its host, schedule and policy endpoint using the private operations runbook."
               echo "The producer may be unavailable, held or failing. It only serves the LATEST release."
@@ -880,7 +885,7 @@ jobs:
               echo "Native binaries, wasm and crates.io do not wait on this job. Once the share is uploaded,"
               echo "re-run THIS job only (it rebuilds nothing). See docs/RELEASING.md."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error title=Trusted repository share missing::${PACK} was not uploaded within 40 min. The configured trusted producer did not run or failed; check its host and schedule using the private operations runbook, then re-run this job. crates.io was not gated on this."
+            echo "::error title=Trusted repository share missing::${PACK} was not uploaded within 90 min. The configured trusted producer did not run or failed; check its host and schedule using the private operations runbook, then re-run this job. crates.io was not gated on this."
             exit 1
           fi
           # The released x86_64 archive, checksummed, is the binary the producer
