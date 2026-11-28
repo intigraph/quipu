@@ -432,3 +432,62 @@ fn h2a_the_owner_reports_held_only_when_it_held_its_writer() {
     assert!(done.is_ok());
     assert!(hold.held.is_some(), "the writer was held for the work");
 }
+
+/// H2b: a committed routed receipt carries a strict cut over its members, at
+/// or after the write it reports.
+#[test]
+fn h2b_a_committed_receipt_carries_a_cut_at_or_after_its_write() {
+    use quipu::store::composition_cut::CompositionCut;
+    let f = fx();
+    let created = report(run(Some(&f.router), &f.legacy, CREATE));
+    let local_tx = created["owner"]["local_tx"].as_i64().unwrap();
+    let token = created["owner"]["cut"].as_str().expect("a cut token");
+    let cut = CompositionCut::from_token(token).unwrap();
+    assert!(!cut.members().is_empty());
+    for (graph, member) in cut.members() {
+        assert_eq!(
+            member.store_id, f.tracker_id,
+            "{graph} is in the owner file"
+        );
+        assert!(
+            member.local_tx >= local_tx,
+            "{graph} is at or after the write"
+        );
+    }
+    let edited = report(run(Some(&f.router), &f.legacy, &edit(1, 2, "urn:w2")));
+    let later = CompositionCut::from_token(edited["owner"]["cut"].as_str().unwrap()).unwrap();
+    assert_ne!(later, cut, "a second write moves the cut");
+}
+
+/// H2b: a CAS that committed nothing has no write to cut at.
+#[test]
+fn h2b_a_write_that_committed_nothing_has_no_cut() {
+    let f = fx();
+    report(run(Some(&f.router), &f.legacy, CREATE));
+    let lost = report(run(Some(&f.router), &f.legacy, &edit(7, 8, "urn:w9")));
+    assert!(lost["owner"]["local_tx"].is_null());
+    assert!(lost["owner"].get("cut").is_none());
+}
+
+/// H2b: a refused capture never turns a committed write into an error. The
+/// receipt keeps the commit and says why there is no cut.
+#[test]
+fn h2b_a_refused_capture_leaves_the_committed_receipt_with_a_null_cut() {
+    let f = fx();
+    let Ok(Route::Owner(owner, _)) = super::route(Some(&f.router), &format!("{BASE}{CREATE}"))
+    else {
+        panic!("CREATE routes to the tracker owner");
+    };
+    let mut receipt = serde_json::json!({"owner": {"local_tx": 7}});
+    // A graph this owner does not hold makes the capture refuse.
+    let foreign: BTreeSet<String> = [Q.to_string()].into();
+    attach_cut(owner, &foreign, &mut receipt);
+    assert_eq!(receipt["owner"]["local_tx"], 7, "the commit is kept");
+    assert!(receipt["owner"]["cut"].is_null());
+    assert!(
+        receipt["owner"]["cut_unavailable"]
+            .as_str()
+            .is_some_and(|why| why.contains("not a graph of this owner")),
+        "{receipt}"
+    );
+}

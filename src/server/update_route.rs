@@ -210,7 +210,38 @@ pub(super) fn apply_routed(
     });
     let result = result.map_err(AppError::from).and_then(|inner| inner);
     super::update_observe::observe_routed(client, result.is_ok(), &seen, hold, &times);
-    result
+    let mut report = result?;
+    attach_cut(owner, members, &mut report);
+    Ok(report)
+}
+
+/// How long a receipt may spend capturing its cut. The capture never queues:
+/// an occupied fence refuses at once, so this only bounds the capture itself.
+#[cfg(unix)]
+const CUT_CAPTURE_BUDGET: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Add `owner.cut` to a committed routed receipt (aegis-n0wc.5 H2b): a strict
+/// composition-cut token over the update's members, captured after commit, so
+/// each member is at or after this write. If the capture refuses (a fence or
+/// reader is occupied) the receipt says `cut: null` and why. The write is
+/// already durable, so a failed capture NEVER turns it into an error.
+#[cfg(unix)]
+fn attach_cut(
+    owner: &quipu::store::graph_owner::GraphSetOwner,
+    members: &BTreeSet<String>,
+    report: &mut serde_json::Value,
+) {
+    if report["owner"]["local_tx"].is_null() {
+        // Nothing committed (e.g. a CAS that matched nothing): no write to cut at.
+        return;
+    }
+    match owner.capture_cut(members, std::time::Instant::now() + CUT_CAPTURE_BUDGET) {
+        Ok(cut) => report["owner"]["cut"] = serde_json::json!(cut.to_token()),
+        Err(error) => {
+            report["owner"]["cut"] = serde_json::Value::Null;
+            report["owner"]["cut_unavailable"] = serde_json::json!(error.to_string());
+        }
+    }
 }
 
 #[cfg(all(test, unix))]
