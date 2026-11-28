@@ -28,7 +28,10 @@ impl WriteOperation {
         match route {
             "/update" => Some(Self::Update),
             "/episode" => Some(Self::Episode),
-            "/knot" => Some(Self::Knot),
+            // aegis-4qv.9.1: owner knots and their seal are Knot writes on the
+            // owner graph; the durable owner layer checks the grant before it
+            // admits or seals an attempt.
+            "/knot" | "/owner/knot" | "/owner/knot/seal" => Some(Self::Knot),
             "/set" => Some(Self::Set),
             "/entity_ref" => Some(Self::EntityRefMint),
             "/fluent/observations" => Some(Self::FluentAppend),
@@ -208,6 +211,15 @@ pub(crate) fn scoped<T>(capability: Capability, work: impl FnOnce() -> T) -> T {
     }
     let _restore = Restore(CAPABILITY.with(|slot| slot.replace(Some(capability))));
     work()
+}
+
+/// True only while `Store::with_writer_scope` holds its own outermost
+/// BEGIN IMMEDIATE for this request with an installed capability. A v2 knot
+/// ticket accepts that transaction as its commit boundary (aegis-4qv.9.1).
+pub(crate) fn in_scoped_transaction(store: &Store) -> bool {
+    is_scoped_request()
+        && !store.conn.is_autocommit()
+        && CAPABILITY.with(|slot| slot.borrow().is_some())
 }
 
 /// Backstop for every normal graph transaction, including derived/retracted

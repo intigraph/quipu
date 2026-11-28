@@ -123,9 +123,11 @@ impl PreparedOwner {
         if identity.principal.is_empty()
             || identity.credential_id.as_ref().is_none_or(String::is_empty)
             || identity.auth_class.is_empty()
-            || identity.auth_class == "scoped_named_bearer"
         {
-            return Err(refuse("stable unscoped durable credential required"));
+            // A scoped writer is admitted here only as an identity; the owner
+            // layer refuses it before admission or seal unless its grant
+            // covers Knot on THIS owner store's instance of the graph.
+            return Err(refuse("stable durable credential required"));
         }
         Ok(())
     }

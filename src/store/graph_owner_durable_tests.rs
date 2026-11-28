@@ -173,3 +173,115 @@ fn unsupported_scoped_v2_and_bad_pins_refuse_before_creating_a_ledger() {
     assert!(!owner.read(|store| Ok(has_ledger(store))).unwrap());
     assert_eq!(values(&owner)["count"], 0);
 }
+
+// aegis-4qv.9.1: a scoped writer on the durable owner route. Its grant must
+// cover Knot on THIS owner store's instance of the graph; anything else
+// refuses before an ID is consumed (no ledger, no facts).
+fn scoped_grant(name: &str, graph: &str, store: &Store) -> crate::writer_scope::WriteGrant {
+    crate::writer_scope::WriteGrant {
+        version: 1,
+        id: format!("grant-{name}"),
+        principal: format!("urn:owner:{name}"),
+        credential_id: name.into(),
+        instance: store.writer_graph_instance(graph).unwrap(),
+        operations: std::collections::BTreeSet::from([crate::writer_scope::WriteOperation::Knot]),
+        valid_from: 0,
+        valid_until: crate::time::epoch_secs() + 3600,
+        revision: 1,
+        revoked: false,
+        mint_scope: None,
+    }
+}
+
+fn enroll(owner: &Owner, grant: &crate::writer_scope::WriteGrant) -> Result<()> {
+    let mut store = owner.writer.owned()?;
+    store.ownership_operation(|store| store.writer_grant_apply(grant))
+}
+
+#[test]
+fn scoped_writer_with_owner_instance_grant_completes_in_the_owner_store() {
+    let dir = tempfile::tempdir().unwrap();
+    let (owner, route) = prepared(dir.path(), "a");
+    let grant = {
+        let store = owner.writer.owned().unwrap();
+        scoped_grant("machine", &route.graph, &store)
+    };
+    enroll(&owner, &grant).unwrap();
+    let body = input(&owner, "scoped");
+    crate::transaction_auth::with_identity(
+        Some(identity("machine", "scoped_named_bearer")),
+        || {
+            let result = owner.knot_durable(&pin(&owner), &body, ID).unwrap();
+            let status = owner.knot_attempt_status(&pin(&owner), &body, ID).unwrap();
+            assert_eq!(status["state"], "finished");
+            assert_eq!(status["receipt"]["tx_id"], result["tx_id"]);
+            // Success completes by itself; a seal after success refuses.
+            assert!(owner.seal_knot_binding(&pin(&owner), &body, ID).is_err());
+        },
+    );
+    assert_eq!(values(&owner)["count"], 1);
+}
+
+#[test]
+fn scoped_writer_without_a_matching_owner_grant_refuses_before_admission() {
+    for case in ["none", "other-credential", "expired"] {
+        let dir = tempfile::tempdir().unwrap();
+        let (owner, route) = prepared(dir.path(), "a");
+        if case != "none" {
+            let mut grant = {
+                let store = owner.writer.owned().unwrap();
+                scoped_grant("machine", &route.graph, &store)
+            };
+            match case {
+                "other-credential" => {
+                    grant.credential_id = "someone-else".into();
+                    grant.principal = "urn:owner:someone-else".into();
+                }
+                _ => {
+                    grant.valid_from = 1;
+                    grant.valid_until = 2;
+                }
+            }
+            enroll(&owner, &grant).unwrap();
+        }
+        let body = input(&owner, "denied");
+        crate::transaction_auth::with_identity(
+            Some(identity("machine", "scoped_named_bearer")),
+            || {
+                assert!(
+                    owner.knot_durable(&pin(&owner), &body, ID).is_err(),
+                    "{case}"
+                );
+                assert!(
+                    owner.seal_knot_binding(&pin(&owner), &body, ID).is_err(),
+                    "{case}"
+                );
+            },
+        );
+        // MUTANT: dropping check_scoped_grant admits the attempt first, so a
+        // ledger row would exist here even though the effect is refused.
+        assert!(
+            !owner.read(|store| Ok(has_ledger(store))).unwrap(),
+            "{case}"
+        );
+        assert_eq!(values(&owner)["count"], 0, "{case}");
+    }
+}
+
+#[test]
+fn a_grant_minted_in_another_store_never_admits_the_owner() {
+    let dir = tempfile::tempdir().unwrap();
+    let (owner, route) = prepared(dir.path(), "a");
+    // Same graph IRI, different store lineage: its instance cannot enroll in
+    // the owner file, and no owner-local grant exists.
+    let other = Store::open_in_memory_test_ns().unwrap();
+    other.graph_create(&route.graph).unwrap();
+    let foreign = scoped_grant("machine", &route.graph, &other);
+    assert!(enroll(&owner, &foreign).is_err());
+    let body = input(&owner, "foreign");
+    crate::transaction_auth::with_identity(
+        Some(identity("machine", "scoped_named_bearer")),
+        || assert!(owner.knot_durable(&pin(&owner), &body, ID).is_err()),
+    );
+    assert!(!owner.read(|store| Ok(has_ledger(store))).unwrap());
+}
