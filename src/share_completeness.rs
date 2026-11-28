@@ -214,6 +214,12 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // has new tx ids and no registry; importing a receipt must never answer a
     // retry as already-applied.
     ("mini_quipu_merges", Disposition::Excluded),
+    // Writer fences bind one mini-Quipu identity and its exact local head;
+    // retirement receipts bind that fork to THIS home's registry and merge ids.
+    // A reconstructed copy has neither lineage, so it must not inherit a fence
+    // or claim a retirement against foreign registry/transaction identities.
+    ("mini_quipu_fence", Disposition::Excluded),
+    ("mini_quipu_retirements", Disposition::Excluded),
     // A replica's cursor into ONE source's history (the shared applier,
     // aegis-s24.2). A share of the replica is a different copy with no cursor
     // of its own: carrying it would let the copy splice a feed it never
