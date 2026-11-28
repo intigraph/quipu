@@ -549,7 +549,7 @@ fn admit_only(f: &Fx, name: &str, write_id: &str) -> UpdateTicket {
         panic!("CREATE routes to the tracker owner");
     };
     with_identity(who(name), || {
-        match owner.admit_update(update_binding(write_id, &text).unwrap()) {
+        match owner.admit_update(&update_binding(write_id, &text).unwrap()) {
             Ok(UpdateAdmission::Fresh(ticket)) => ticket,
             other => panic!("expected a fresh admission, got {other:?}"),
         }

@@ -93,7 +93,7 @@ pub(super) fn dispatch_with_write_id(
         Ok(Route::Owner(owner, members)) => (owner, members),
     };
     let binding = update_binding(write_id, update)?;
-    let ticket = match owner.admit_update(binding) {
+    let ticket = match owner.admit_update(&binding) {
         Ok(UpdateAdmission::Fresh(ticket)) => ticket,
         Ok(UpdateAdmission::Retry(status)) => return Ok(Dispatched::Retried(status)),
         // The same refusal for another principal or other bytes: no receipt.

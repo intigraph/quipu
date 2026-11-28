@@ -97,7 +97,7 @@ impl Store {
     /// Consume a write ID durably before the effect, or find its earlier
     /// attempt. The same ID bound to another principal or other bytes is
     /// refused with ONE message, revealing nothing about the original.
-    pub fn admit_update_attempt(&mut self, binding: Binding) -> Result<UpdateAdmission> {
+    pub fn admit_update_attempt(&mut self, binding: &Binding) -> Result<UpdateAdmission> {
         binding.validate()?;
         self.ensure_ownership_writable()?;
         if !self.conn.is_autocommit() {
@@ -156,7 +156,7 @@ impl Store {
                 super::super::release::release(&self.conn, "quipu_update_admit")?;
                 Ok(match fresh {
                     Some(ticket) => UpdateAdmission::Fresh(ticket),
-                    None => UpdateAdmission::Retry(self.update_attempt_status(&binding)?),
+                    None => UpdateAdmission::Retry(self.update_attempt_status(binding)?),
                 })
             }
             Err(error) => {

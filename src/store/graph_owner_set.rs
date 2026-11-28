@@ -315,7 +315,7 @@ impl GraphSetOwner {
     #[cfg(unix)]
     pub fn admit_update(
         &self,
-        binding: crate::store::knot_completion::Binding,
+        binding: &crate::store::knot_completion::Binding,
     ) -> Result<crate::store::knot_completion::update::UpdateAdmission> {
         self.ledger(|store| store.admit_update_attempt(binding))
     }
