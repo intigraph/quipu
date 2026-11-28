@@ -32,7 +32,7 @@ pub(super) fn render(
             "# HELP quipu_http_client_requests_total Requests completed, by normalised caller, task, route template, and bounded outcome.\n\
              # TYPE quipu_http_client_requests_total counter\n",
         );
-    for ((client, task, ep), (counts, _secs)) in clients.iter() {
+    for ((client, task, ep), (counts, _secs)) in clients {
         for (outcome, n) in LABELS.iter().zip(counts) {
             let _ = writeln!(
                 out,
