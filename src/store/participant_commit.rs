@@ -191,7 +191,7 @@ pub fn commit_derived(
     deps::check_bounds(validations)?;
     let owners = derive::participants(&batch.members, validations, sources)?;
     let order = canonical(&owners)?;
-    // Validate every member against its own owner before any fence.
+    // Check routing here; PREPARE judges SHACL under the writer guards.
     let mut pin_plan = deps::plan_pins(&batch.members, validations);
     let mut planned = Vec::with_capacity(order.len());
     for owner in &order {
