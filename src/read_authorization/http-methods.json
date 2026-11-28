@@ -146,6 +146,9 @@
   "/graph-canvas.js": [
     "get"
   ],
+  "/graph-sets/query": [
+    "post"
+  ],
   "/graph/create": [
     "post"
   ],

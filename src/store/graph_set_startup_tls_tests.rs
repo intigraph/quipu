@@ -267,7 +267,8 @@ fn batch(o: &Owners, set: usize, value: &str) -> GraphSetBatch {
 }
 
 fn admit(o: &Owners) -> Result<GraphSetRouter> {
-    o.config.admit_enrolled(catalog(o), &o.legacy, |_| Ok(()))
+    o.config
+        .admit_enrolled(catalog(o), &o.legacy, None, |_| Ok(()))
 }
 
 type Commit = (
@@ -355,7 +356,7 @@ fn prefix_and_fence_refusals_come_before_any_credential_is_read() {
     let mut missing = o.config.clone();
     missing.prefixes.pop_first();
     let err = missing
-        .admit_enrolled(catalog(&o), &o.legacy, |_| Ok(()))
+        .admit_enrolled(catalog(&o), &o.legacy, None, |_| Ok(()))
         .err()
         .expect("missing prefix admitted")
         .to_string();
@@ -365,7 +366,7 @@ fn prefix_and_fence_refusals_come_before_any_credential_is_read() {
         .prefixes
         .insert("https://example.test/unrouted".into(), "lineage/x".into());
     let err = extra
-        .admit_enrolled(catalog(&o), &o.legacy, |_| Ok(()))
+        .admit_enrolled(catalog(&o), &o.legacy, None, |_| Ok(()))
         .err()
         .expect("extra prefix admitted")
         .to_string();
@@ -375,4 +376,50 @@ fn prefix_and_fence_refusals_come_before_any_credential_is_read() {
     o.legacy.fence_routed_graph(SETS[0].1[0], 7, 4).unwrap();
     let err = admit(&o).err().expect("partial fence admitted").to_string();
     assert!(err.contains("legacy fence"), "{err}");
+}
+
+/// aegis-n0wc.5.2 review (#1375 finding 1): with reads the owners take the
+/// read admission's own allocation, so the service holds ONE split of
+/// `memory_mib`. A missing, foreign or unrequested allocation refuses, and
+/// before any credential is read.
+#[test]
+fn reads_share_the_read_admission_allocation_or_refuse_before_credentials() {
+    let o = owners([true, true]);
+    fs::remove_file(&o.config.credentials_file).unwrap();
+    let mut with_reads = o.config.clone();
+    with_reads.reads = Some(crate::config::PilotReadsConfig {
+        policy_file: o.root.join("policy.db"),
+        owner: "urn:issuer".into(),
+        registry_file: o.root.join("registry.json"),
+        timeout_secs: 5,
+        concurrency: 1,
+        runtime_mib: 8,
+        view_mib: 8,
+        query_mib: 8,
+        max_response_mib: 1,
+    });
+    let readers = 1 + 2;
+    let split = |mib, scratch| {
+        catalog(&o)
+            .physical()
+            .memory_allocation(mib, readers, scratch)
+            .unwrap()
+    };
+    let refusal = |config: &GraphSetsConfig, shared| {
+        config
+            .admit_enrolled(catalog(&o), &o.legacy, shared, |_| Ok(()))
+            .err()
+            .expect("allocation mismatch admitted")
+            .to_string()
+    };
+    let err = refusal(&with_reads, None);
+    assert!(err.contains("no read admission allocation"), "{err}");
+    let foreign = split(o.config.memory_mib * 2, 1);
+    let err = refusal(&with_reads, Some(foreign));
+    assert!(err.contains("differs"), "{err}");
+    let err = refusal(&o.config, Some(split(o.config.memory_mib, 0)));
+    assert!(err.contains("no reads are configured"), "{err}");
+    // The matching split passes the check and reaches the credentials.
+    let err = refusal(&with_reads, Some(split(o.config.memory_mib, 1)));
+    assert!(!err.contains("allocation"), "{err}");
 }

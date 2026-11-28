@@ -36,16 +36,17 @@ pub(crate) fn start(config: &quipu::QuipuConfig, legacy: &SharedStore) -> Option
         let revision = catalog.physical().revision();
         let owners = catalog.physical().routes().count();
         let catalog = std::sync::Arc::new(catalog);
-        // Sized before any owner opens: admit_enrolled reserves the same
-        // read scratch in the owners' allocation.
+        // Sized before any owner opens: the owners take this admission's
+        // allocation, so reads and owners share one split of memory_mib.
         let reads = sets.reads.as_ref().map(|reads| {
             let admission =
                 read_admission(&catalog, sets.memory_mib, reads).unwrap_or_else(|e| fail(e));
             (reads, admission)
         });
+        let shared = reads.as_ref().map(|(_, admission)| admission.allocation());
         let writer = legacy.writer.lock();
         let router = sets
-            .admit_enrolled(catalog.clone(), &writer, |store| {
+            .admit_enrolled(catalog.clone(), &writer, shared, |store| {
                 configure(store, config);
                 Ok(())
             })

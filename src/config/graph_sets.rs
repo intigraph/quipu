@@ -126,6 +126,7 @@ impl GraphSetsConfig {
         &self,
         catalog: std::sync::Arc<GraphSetCatalog>,
         legacy: &crate::Store,
+        reads: Option<crate::memory_budget::MemoryAllocation>,
         configure: impl Fn(&mut crate::Store) -> crate::Result<()>,
     ) -> crate::Result<crate::store::graph_owner::GraphSetRouter> {
         use crate::store::graph_owner::{GraphSetOwner, GraphSetRouter};
@@ -146,8 +147,10 @@ impl GraphSetsConfig {
         }
         GraphSetRouter::verify_fence(&catalog, legacy)?;
         let readers = catalog.physical().budget().readers_per_owner as u64;
-        // With reads, the owners and the read admission share ONE allocation
-        // that also reserves the read scratch (as the pilot does).
+        // With reads, the owners take the read admission's OWN allocation
+        // (which also reserves the read scratch, as the pilot does), so the
+        // service holds one split of `memory_mib`, never two. It must be the
+        // split this table describes; a mismatch or a missing one refuses.
         let scratch = self
             .reads
             .as_ref()
@@ -156,6 +159,25 @@ impl GraphSetsConfig {
             catalog
                 .physical()
                 .memory_allocation(self.memory_mib, readers + 2, scratch)?;
+        match (self.reads.is_some(), reads) {
+            (false, None) => {}
+            (true, Some(shared)) if shared == allocation => {}
+            (true, None) => {
+                return Err(refused(
+                    "reads are configured but no read admission allocation was shared",
+                ));
+            }
+            (false, Some(_)) => {
+                return Err(refused(
+                    "a read allocation was shared but no reads are configured",
+                ));
+            }
+            (true, Some(_)) => {
+                return Err(refused(
+                    "the read admission allocation differs from the owners' budget",
+                ));
+            }
+        }
         let witness_ca_der = self
             .witness_ca_file
             .as_deref()

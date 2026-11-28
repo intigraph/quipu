@@ -435,11 +435,7 @@ async fn main() {
     let attest_store = state.clone();
     let graph_set_reads = graph_sets_startup::start(&config, &state);
     let app = knot_durable::mount_pilot(api_routes(), &config, &state);
-    // Merged before protected_app so /graph-sets/query keeps the auth layer.
-    let app = match graph_set_reads {
-        Some(routes) => app.merge(routes.with_state(())),
-        None => app,
-    };
+    let app = mount_graph_set_reads(app, graph_set_reads);
     let app = protected_app(
         app,
         &workers,
@@ -636,6 +632,19 @@ fn api_routes() -> Router<SharedStore> {
 /// proxying, then the scoped-read guard, then authentication. A proxied worker
 /// request therefore cannot bypass the scoped guard, and the guard only ever
 /// sees authenticated identity evidence.
+/// Merge the optional `/graph-sets/query` routes (aegis-n0wc.5.2) into the
+/// API routes. Callers wrap the result in [`protected_app`], so the reads keep
+/// the ordinary auth layer; `None` mounts nothing.
+fn mount_graph_set_reads(
+    app: Router<SharedStore>,
+    reads: Option<axum::Router>,
+) -> Router<SharedStore> {
+    match reads {
+        Some(routes) => app.merge(routes.with_state(())),
+        None => app,
+    }
+}
+
 fn protected_app(
     routes: Router<SharedStore>,
     workers: &process_pool::ProcessPool,

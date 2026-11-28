@@ -58,8 +58,9 @@ struct Serving {
     files: Arc<Vec<PathBuf>>,
     config: ReadConfig,
     admission: ComposedReadAdmission,
-    /// Test barrier run after evaluation and BEFORE the policy/identity
-    /// recheck, so a test can change authority at exactly that point.
+    /// Test barrier run BEFORE every policy/identity recheck (after
+    /// evaluation, and before each 409/400 outcome), so a test can change
+    /// authority at exactly that point.
     #[cfg(test)]
     before_recheck: Option<Arc<dyn Fn() + Send + Sync>>,
 }
@@ -80,7 +81,25 @@ enum Outcome {
     Spans,
     BadCut(String),
     CutRefused(String),
-    Behind { requested: String, head: String },
+    Behind {
+        requested: String,
+        head: String,
+    },
+    /// The post-evaluation recheck refused: authority changed mid-request.
+    /// Answered like any denial, carrying no cut, head or selection.
+    Revoked,
+}
+
+/// Policy or identity refusals from a recheck become [`Outcome::Revoked`];
+/// anything else (an unreadable policy file, I/O) stays UNKNOWN.
+fn revoked(result: quipu::Result<()>) -> quipu::Result<Option<Outcome>> {
+    match result {
+        Ok(()) => Ok(None),
+        Err(quipu::Error::PolicyDenied(_) | quipu::Error::InvalidValue(_)) => {
+            Ok(Some(Outcome::Revoked))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// The `/graph-sets/query` router over the process-lifetime `router`. Startup
@@ -214,30 +233,55 @@ async fn query(
         separate_policy_files(&serving.files, config)?;
         let policy = config.policy.open_policy()?.snapshot()?;
         let authorized = policy.authorize(&who, ReadOperation::Query, Some(&selected), now)?;
-        // Authorized from here: selection and cut refusals may name graphs
-        // and heads.
+        let barrier = || {
+            #[cfg(test)]
+            if let Some(barrier) = &serving.before_recheck {
+                barrier();
+            }
+        };
+        // Every outcome that is not an answer is rechecked like an answer
+        // (#1375 security review): a caller revoked mid-request must not
+        // learn a head, a cut kind or a selection's placement.
+        let recheck_authority = || -> quipu::Result<()> {
+            barrier();
+            separate_policy_files(&serving.files, &serving.config)?;
+            let current = serving.config.policy.open_policy()?.snapshot()?;
+            let who = identity(&serving.config.registry, &header, &evidence)?;
+            current.authorize(
+                &who,
+                ReadOperation::Query,
+                Some(&selected),
+                quipu::time::epoch_secs(),
+            )?;
+            Ok(())
+        };
+        let refusal = |outcome: Outcome| -> quipu::Result<Outcome> {
+            Ok(revoked(recheck_authority())?.unwrap_or(outcome))
+        };
+        // Authorized from here, subject to that recheck: selection and cut
+        // refusals may name graphs and heads.
         let named: BTreeSet<Option<String>> = selected.iter().cloned().map(Some).collect();
         let owner = match serving.router.target_graphs(&named) {
             Ok(SetTarget::Routed(key)) => serving.router.routed_owner(key),
             _ => None,
         };
         let Some(owner) = owner else {
-            return Ok(Outcome::Spans);
+            return refusal(Outcome::Spans);
         };
         let requested = match input.cut.as_deref().map(CompositionCut::from_token) {
             None => None,
             Some(Ok(cut)) => Some(cut),
-            Some(Err(error)) => return Ok(Outcome::BadCut(cut_kind(&error))),
+            Some(Err(error)) => return refusal(Outcome::BadCut(cut_kind(&error))),
         };
         owner
             .read_members(&selected, deadline, |reads| {
                 let at = CompositionCut::capture(reads)?;
                 if let Some(cut) = &requested {
                     if let Err(error) = cut.admit(reads) {
-                        return Ok(Outcome::CutRefused(cut_kind(&error)));
+                        return refusal(Outcome::CutRefused(cut_kind(&error)));
                     }
                     if !cut.is_at_head(reads) {
-                        return Ok(Outcome::Behind {
+                        return refusal(Outcome::Behind {
                             requested: cut.to_token(),
                             head: at.to_token(),
                         });
@@ -245,16 +289,18 @@ async fn query(
                 }
                 let view = authorized.open_composed_cut(reads, permit, now, deadline)?;
                 let output = view.query(&input.query, false, now)?;
-                #[cfg(test)]
-                if let Some(barrier) = &serving.before_recheck {
-                    barrier();
-                }
-                separate_policy_files(&serving.files, &serving.config)?;
-                let current = serving.config.policy.open_policy()?.snapshot()?;
-                let who = identity(&serving.config.registry, &header, &evidence)?;
-                view.recheck(&current, &who, reads, quipu::time::epoch_secs())?;
-                Ok(Outcome::Answer(output, at.to_token()))
+                barrier();
+                let checked = (|| -> quipu::Result<()> {
+                    separate_policy_files(&serving.files, &serving.config)?;
+                    let current = serving.config.policy.open_policy()?.snapshot()?;
+                    let who = identity(&serving.config.registry, &header, &evidence)?;
+                    view.recheck(&current, &who, reads, quipu::time::epoch_secs())
+                })();
+                // A revoked caller is a denial (403), not UNKNOWN (503).
+                Ok(revoked(checked)?.unwrap_or(Outcome::Answer(output, at.to_token())))
             })
+            // Fences, readers and I/O stay UNKNOWN. Policy decisions made in
+            // the closure are already Outcomes, so none is collapsed here.
             .map_err(|_| quipu::Error::CannotVerify("composed read unavailable".into()))
     })
     .await;
@@ -296,7 +342,8 @@ async fn query(
                 "kind":"behind-head", "requested": requested, "head": head,
             }),
         ),
-        Ok(Err(quipu::Error::PolicyDenied(_) | quipu::Error::InvalidValue(_))) => deny(),
+        Ok(Ok(Outcome::Revoked))
+        | Ok(Err(quipu::Error::PolicyDenied(_) | quipu::Error::InvalidValue(_))) => deny(),
         _ => unavailable(),
     }
 }

@@ -381,6 +381,12 @@ fn routes_in_server_source() -> Vec<String> {
             "server/owner_pilot_read.rs",
             include_str!("../server/owner_pilot_read.rs"),
         ),
+        // aegis-n0wc.5.2: graph-set reads, declared by graph_sets_startup's
+        // own #[path] (not server.rs), so the fragment check cannot find it.
+        (
+            "server/graph_set_read.rs",
+            include_str!("../server/graph_set_read.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
         (
             "server/writer_instance.rs",

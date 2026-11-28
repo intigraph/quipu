@@ -81,6 +81,7 @@ const CENSUS: &[&str] = &[
     "/fragments",
     "/graph",
     "/graph-canvas.js",
+    "/graph-sets/query",
     "/graph/create",
     "/graph/freeze",
     "/graph/label",

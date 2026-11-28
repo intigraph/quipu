@@ -590,3 +590,211 @@ async fn s5_authority_changed_between_open_and_recheck_refuses_the_read() {
     assert_ne!(status, StatusCode::OK, "{body}");
     assert!(body.get("boolean").is_none(), "no answer escaped: {body}");
 }
+
+impl Fx {
+    /// The app with a barrier that revokes the fixture grant at the first
+    /// recheck, counting barrier runs.
+    fn revoking_app(&self, ran: Arc<std::sync::atomic::AtomicUsize>) -> Router {
+        let path = self.config.policy.policy_path.clone();
+        let grant = std::sync::Mutex::new(Some(self.grant.clone()));
+        routes_with_recheck_barrier(
+            self.router,
+            self.files.clone(),
+            self.config.clone(),
+            self.admission.clone(),
+            Arc::new(move || {
+                ran.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if let Some(mut grant) = grant.lock().unwrap().take() {
+                    grant.revision = 2;
+                    grant.revoked = true;
+                    OwnerReadPolicy::open(&path, "urn:owner")
+                        .unwrap()
+                        .apply(&grant, "revoke before the answer")
+                        .unwrap();
+                }
+            }),
+        )
+        .unwrap()
+    }
+}
+
+/// S7 (#1375 security review): every non-answer outcome (Spans, BadCut,
+/// CutRefused, Behind) rechecks authority before it is sent. Revoked between
+/// admit and answer, each is the one 403 body: no cut, head, kind or graphs.
+/// The control is each case's own unrevoked answer.
+#[tokio::test]
+async fn s7_a_caller_revoked_before_a_refusal_learns_no_cut_or_head() {
+    let denied = json!({"error":"composed read denied"});
+    type Case = fn(&Fx) -> (Value, StatusCode, &'static str);
+    let cases: [(&str, Case); 4] = [
+        ("spans", |_| {
+            (
+                json!({"graphs":[P, Q], "query":"ASK {}"}),
+                StatusCode::CONFLICT,
+                "graph-set read spans files",
+            )
+        }),
+        ("bad cut", |_| {
+            (
+                with_cut(ask_title(), "qcut1.not-base64!"),
+                StatusCode::BAD_REQUEST,
+                "composition cut refused",
+            )
+        }),
+        ("cut refused", |f| {
+            let token = f.write(&edit(1, 2, "urn:w2"))["owner"]["cut"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            (
+                with_cut(json!({"graphs":[P], "query":"ASK {}"}), &token),
+                StatusCode::CONFLICT,
+                "composition cut refused",
+            )
+        }),
+        ("behind", |f| {
+            let first = f.write(&edit(1, 2, "urn:w2"))["owner"]["cut"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            f.write(&edit(2, 3, "urn:w3"));
+            (
+                with_cut(ask_title(), &first),
+                StatusCode::CONFLICT,
+                "historical cut needs vector mode (not implemented)",
+            )
+        }),
+    ];
+    for (name, case) in cases {
+        let f = fx();
+        f.write(CREATE);
+        let (input, refused, error) = case(&f);
+        let (status, headers, body) = read(&f.app(), input.clone()).await;
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (refused, Some(error)),
+            "{name} control: {body}"
+        );
+        assert!(headers.get(CUT_HEADER).is_none(), "{name}");
+        let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (status, headers, body) = read(&f.revoking_app(ran.clone()), input).await;
+        assert_eq!(
+            ran.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "{name}: the recheck ran before the refusal"
+        );
+        assert_eq!(status, StatusCode::FORBIDDEN, "{name}: {body}");
+        assert_eq!(body, denied, "{name}: no cut, head, kind or graphs");
+        assert!(headers.get(CUT_HEADER).is_none(), "{name}");
+    }
+}
+
+/// S5 tightened: a grant revoked at the answer's recheck is the 403 denial,
+/// not a 503 UNKNOWN (#1375 review nit: the closure no longer collapses a
+/// policy decision into "unavailable").
+#[tokio::test]
+async fn s5b_a_revoked_answer_is_the_403_denial() {
+    let f = fx();
+    f.write(CREATE);
+    let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (status, headers, body) = read(&f.revoking_app(ran.clone()), ask_title()).await;
+    assert_eq!(ran.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        (status, body),
+        (
+            StatusCode::FORBIDDEN,
+            json!({"error":"composed read denied"})
+        )
+    );
+    assert!(headers.get(CUT_HEADER).is_none());
+}
+
+/// T3b (#1375 review finding 3): no Authorization header at all, a query
+/// over 64 KiB, and a body over the 128 KiB limit all refuse with no answer.
+#[tokio::test]
+async fn t3b_missing_authorization_and_oversize_requests_refuse() {
+    let f = fx();
+    let app = f.app();
+    f.write(CREATE);
+    let denied = json!({"error":"composed read denied"});
+    let mut bare = request("/graph-sets/query", &ask_title());
+    bare.headers_mut().remove(header::AUTHORIZATION);
+    let (status, _, body) = call(&app, Some("named_bearer"), bare).await;
+    assert_eq!(
+        (status, body),
+        (StatusCode::FORBIDDEN, denied.clone()),
+        "no header"
+    );
+    let long = json!({"graphs":[P], "query": format!("ASK {{}} #{}", "x".repeat(65_536))});
+    assert!(long.to_string().len() < 131_072, "under the body limit");
+    let (status, _, body) = read(&app, long).await;
+    assert_eq!(
+        (status, body),
+        (StatusCode::FORBIDDEN, denied),
+        "query over 64 KiB"
+    );
+    let huge = json!({"graphs":[P], "query": "x".repeat(131_072)});
+    let (status, headers, body) = read(&app, huge).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{body}");
+    assert!(headers.get(CUT_HEADER).is_none() && body.get("boolean").is_none());
+}
+
+/// W1 (#1375 review finding 2): the production wiring. Merged by
+/// `mount_graph_set_reads` and wrapped in the real `protected_app`, the route
+/// needs a bearer and answers a named one; `None` mounts nothing.
+#[tokio::test]
+async fn w1_the_mounted_reads_sit_behind_the_real_auth_layer() {
+    let f = fx();
+    f.write(CREATE);
+    let protected = |reads: Option<Router>| {
+        let registry =
+            quipu::crew_credentials::CredentialRegistry::parse(registry_body().as_bytes(), "quipu")
+                .unwrap();
+        let policy =
+            quipu::http_auth::BearerPolicy::new(None, None, None, quipu::time::epoch_secs())
+                .unwrap()
+                .with_named(registry);
+        crate::protected_app(
+            crate::mount_graph_set_reads(axum::Router::new(), reads),
+            &crate::process_pool::in_process(),
+            None,
+            f.legacy.clone(),
+            crate::auth_guard::Config {
+                auth_policy: policy,
+                session_keys: Default::default(),
+                attest_store: f.legacy.clone(),
+                replica_config: None,
+                read_only: false,
+                is_relay: false,
+                scoped_enabled: false,
+            },
+        )
+        .with_state(f.legacy.clone())
+    };
+    let send = |app: Router, req: Request<Body>| async move {
+        let response = app.oneshot(req).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null),
+        )
+    };
+    let app = protected(Some(f.app()));
+    let mut anonymous = request("/graph-sets/query", &ask_title());
+    anonymous.headers_mut().remove(header::AUTHORIZATION);
+    let (status, body) = send(app.clone(), anonymous).await;
+    assert_ne!(status, StatusCode::OK, "{body}");
+    assert!(body.get("boolean").is_none(), "no anonymous answer: {body}");
+    let (status, body) = send(app, request("/graph-sets/query", &ask_title())).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the named bearer reaches the read: {body}"
+    );
+    assert_eq!(body["boolean"], true);
+    let (status, _) = send(protected(None), request("/graph-sets/query", &ask_title())).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "absent reads mount nothing");
+}
