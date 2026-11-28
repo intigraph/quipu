@@ -49,6 +49,12 @@ pub struct GraphSetsConfig {
     pub credentials_file: PathBuf,
     /// Exactly one existing enrolled lineage prefix per routed owner graph.
     pub prefixes: BTreeMap<String, String>,
+    /// Optional `[quipu.graph_sets.reads]` (aegis-n0wc.5.2): authenticated
+    /// reads of one routed owner's members at `POST /graph-sets/query`, the
+    /// same keys and authority as `[quipu.ingest_pilot.reads]`. Absent mounts
+    /// nothing; `/update` routing is unchanged either way.
+    #[serde(default)]
+    pub reads: Option<super::PilotReadsConfig>,
 }
 
 #[cfg(all(unix, feature = "ownership-witness-s3"))]
@@ -120,6 +126,7 @@ impl GraphSetsConfig {
         &self,
         catalog: std::sync::Arc<GraphSetCatalog>,
         legacy: &crate::Store,
+        reads: Option<crate::memory_budget::MemoryAllocation>,
         configure: impl Fn(&mut crate::Store) -> crate::Result<()>,
     ) -> crate::Result<crate::store::graph_owner::GraphSetRouter> {
         use crate::store::graph_owner::{GraphSetOwner, GraphSetRouter};
@@ -140,9 +147,37 @@ impl GraphSetsConfig {
         }
         GraphSetRouter::verify_fence(&catalog, legacy)?;
         let readers = catalog.physical().budget().readers_per_owner as u64;
-        let allocation = catalog
-            .physical()
-            .memory_allocation(self.memory_mib, readers + 2, 0)?;
+        // With reads, the owners take the read admission's OWN allocation
+        // (which also reserves the read scratch, as the pilot does), so the
+        // service holds one split of `memory_mib`, never two. It must be the
+        // split this table describes; a mismatch or a missing one refuses.
+        let scratch = self
+            .reads
+            .as_ref()
+            .map_or(0, |reads| reads.concurrency as u64);
+        let allocation =
+            catalog
+                .physical()
+                .memory_allocation(self.memory_mib, readers + 2, scratch)?;
+        match (self.reads.is_some(), reads) {
+            (false, None) => {}
+            (true, Some(shared)) if shared == allocation => {}
+            (true, None) => {
+                return Err(refused(
+                    "reads are configured but no read admission allocation was shared",
+                ));
+            }
+            (false, Some(_)) => {
+                return Err(refused(
+                    "a read allocation was shared but no reads are configured",
+                ));
+            }
+            (true, Some(_)) => {
+                return Err(refused(
+                    "the read admission allocation differs from the owners' budget",
+                ));
+            }
+        }
         let witness_ca_der = self
             .witness_ca_file
             .as_deref()

@@ -9,7 +9,7 @@ use quipu::store::graph_owner::{CapturedRead, LegacyWriterFence, Owner};
 use std::{sync::Arc, time::Instant};
 
 #[path = "owner_pilot_read.rs"]
-mod read;
+pub(crate) mod read;
 pub(crate) use read::ReadConfig;
 
 /// Disabled startup never touches the borrowed legacy writer.

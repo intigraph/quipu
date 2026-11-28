@@ -381,6 +381,12 @@ fn routes_in_server_source() -> Vec<String> {
             "server/owner_pilot_read.rs",
             include_str!("../server/owner_pilot_read.rs"),
         ),
+        // aegis-n0wc.5.2: graph-set reads, declared by graph_sets_startup's
+        // own #[path] (not server.rs), so the fragment check cannot find it.
+        (
+            "server/graph_set_read.rs",
+            include_str!("../server/graph_set_read.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
         (
             "server/writer_instance.rs",
@@ -760,5 +766,59 @@ fn session_keys_require_keys_with_only_exact_onboarding_reads() {
             .validate()
             .is_err()
         );
+    }
+}
+
+/// aegis-n0wc.5.2 (#1375): the hole was a missing table entry, so pin the
+/// entry. Each composed-read route is a classified READ endpoint that still
+/// needs verified identity: with no bearer or a wrong one it is refused at
+/// the auth layer, and a named bearer is allowed (the handlers then refuse
+/// any identity that is not a named bearer).
+#[test]
+fn composed_read_routes_are_identity_read_endpoints_refused_without_a_named_bearer() {
+    use sha2::{Digest as _, Sha256};
+    let registry = crate::crew_credentials::CredentialRegistry::parse(
+        serde_json::json!({"version": 1, "credentials": [{
+            "credential_id": "r-1", "principal": "urn:crew:reader", "audience": "quipu",
+            "token_sha256": format!("{:x}", Sha256::digest(b"reader-secret"))
+        }]})
+        .to_string()
+        .as_bytes(),
+        "quipu",
+    )
+    .unwrap();
+    let policy = BearerPolicy::new(Some("shared".into()), None, None, 1)
+        .unwrap()
+        .with_named(registry);
+    for path in ["/graph-sets/query", "/owner/query"] {
+        assert!(READ_ENDPOINTS.contains(&path), "{path} is a read endpoint");
+        assert!(!WRITE_ENDPOINTS.contains(&path), "{path} is not a write");
+        assert!(
+            requires_read_identity(path),
+            "{path} needs verified identity"
+        );
+        assert_ne!(
+            crate::read_authorization::routes::classify(path, "POST"),
+            crate::read_authorization::routes::RouteClass::Unclassified,
+            "{path} is in the scoped census"
+        );
+        for header in [None, Some("Bearer wrong")] {
+            assert_eq!(
+                render_auth::authorize_http_bearers(path, "POST", false, &policy, header, 2)
+                    .decision,
+                AccessDecision::Unauthorized,
+                "{path} refuses {header:?}"
+            );
+        }
+        let named = render_auth::authorize_http_bearers(
+            path,
+            "POST",
+            false,
+            &policy,
+            Some("Bearer reader-secret"),
+            2,
+        );
+        assert_eq!(named.decision, AccessDecision::Allow, "{path}");
+        assert_eq!(named.generation, Some(AuthGeneration::Named), "{path}");
     }
 }

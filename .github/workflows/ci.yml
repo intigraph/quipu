@@ -157,6 +157,19 @@ jobs:
           cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --bin quipu-server knot_durable::owner -- --test-threads=2 --color never | tee "$RUNNER_TEMP/enrolled-owner-tests.txt"
           grep -Fx 'test knot_durable::owner::dataset::tests::query_acceptance::enrolled_query_bags_paths_and_rdf_terms_match_single_file_baseline ... ok' "$RUNNER_TEMP/enrolled-owner-tests.txt"
           grep -Fx 'test knot_durable::owner::dataset::tests::read_http::enrolled_http_query_rechecks_credentials_grants_and_retains_response_budget ... ok' "$RUNNER_TEMP/enrolled-owner-tests.txt"
+      - name: Routed graph-set read cuts and authorization controls
+        if: runner.os == 'Linux'
+        env:
+          CARGO_BUILD_JOBS: 2
+          CARGO_PROFILE_TEST_DEBUG: 0
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --locked --no-default-features --features shacl,onnx,server,ownership-witness-s3 --bin quipu-server graph_sets_startup::read::tests -- --test-threads=2 --color never | tee "$RUNNER_TEMP/graph-set-read-tests.txt"
+          grep -Fx 'test graph_sets_startup::read::tests::t4_a_routed_writer_reads_its_own_write_at_its_receipt_cut ... ok' "$RUNNER_TEMP/graph-set-read-tests.txt"
+          grep -Fx 'test graph_sets_startup::read::tests::t5_a_cut_behind_head_refuses_409_naming_requested_and_head ... ok' "$RUNNER_TEMP/graph-set-read-tests.txt"
+          grep -Fx 'test graph_sets_startup::read::tests::s5_authority_changed_between_open_and_recheck_refuses_the_read ... ok' "$RUNNER_TEMP/graph-set-read-tests.txt"
+          grep -Fx 'test graph_sets_startup::read::tests::w1_the_mounted_reads_sit_behind_the_real_auth_layer ... ok' "$RUNNER_TEMP/graph-set-read-tests.txt"
       # aegis-4qv.1: the `quipu pilot` operator verbs, driven through the binary.
       - name: Pilot operator CLI refusals, lab sequence and import-slice --into
         if: runner.os == 'Linux'

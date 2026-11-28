@@ -176,6 +176,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // aegis-4qv.8: pilot composed reads over explicit graphs; per-request
     // registry identity and owner grants. Mounted only with configured reads.
     "/owner/query",
+    // aegis-n0wc.5.2: graph-set composed reads, the same authority sequence
+    // as /owner/query. Mounted only with `[quipu.graph_sets.reads]`.
+    "/graph-sets/query",
     "/rule_query",
     "/watermark",
     // aegis-tnh: follower readiness from its own records; never asks the primary.
@@ -287,7 +290,7 @@ pub fn is_write_endpoint(path: &str) -> bool {
 pub fn requires_read_identity(path: &str) -> bool {
     matches!(
         path,
-        "/identity" | "/knot/status" | "/owner/knot/status" | "/owner/query"
+        "/identity" | "/knot/status" | "/owner/knot/status" | "/owner/query" | "/graph-sets/query"
     )
 }
 
