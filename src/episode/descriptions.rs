@@ -109,10 +109,11 @@ pub(super) fn keep_existing_node_labels(
 
     let mut existing: HashMap<i64, Vec<Value>> = HashMap::new();
     for entity in labelled {
+        // aegis-7aee: read only the label history, not the entity's every fact.
         let current: Vec<Value> = store
-            .entity_history_in_graph(entity, graph)?
+            .attribute_history_in_graph(entity, label, graph)?
             .into_iter()
-            .filter(|f| f.attribute == label && f.op == Op::Assert && f.valid_to.is_none())
+            .filter(|f| f.op == Op::Assert && f.valid_to.is_none())
             .map(|f| f.value)
             .collect();
         if !current.is_empty() {
@@ -158,23 +159,28 @@ pub(super) fn reconcile_node_descriptions(
         if !reconciled.insert((entity, new_text)) {
             continue;
         }
-        let history = store.entity_history_in_graph(entity, graph)?;
-        let superseded: Vec<_> = history
+        // aegis-7aee: read the comment history only; the attribution history
+        // is read below, and only when a description actually changes.
+        let comments = store.attribute_history_in_graph(entity, comment, graph)?;
+        let superseded: Vec<_> = comments
             .iter()
             .filter(|fact| {
-                fact.attribute == comment
-                    && fact.op == Op::Assert
+                fact.op == Op::Assert
                     && fact.valid_to.is_none()
                     && matches!(&fact.value, Value::Str(old) if old != new_text)
             })
             .collect();
 
+        let attributions = if superseded.is_empty() {
+            Vec::new()
+        } else {
+            store.attribute_history_in_graph(entity, generated_by, graph)?
+        };
         for old in superseded {
-            let episode_entity = history
+            let episode_entity = attributions
                 .iter()
                 .find_map(|fact| {
-                    if fact.tx == old.tx && fact.attribute == generated_by && fact.op == Op::Assert
-                    {
+                    if fact.tx == old.tx && fact.op == Op::Assert {
                         match fact.value {
                             Value::Ref(id) => Some(id),
                             _ => None,

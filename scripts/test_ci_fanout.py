@@ -73,7 +73,8 @@ class WorkflowContract(unittest.TestCase):
         self.assertIn('always()', ci['nightly-gate']['if'])
         self.assertEqual(ci['nightly-publish']['needs'], 'nightly-gate')
         self.assertEqual(ci['nightly-publish']['if'],
-                         "github.event_name == 'schedule' && github.ref == 'refs/heads/main'")
+                         "${{ !cancelled() && needs.nightly-gate.result == 'success' && "
+                         "github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}")
         self.assertIn('always()', ci['nightly-failure']['if'])
         self.assertEqual(set(ci['nightly-failure']['needs']), {'nightly-gate', 'nightly-publish'})
         self.assertNotIn('pull_request', workflow('merge-load.yml').get(True, {}))
