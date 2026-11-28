@@ -100,6 +100,8 @@ impl TlsBridge {
                     }
                     Err(_) => break,
                 };
+                // accept() inherits O_NONBLOCK on macOS/BSD; timeout IO must block.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
@@ -114,7 +116,8 @@ impl TlsBridge {
                 let mut request = Vec::new();
                 let mut byte = [0];
                 while request.len() < 65536 && !request.ends_with(b"\r\n\r\n") {
-                    if tls.read_exact(&mut byte).is_err() {
+                    if let Err(error) = tls.read_exact(&mut byte) {
+                        eprintln!("witness TLS bridge header read failed: {error:?}");
                         break;
                     }
                     request.push(byte[0]);
@@ -135,7 +138,8 @@ impl TlsBridge {
                     continue;
                 }
                 let mut body = vec![0; length];
-                if tls.read_exact(&mut body).is_err() {
+                if let Err(error) = tls.read_exact(&mut body) {
+                    eprintln!("witness TLS bridge body read failed: {error:?}");
                     continue;
                 }
                 let mut upstream = TcpStream::connect(&upstream).unwrap();
@@ -145,9 +149,17 @@ impl TlsBridge {
                 upstream.write_all(&request).unwrap();
                 upstream.write_all(&body).unwrap();
                 let mut reply = Vec::new();
-                if upstream.take(1 << 20).read_to_end(&mut reply).is_ok() {
-                    let _ = tls.write_all(&reply);
-                    let _ = tls.flush();
+                match upstream.take(1 << 20).read_to_end(&mut reply) {
+                    Ok(_) => {
+                        eprintln!("witness TLS bridge upstream response bytes={}", reply.len());
+                        if let Err(error) = tls.write_all(&reply).and_then(|()| tls.flush()) {
+                            eprintln!("witness TLS bridge response write failed: {error:?}");
+                        }
+                    }
+                    Err(error) => eprintln!(
+                        "witness TLS bridge upstream read failed: {error:?}, received_bytes={}",
+                        reply.len()
+                    ),
                 }
             }
         });

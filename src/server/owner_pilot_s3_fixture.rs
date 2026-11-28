@@ -52,6 +52,8 @@ impl Emulator {
             while !done.load(std::sync::atomic::Ordering::SeqCst) {
                 match listener.accept() {
                     Ok((stream, _)) => {
+                        // accept() inherits O_NONBLOCK on macOS/BSD; timeout IO must block.
+                        stream.set_nonblocking(false).unwrap();
                         stream
                             .set_read_timeout(Some(Duration::from_secs(2)))
                             .unwrap();
@@ -90,6 +92,10 @@ fn take_fault(state: &Mutex<EmuState>, method: &str) -> Option<EmuFault> {
 }
 
 fn respond(stream: &mut TcpStream, status: &str, headers: &[(&str, String)], body: &[u8]) {
+    eprintln!(
+        "witness emulator response: {status}, body_bytes={}",
+        body.len()
+    );
     let mut out = format!(
         "HTTP/1.1 {status}\r\nconnection: close\r\ncontent-length: {}\r\n",
         body.len()
@@ -137,6 +143,9 @@ fn serve(mut stream: TcpStream, state: &Mutex<EmuState>) {
         .is_some_and(|a| a.starts_with("AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/"))
         && headers.get("x-amz-content-sha256") == Some(&hex::encode(Sha256::digest(&body)))
         && headers.contains_key("x-amz-date");
+    eprintln!(
+        "witness emulator request: method={method}, target={target}, signed_shape_and_payload={signed}"
+    );
     if !signed {
         return respond(&mut stream, "403 Forbidden", &[], b"");
     }
