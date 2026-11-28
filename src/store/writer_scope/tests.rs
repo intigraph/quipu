@@ -424,3 +424,31 @@ fn a_grant_expiring_during_work_cannot_commit_the_staged_transaction() {
     assert!(entered, "test must reach the staged write before expiry");
     assert_eq!(store.latest_tx_id().unwrap(), before);
 }
+
+// aegis-4qv.9.1: run_scoped admits a scoped POST write only when for_route
+// names its operation. The owner knot and its seal are Knot writes; every
+// other unmapped write route stays denied, and status is a read.
+#[test]
+fn owner_knot_routes_are_knot_writes_and_other_writes_stay_unmapped() {
+    use crate::writer_scope::WriteOperation;
+    for route in ["/knot", "/owner/knot", "/owner/knot/seal"] {
+        assert_eq!(WriteOperation::for_route(route), Some(Knot), "{route}");
+    }
+    for route in [
+        "/import",
+        "/import/promote",
+        "/knot/stage",
+        "/owner/knot/status",
+        "/owner/query",
+    ] {
+        assert_eq!(WriteOperation::for_route(route), None, "{route}");
+    }
+    assert!(!crate::http_auth::is_write_request(
+        "/owner/knot/status",
+        "POST"
+    ));
+    assert!(crate::http_auth::is_write_request(
+        "/owner/knot/seal",
+        "POST"
+    ));
+}
