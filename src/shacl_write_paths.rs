@@ -1,7 +1,7 @@
 //! Capability obligations follow the same compiled shape identities and
 //! deactivation semantics as batch validation, including shared references.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use rudof_rdf::rdf_core::term::literal::Literal as _;
 use rudof_rdf::rdf_core::{Rdf, SHACLPath};
@@ -13,6 +13,9 @@ use super::Validator;
 use crate::{Error, Result};
 
 pub(crate) struct CardinalityPlan {
+    /// Rendered result path to its forward/inverse ownership keys, derived
+    /// from the compiled path rather than reparsing an IRI-containing string.
+    pub(crate) value_set_paths: BTreeMap<String, BTreeSet<String>>,
     pub(crate) has_value_set_constraint: bool,
     pub(crate) has_value_constraint: bool,
     pub(crate) has_class_constraint: bool,
@@ -23,6 +26,18 @@ pub(crate) struct CardinalityPlan {
     pub(crate) object_target_predicates: BTreeSet<String>,
     pub(crate) subject_target_predicates: BTreeSet<String>,
     pub(crate) node_reference_predicates: BTreeSet<String>,
+    /// Every forward predicate a reachable shape reads from a focus: property
+    /// paths, `sh:targetSubjectsOf`, and the other side of `sh:equals`,
+    /// `sh:disjoint`, `sh:lessThan` and `sh:lessThanOrEquals` (aegis-7aee). Meaningful only
+    /// when [`Self::subject_context_bounded`] holds.
+    pub(crate) subject_predicates: BTreeSet<String>,
+    /// Whether a focus's stored context may be narrowed to
+    /// [`Self::subject_predicates`] plus `rdf:type`. False when some reachable
+    /// shape's reach cannot be bounded that way: `sh:closed`, SPARQL
+    /// constraints, `sh:subsetOf`, a complex path, an unknown target kind, or a
+    /// shape reached again through `sh:node` (recursion or reuse). In that case
+    /// the post-state check loads a focus's full current facts, as before.
+    pub(crate) subject_context_bounded: bool,
 }
 
 impl Validator {
@@ -37,6 +52,7 @@ impl Validator {
             .collect();
         let mut seen = HashSet::new();
         let mut plan = CardinalityPlan {
+            value_set_paths: BTreeMap::new(),
             has_value_set_constraint: false,
             has_value_constraint: false,
             has_class_constraint: false,
@@ -45,6 +61,8 @@ impl Validator {
             object_target_predicates: BTreeSet::new(),
             subject_target_predicates: BTreeSet::new(),
             node_reference_predicates: BTreeSet::new(),
+            subject_predicates: BTreeSet::new(),
+            subject_context_bounded: true,
         };
         while let Some(index) = pending.pop() {
             if !seen.insert(index) {
@@ -76,9 +94,15 @@ impl Validator {
                     Target::SubjectsOf(predicate) => {
                         plan.subject_target_predicates
                             .insert(predicate.as_str().to_owned());
+                        plan.subject_predicates
+                            .insert(predicate.as_str().to_owned());
                     }
-                    _ => {}
+                    Target::Node(_) | Target::Class(_) | Target::ImplicitClass(_) => {}
+                    _ => plan.subject_context_bounded = false,
                 }
+            }
+            if let Some(path) = shape.path() {
+                plan_subject_path(path, &mut plan);
             }
             pending.extend(shape.property_shapes().iter().copied());
             for component in shape.components() {
@@ -99,6 +123,33 @@ impl Validator {
                         | IRComponent::Node(_)
                 ) {
                     plan.has_value_constraint = true;
+                }
+                match component {
+                    IRComponent::Closed(_)
+                    | IRComponent::BasicSparql(_)
+                    | IRComponent::SubsetOf(_) => {
+                        plan.subject_context_bounded = false;
+                    }
+                    IRComponent::Equals(other) => {
+                        plan.subject_predicates
+                            .insert(other.iri().as_str().to_owned());
+                    }
+                    IRComponent::Disjoint(other) => {
+                        plan.subject_predicates
+                            .insert(other.iri().as_str().to_owned());
+                    }
+                    IRComponent::LessThan(other) => {
+                        plan.subject_predicates
+                            .insert(other.iri().as_str().to_owned());
+                    }
+                    IRComponent::LessThanOrEquals(other) => {
+                        plan.subject_predicates
+                            .insert(other.iri().as_str().to_owned());
+                    }
+                    IRComponent::Node(value) if seen.contains(value.shape()) => {
+                        plan.subject_context_bounded = false;
+                    }
+                    _ => {}
                 }
                 if let IRComponent::Class(class) = component {
                     plan.has_class_constraint = true;
@@ -121,7 +172,8 @@ impl Validator {
                     | IRComponent::LessThanOrEquals(_) => {
                         plan.has_value_set_constraint = true;
                         if let Some(path) = shape.path() {
-                            plan_value_set_path(path, &mut plan.incoming_predicates)?;
+                            let keys = plan_value_set_path(path, &mut plan.incoming_predicates)?;
+                            plan.value_set_paths.insert(path.to_string(), keys);
                         }
                     }
                     IRComponent::And(value) => pending.extend(value.shapes().iter().copied()),
@@ -147,30 +199,59 @@ impl Validator {
     }
 }
 
-/// Record what a value-set constraint on `path` needs from the post-state
-/// context. A predicate path needs only the focus's own facts; an inverse
-/// predicate also needs the facts pointing at it; an alternative of those is
-/// the union of its members. Any other path cannot be checked incrementally.
-fn plan_value_set_path(path: &SHACLPath, incoming: &mut BTreeSet<String>) -> Result<()> {
+/// Record which forward predicates a shape's path reads from its focus
+/// (aegis-7aee). An inverse predicate reads incoming edges, which the
+/// incoming-target lane loads, not the focus's own facts. Anything else cannot
+/// be bounded, so the plan falls back to the full focus context.
+fn plan_subject_path(path: &SHACLPath, plan: &mut CardinalityPlan) {
     match path {
-        SHACLPath::Predicate { .. } => Ok(()),
-        SHACLPath::Inverse { path: inner } => match inner.as_ref() {
-            SHACLPath::Predicate { pred } => {
-                incoming.insert(pred.as_str().to_owned());
-                Ok(())
-            }
-            _ => Err(unsupported_path(path)),
-        },
+        SHACLPath::Predicate { pred } => {
+            plan.subject_predicates.insert(pred.as_str().to_owned());
+        }
+        SHACLPath::Inverse { path: inner }
+            if matches!(inner.as_ref(), SHACLPath::Predicate { .. }) => {}
         SHACLPath::Alternative { paths } => {
             for member in paths {
                 match member {
                     SHACLPath::Predicate { .. } | SHACLPath::Inverse { .. } => {
-                        plan_value_set_path(member, incoming)?;
+                        plan_subject_path(member, plan);
+                    }
+                    _ => plan.subject_context_bounded = false,
+                }
+            }
+        }
+        _ => plan.subject_context_bounded = false,
+    }
+}
+
+/// Record what a value-set constraint on `path` needs from the post-state
+/// context. A predicate path needs only the focus's own facts; an inverse
+/// predicate also needs the facts pointing at it; an alternative of those is
+/// the union of its members. Any other path cannot be checked incrementally.
+fn plan_value_set_path(
+    path: &SHACLPath,
+    incoming: &mut BTreeSet<String>,
+) -> Result<BTreeSet<String>> {
+    match path {
+        SHACLPath::Predicate { pred } => Ok(BTreeSet::from([pred.as_str().to_owned()])),
+        SHACLPath::Inverse { path: inner } => match inner.as_ref() {
+            SHACLPath::Predicate { pred } => {
+                incoming.insert(pred.as_str().to_owned());
+                Ok(BTreeSet::from([format!("^{}", pred.as_str())]))
+            }
+            _ => Err(unsupported_path(path)),
+        },
+        SHACLPath::Alternative { paths } => {
+            let mut keys = BTreeSet::new();
+            for member in paths {
+                match member {
+                    SHACLPath::Predicate { .. } | SHACLPath::Inverse { .. } => {
+                        keys.extend(plan_value_set_path(member, incoming)?);
                     }
                     _ => return Err(unsupported_path(path)),
                 }
             }
-            Ok(())
+            Ok(keys)
         }
         _ => Err(unsupported_path(path)),
     }

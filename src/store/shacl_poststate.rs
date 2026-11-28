@@ -344,22 +344,57 @@ impl Store {
         graph: i64,
         attribute: Option<i64>,
     ) -> Result<()> {
+        self.append_bounded_entity_in(
+            facts,
+            entity,
+            graph,
+            attribute.as_ref().map(std::slice::from_ref),
+        )
+    }
+
+    /// The ONE bounded-focus loader (aegis-7aee; shared with aegis-ew90).
+    ///
+    /// `attributes: None` loads every current fact of `entity` in `graph`;
+    /// `Some(set)` loads only facts whose predicate is in `set`, which
+    /// `idx_geav (g, e, a, v)` serves without reading the entity's other
+    /// facts. A hot node (one repository named by every GitHub delivery) can
+    /// carry 10^5 facts no loaded shape constrains; loading them made every
+    /// small write re-validate them (2.49 s per delivery at 44.6k:67.6k).
+    #[cfg(feature = "shacl")]
+    pub(super) fn append_bounded_entity_in(
+        &self,
+        facts: &mut Vec<crate::Fact>,
+        entity: i64,
+        graph: i64,
+        attributes: Option<&[i64]>,
+    ) -> Result<()> {
         // Validation consumes RDF triples, not repeated assertion rows. Bound
-        // the selected predicate and DISTINCT triples before materializing them.
+        // the selected predicates and DISTINCT triples before materializing them.
         // SQLite's single MIN aggregate selects the matching row's provenance.
         if facts.len() > CONTEXT_FACT_BUDGET as usize {
             return Err(Error::CannotVerify(
                 "post-state SHACL context exceeds 100000 facts".into(),
             ));
         }
+        if attributes.is_some_and(<[i64]>::is_empty) {
+            return Ok(());
+        }
         let remaining = CONTEXT_FACT_BUDGET as usize - facts.len();
-        let mut stmt = self.conn.prepare(
-            "SELECT e,a,v,MIN(tx),valid_from,valid_to FROM facts \
-             WHERE e=?1 AND g=?2 AND op=1 AND valid_to IS NULL \
-             AND (?3 IS NULL OR a=?3) GROUP BY a,v LIMIT ?4",
-        )?;
         let limit = CONTEXT_FACT_BUDGET - facts.len() as u32 + 1;
-        let mut rows = stmt.query(rusqlite::params![entity, graph, attribute, limit])?;
+        let filter = match attributes {
+            None => String::new(),
+            Some(set) => format!(" AND a IN ({})", vec!["?"; set.len()].join(",")),
+        };
+        let sql = format!(
+            "SELECT e,a,v,MIN(tx),valid_from,valid_to FROM facts \
+             WHERE e=? AND g=? AND op=1 AND valid_to IS NULL{filter} \
+             GROUP BY a,v LIMIT ?"
+        );
+        let mut params: Vec<rusqlite::types::Value> = vec![entity.into(), graph.into()];
+        params.extend(attributes.unwrap_or_default().iter().map(|&a| a.into()));
+        params.push(i64::from(limit).into());
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(params))?;
         let mut selected = Vec::new();
         while let Some(row) = rows.next()? {
             if selected.len() >= remaining {
@@ -394,3 +429,7 @@ pub(super) fn context_budget_exhausted(message: &str) -> bool {
 #[cfg(all(test, feature = "shacl"))]
 #[path = "shacl_write_path_tests.rs"]
 mod write_path_tests;
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_bounded_context_tests.rs"]
+mod bounded_context_tests;

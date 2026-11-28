@@ -153,3 +153,90 @@ fn an_unplannable_path_is_refused_at_load_and_writes_keep_working() {
     knot(&mut store, "ex:a ex:unrelated \"one\" .").expect("write after a refused load");
     knot(&mut store, "ex:b ex:unrelated \"two\" .").expect("second write after a refused load");
 }
+
+#[test]
+fn later_alternative_values_are_refused_without_restating_the_target_type() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("alt", ALTERNATIVE, "2026-11-04T00:00:00Z")
+        .unwrap();
+    knot(&mut store, "ex:l a ex:Labelled ; ex:label \"first\" .").unwrap();
+    knot(&mut store, "ex:l ex:altLabel \"second\" .")
+        .expect_err("a new union member must own the post-state maxCount violation");
+    let rows = crate::sparql::query(
+        &store,
+        "SELECT ?v WHERE { <http://ex.test/l> <http://ex.test/altLabel> ?v }",
+    )
+    .unwrap();
+    assert!(rows.rows().is_empty(), "the rejected value must roll back");
+}
+
+#[test]
+fn later_inverse_alternative_values_are_refused() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("alt", ALTERNATIVE_WITH_INVERSE, "2026-11-04T00:00:00Z")
+        .unwrap();
+    knot(&mut store, "ex:l a ex:Labelled ; ex:p ex:only .").unwrap();
+    knot(&mut store, "ex:other ex:q ex:l .")
+        .expect_err("a new inverse member must own the union violation");
+}
+
+#[test]
+fn alternative_debt_does_not_block_restatements_or_unrelated_values() {
+    let mut store = Store::open_in_memory().unwrap();
+    knot(
+        &mut store,
+        "ex:l a ex:Labelled ; ex:label \"first\" ; ex:altLabel \"second\" .",
+    )
+    .unwrap();
+    store
+        .load_shapes("alt", ALTERNATIVE, "2026-11-04T00:00:00Z")
+        .unwrap();
+    let out = knot(
+        &mut store,
+        "ex:l ex:label \"first\" ; ex:unrelated \"new\" .",
+    )
+    .unwrap();
+    assert_eq!(
+        out["conforms"], true,
+        "existing union debt is not this write's"
+    );
+    knot(&mut store, "ex:l ex:altLabel \"third\" .")
+        .expect_err("adding a new value still owns and worsens the union debt");
+}
+
+#[test]
+fn alternative_arms_reaching_the_same_value_still_conform_across_writes() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("alt", ALTERNATIVE, "2026-11-04T00:00:00Z")
+        .unwrap();
+    knot(&mut store, "ex:l a ex:Labelled ; ex:label \"same\" .").unwrap();
+    let out = knot(&mut store, "ex:l ex:altLabel \"same\" .").unwrap();
+    assert_eq!(out["conforms"], true, "union counts distinct RDF values");
+}
+
+#[test]
+fn alternative_unique_language_owns_a_later_language_collision() {
+    let mut store = Store::open_in_memory().unwrap();
+    let shapes = ALTERNATIVE.replace("sh:maxCount 1", "sh:uniqueLang true");
+    store
+        .load_shapes("alt", &shapes, "2026-11-04T00:00:00Z")
+        .unwrap();
+    knot(&mut store, "ex:l a ex:Labelled ; ex:label \"first\"@en .").unwrap();
+    knot(&mut store, "ex:l ex:altLabel \"second\"@en .")
+        .expect_err("the new arm owns the duplicate language");
+}
+
+#[test]
+fn alternative_member_iris_keep_their_parentheses() {
+    let mut store = Store::open_in_memory().unwrap();
+    let shapes = ALTERNATIVE.replace("ex:label", "<http://ex.test/label(x)>");
+    store
+        .load_shapes("alt", &shapes, "2026-11-04T00:00:00Z")
+        .unwrap();
+    knot(&mut store, "ex:l a ex:Labelled ; ex:altLabel \"first\" .").unwrap();
+    knot(&mut store, "ex:l <http://ex.test/label(x)> \"second\" .")
+        .expect_err("the whole predicate IRI is an ownership key");
+}

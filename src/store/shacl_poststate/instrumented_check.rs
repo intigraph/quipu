@@ -79,6 +79,9 @@ impl Store {
                 })()
             )?;
             let incoming_targets = plan.incoming_predicates.clone();
+            // aegis-7aee: narrow each focus's stored context to what the loaded
+            // shapes can read, when every reachable shape is boundable.
+            let subject_attributes = self.bounded_subject_attributes(&plan)?;
             let mut facts = Vec::new();
             timed!(
                 check_entities,
@@ -86,7 +89,12 @@ impl Store {
                     for &entity in &subjects {
                         timed!(
                             check_entity_bounded,
-                            self.append_bounded_entity(&mut facts, entity, graph, None)
+                            self.append_bounded_entity_in(
+                                &mut facts,
+                                entity,
+                                graph,
+                                subject_attributes.as_deref(),
+                            )
                         )?;
                         timed!(
                             check_entity_object_targets,
@@ -200,7 +208,7 @@ impl Store {
                     };
                     let focus = issue.focus_node.trim_matches(['<', '>']);
                     let mine = if VALUE_SETS.contains(&component) {
-                        owned.owns(component, focus, issue.path.as_deref())
+                        owned.owns(component, focus, issue.path.as_deref(), &plan)
                     } else {
                         complete_values
                             && COMPONENTS.contains(&component)
@@ -245,5 +253,33 @@ impl Store {
             }
             result => result,
         }
+    }
+
+    /// The predicate ids a bounded focus context loads: the plan's subject
+    /// predicates plus `rdf:type` (class targets, `sh:class`, and the
+    /// subclass walk all start from the focus's types). `None` means load the
+    /// full focus context. A predicate the store has never interned has no
+    /// facts to load and is skipped.
+    fn bounded_subject_attributes(
+        &self,
+        plan: &crate::shacl::write_paths::CardinalityPlan,
+    ) -> Result<Option<Vec<i64>>> {
+        if !plan.subject_context_bounded {
+            return Ok(None);
+        }
+        let mut ids = Vec::new();
+        for iri in plan
+            .subject_predicates
+            .iter()
+            .map(String::as_str)
+            .chain(["http://www.w3.org/1999/02/22-rdf-syntax-ns#type"])
+        {
+            if let Some(id) = self.lookup(iri)? {
+                ids.push(id);
+            }
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        Ok(Some(ids))
     }
 }
