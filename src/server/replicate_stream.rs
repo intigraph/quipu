@@ -188,6 +188,10 @@ async fn produce(
     let mut hints = store.commit_wake.subscribe();
     hints.borrow_and_update();
     let mut nonces: VecDeque<Challenge> = VecDeque::new();
+    // aegis-awpw: the wait for a hinted commit runs beside the select, so a
+    // challenge that arrives during a write is still taken and answered.
+    let (commit_done, mut commit_finished) = mpsc::channel::<Result<(), AppError>>(1);
+    let mut waiting = false;
     loop {
         let front = nonces.front().copied();
         if let Some((_, Some(proof), _)) = front {
@@ -240,35 +244,50 @@ async fn produce(
         if sent_any || !nonces.is_empty() {
             continue;
         }
-        tokio::select! {
-            changed = hints.changed() => {
-                if changed.is_err() {
-                    return;
+        loop {
+            tokio::select! {
+                changed = hints.changed(), if !waiting => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    // Wait for the hinted commit to finish before reading it,
+                    // without holding up challenges (aegis-awpw): a challenge is
+                    // answered from the committed head and needs only a read
+                    // permit, never the writer lock.
+                    waiting = true;
+                    let writer = store.clone();
+                    let done = commit_done.clone();
+                    tokio::spawn(async move {
+                        let finished = crate::base::blocking(move || {
+                            drop(writer.writer.lock());
+                            Ok(())
+                        })
+                        .await;
+                        let _ = done.send(finished).await;
+                    });
                 }
-                // Wait for the hinted commit to finish before reading it.
-                let writer = store.clone();
-                if crate::base::blocking(move || {
-                    drop(writer.writer.lock());
-                    Ok(())
-                })
-                .await
-                .is_err()
-                {
-                    return;
+                finished = commit_finished.recv(), if waiting => {
+                    waiting = false;
+                    if !matches!(finished, Some(Ok(()))) {
+                        return;
+                    }
+                    break;
                 }
-            }
-            nonce = inbox.recv() => match nonce {
-                Some(nonce) => {
-                    timing::observe(Stage::Inbox, nonce.2.elapsed());
-                    nonces.push_back(nonce);
-                }
-                None => return,
-            },
-            // The follower went away: free its slot and session now.
-            () = frames.closed() => return,
-            () = tokio::time::sleep(HEARTBEAT) => {
-                if frames.send(sse(session.heartbeat())).await.is_err() {
-                    return;
+                nonce = inbox.recv() => match nonce {
+                    Some(nonce) => {
+                        timing::observe(Stage::Inbox, nonce.2.elapsed());
+                        nonces.push_back(nonce);
+                        break;
+                    }
+                    None => return,
+                },
+                // The follower went away: free its slot and session now.
+                () = frames.closed() => return,
+                () = tokio::time::sleep(HEARTBEAT) => {
+                    if frames.send(sse(session.heartbeat())).await.is_err() {
+                        return;
+                    }
+                    break;
                 }
             }
         }

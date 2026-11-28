@@ -49,6 +49,34 @@ fn source(signing: bool) -> (SharedStore, String) {
     (Arc::new(StoreHandle::writer_only(store)), key)
 }
 
+/// A file-backed source with a real reader pool, as production serves (a pool of
+/// 8 readers). With no pool `read()` IS the writer, so a writer-only
+/// source cannot show whether an answer avoids the writer lock.
+fn pooled_source() -> (SharedStore, String, tempfile::TempDir) {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("source.db");
+    let path = path.to_str().unwrap();
+    let mut store = Store::open(path).unwrap();
+    write(&mut store, "urn:item:1", "one");
+    write(&mut store, "urn:item:2", "two");
+    let doc = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new()).unwrap();
+    let identity = quipu::signing::SigningIdentity::new(
+        Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap(),
+        "quipu",
+    );
+    let key = identity.public_key_hex();
+    store.set_signing_identity(Arc::new(identity));
+    let readers = crate::ReadPool::open(path, &store, 2);
+    assert!(readers.len() > 0, "the regression needs a real reader pool");
+    let shared = Arc::new(StoreHandle::serving(
+        store,
+        readers,
+        path,
+        quipu::config::FederationConfig::default(),
+    ));
+    (shared, key, temp)
+}
+
 fn request(shared: &SharedStore) -> StreamRequest {
     serde_json::from_value(serde_json::json!({
         "graphs": [BOARD], "since": 0,
@@ -232,6 +260,62 @@ async fn a_challenge_through_the_route_bounds_freshness() {
         freshness.bounded && freshness.within(5_000),
         "{freshness:?}"
     );
+}
+
+/// aegis-awpw: a challenge that arrives while a hinted commit is still holding
+/// the writer lock is answered from the committed head, not after the write.
+/// Before the fix the producer awaited `writer.lock()` inline after every hint,
+/// so this proof only came once the 3 s write released the lock.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_challenge_is_answered_while_a_hinted_write_holds_the_writer() {
+    let (shared, key, _temp) = pooled_source();
+    let mut follower = Follower::connect(&shared, &key).await;
+    let head = shared.read().latest_tx_id().unwrap();
+    follower
+        .until(
+            Duration::from_secs(5),
+            |o| matches!(o, Outcome::CoverageAdvanced { watermark } if *watermark == head),
+        )
+        .await
+        .unwrap();
+    // A write in flight: hold the real writer lock for 3 s, then hint a commit.
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let writer = shared.clone();
+    let holder = std::thread::spawn(move || {
+        let _write = writer.writer.lock();
+        held_tx.send(()).unwrap();
+        std::thread::sleep(Duration::from_secs(3));
+    });
+    held_rx.recv().unwrap();
+    shared.commit_wake.send_modify(|_| ());
+    tokio::time::sleep(Duration::from_millis(100)).await; // the producer is now waiting on the write
+    let session = follower.applier.session().unwrap().to_string();
+    let nonce = [0x6b; 16];
+    let sent = follower.now();
+    follower.applier.challenge(&session, nonce, sent).unwrap();
+    let started = Instant::now();
+    let response = challenge(axum::Json(ChallengeRequest {
+        session: session.clone(),
+        nonce: hex::encode(nonce),
+    }))
+    .await;
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let proof = follower
+        .until(Duration::from_secs(1), |o| {
+            matches!(o, Outcome::ProofAccepted { .. })
+        })
+        .await;
+    let waited = started.elapsed();
+    assert_eq!(
+        proof,
+        Some(Outcome::ProofAccepted { t_send_ms: sent }),
+        "no proof within 1 s while the writer was held (waited {waited:?})"
+    );
+    assert!(
+        !holder.is_finished(),
+        "the write must still be in flight when the proof lands"
+    );
+    holder.join().unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
