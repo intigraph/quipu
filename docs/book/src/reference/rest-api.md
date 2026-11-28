@@ -589,6 +589,14 @@ local evaluator's context). See
 
 #### Durable write IDs on routed updates
 
+Before opting in, read `GET /version`'s `routed_update_completion` object.
+It names the `/update` operation, `request_contract`, `status_contract`,
+`status` and `seal` paths, and `enabled` (true only with an installed graph-set
+router). A missing object or `enabled: false` is not write admission. The
+general `/knot` v2 advertisement alone does not establish `/update` support.
+Clients must separately verify their configured composed-read credential and
+graph selection; this capability object grants no authority.
+
 An update whose graphs all belong to ONE enrolled graph-set owner
 (`[quipu.graph_sets]`) may opt in to the same durable completion contract as
 `/knot` v2: send `X-Quipu-Completion-Contract: quipu.knot-completion/v2` and

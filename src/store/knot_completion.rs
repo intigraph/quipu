@@ -360,3 +360,7 @@ mod owner_context;
 #[cfg(unix)]
 #[path = "update_completion.rs"]
 pub mod update;
+
+#[cfg(all(test, unix))]
+#[path = "completion_conformance_tests.rs"]
+mod conformance;

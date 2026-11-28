@@ -9,6 +9,63 @@ use axum::{
 use super::update_route;
 use crate::base::{AppError, blocking};
 
+/// Operation-specific support and activation, without attempting a write.
+/// The knot v2 advertisement alone cannot prove routed `/update` support.
+pub(crate) fn capability() -> serde_json::Value {
+    #[cfg(unix)]
+    let enabled = update_route::router().is_some();
+    #[cfg(not(unix))]
+    let enabled = false;
+    capability_for_router(enabled)
+}
+
+fn capability_for_router(enabled: bool) -> serde_json::Value {
+    serde_json::json!({
+        "operation": "/update",
+        "request_contract": crate::knot_durable::CONTRACT,
+        "status_contract": "quipu.update-completion/v1",
+        "enabled": enabled,
+        "status": "/update/status",
+        "seal": "/update/seal",
+    })
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn version_serves_the_routed_update_capability() {
+        let response = crate::base::version().await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 16384)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["routed_update_completion"], capability());
+    }
+
+    #[test]
+    fn routed_update_capability_distinguishes_support_from_activation() {
+        let off = capability_for_router(false);
+        let on = capability_for_router(true);
+        assert_eq!(off["enabled"], false);
+        assert_eq!(on["enabled"], true);
+        assert_eq!(on["request_contract"], "quipu.knot-completion/v2");
+        assert_eq!(on["operation"], "/update");
+        assert_eq!(on["status"], "/update/status");
+        assert_eq!(on["seal"], "/update/seal");
+        #[cfg(unix)]
+        assert_eq!(
+            on["status_contract"],
+            quipu::store::knot_completion::update::STATUS_CONTRACT
+        );
+        #[cfg(unix)]
+        assert_eq!(capability()["enabled"], update_route::router().is_some());
+        #[cfg(not(unix))]
+        assert_eq!(capability()["enabled"], false);
+    }
+}
+
 /// A repeated write ID's answer: the original complete receipt when the
 /// attempt finished, the commit witness when it committed but its receipt was
 /// never recorded, else 409 with its state (admitted = UNKNOWN custody).
