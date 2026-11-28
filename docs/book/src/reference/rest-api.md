@@ -2317,11 +2317,23 @@ Caller attribution uses the normalized `X-Quipu-Client` header (falling back
 to `User-Agent`, then `unattributed`) and is capped at 32 identities; overflow
 folds into `other` rather than creating unbounded Prometheus cardinality:
 
-- `quipu_http_client_requests_total{client,endpoint}` — request count;
-- `quipu_http_client_request_seconds_total{client,endpoint}` — wall time;
+- `quipu_http_client_requests_total{client,task,endpoint,outcome}` — terminal request count;
+- `quipu_http_client_request_seconds_total{client,task,endpoint}` — wall time;
 - `quipu_store_wait_seconds_total{client,endpoint}` — time waiting to acquire a
   store connection;
 - `quipu_store_held_seconds_total{client,endpoint}` — store capacity consumed.
+
+The request counter's `outcome` has six fixed classes: `ok` (1xx–3xx,
+including protocol upgrades and redirects), `timeout` (408), `client_closed`
+(499, including dropped request futures), `client_error` (other 4xx),
+`unavailable` (503), and `server_error` (other 5xx or invalid status values).
+Each completion counts once. Every observed client/task/route identity exports
+all six outcomes, including zeros, so a later first failure has a counter baseline.
+This adds at most six series per existing client/task/route identity. Duration
+metrics keep their existing labels. Sum without `outcome` to retain aggregate
+counts; use, for example,
+`sum by (client, outcome) (increase(quipu_http_client_requests_total{outcome=~"timeout|client_closed|unavailable"}[15m]))`
+to attribute failed requests. Raw statuses remain on `quipu_http_requests_total`.
 
 For reads the store is a read-pool connection. For writes (`/update` and the
 generic write tools such as `/set`, labelled by route template) it is the single

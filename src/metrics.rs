@@ -29,6 +29,7 @@ pub(crate) mod attestation;
 mod histogram;
 pub mod inflight;
 pub mod operations;
+mod outcomes;
 mod search;
 use histogram::Hist;
 pub(crate) mod refusals;
@@ -80,7 +81,7 @@ const MAX_CLIENTS: usize = 32;
 const MAX_TASKS: usize = 128;
 
 type ClientTaskEndpoint = (String, String, String);
-type RequestObservation = (u64, f64);
+type RequestObservation = ([u64; 6], f64);
 type AuthRefusalMethods = BTreeMap<(&'static str, bool), u64>;
 
 fn client_key<V>(
@@ -158,7 +159,7 @@ pub struct Metrics {
     agent_queries: agents::AgentQueryMetrics,
     /// `/query` by declared operation (aegis-hg6); bounded allowlist, no task/endpoint dimension.
     operation_queries: operations::OperationQueryMetrics,
-    /// (client, task, endpoint template) -> (request count, summed seconds).
+    /// (client, task, endpoint template) -> (six outcome counts, summed seconds).
     clients: Mutex<BTreeMap<ClientTaskEndpoint, RequestObservation>>,
     /// Per-caller tails, sharing the counter's bounded identity but not its task dimension.
     client_durations: Mutex<BTreeMap<(String, String), Hist>>,
@@ -269,7 +270,7 @@ impl Metrics {
         self.operation_queries.observe(client, ep, op, secs);
     }
 
-    /// Attribute one request's TIME to a caller (aegis-ma1hy).
+    /// Attribute one terminal request's outcome and time to its caller.
     ///
     /// Call with the already-normalised label from [`normalize_client`]; this
     /// method does not normalise, so that the middleware pays that cost once and
@@ -277,7 +278,14 @@ impl Metrics {
     ///
     /// Folds into `other` past [`MAX_CLIENTS`] distinct values — see that
     /// constant for why the cap is not optional.
-    pub fn observe_client(&self, client: &str, task: &str, endpoint: &str, seconds: f64) {
+    pub fn observe_client(
+        &self,
+        client: &str,
+        task: &str,
+        endpoint: &str,
+        status: u16,
+        seconds: f64,
+    ) {
         let mut map = self.clients.lock().unwrap();
         // `MAX_CLIENTS - 1`, not `MAX_CLIENTS`: the `other` bucket needs a slot
         // of its own, or the cap is silently one higher than the constant says.
@@ -287,8 +295,8 @@ impl Metrics {
         // fold after a few multi-endpoint clients (aegis-vxl81).
         let key = request_key(&map, client, task, endpoint);
         let histogram_key = (key.0.clone(), key.2.clone());
-        let e = map.entry(key).or_insert((0, 0.0));
-        e.0 += 1;
+        let e = map.entry(key).or_insert(([0; 6], 0.0));
+        e.0[outcomes::classify(status)] += 1;
         e.1 += seconds;
         drop(map);
         self.client_durations
@@ -492,20 +500,7 @@ impl Metrics {
             );
         }
 
-        // Task-level counters retain attribution without multiplying histogram series.
-        out.push_str(
-            "# HELP quipu_http_client_requests_total Requests served, by normalised caller, task, and route template.\n\
-             # TYPE quipu_http_client_requests_total counter\n",
-        );
-        for ((client, task, ep), (n, _secs)) in self.clients.lock().unwrap().iter() {
-            let _ = writeln!(
-                out,
-                "quipu_http_client_requests_total{{client=\"{}\",task=\"{}\",endpoint=\"{}\"}} {n}",
-                esc(client),
-                esc(task),
-                esc(ep)
-            );
-        }
+        outcomes::render(&mut out, &self.clients.lock().unwrap());
 
         out.push_str(
             "# HELP quipu_http_client_request_seconds_total Cumulative request seconds, by normalised caller, task, and route template.\n\

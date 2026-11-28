@@ -93,7 +93,7 @@ fn client_cardinality_is_capped_and_overflow_is_visible() {
     let m = Metrics::default();
     // Far more distinct callers than the cap, all on one endpoint.
     for i in 0..(MAX_CLIENTS * 4) {
-        m.observe_client(&format!("caller{i}"), "unattributed", "/query", 0.1);
+        m.observe_client(&format!("caller{i}"), "unattributed", "/query", 200, 0.1);
     }
     let text = m.render(0, 0, 0, None);
     let clients: BTreeSet<&str> = text
@@ -128,15 +128,15 @@ fn client_cap_counts_clients_not_client_endpoint_pairs() {
     // pairs and folded the next legitimate caller into `other`.
     for i in 0..MAX_CLIENTS {
         let endpoint = format!("/route/{i}");
-        m.observe_client("existing", "unattributed", &endpoint, 0.1);
+        m.observe_client("existing", "unattributed", &endpoint, 200, 0.1);
         m.observe_store_time("existing", &endpoint, 0.0, 0.1);
     }
-    m.observe_client("new-caller", "unattributed", "/query", 0.1);
+    m.observe_client("new-caller", "unattributed", "/query", 200, 0.1);
     m.observe_store_time("new-caller", "/query", 0.0, 0.1);
 
     let text = m.render(0, 0, 0, None);
     assert!(text.contains(
-            "quipu_http_client_requests_total{client=\"new-caller\",task=\"unattributed\",endpoint=\"/query\"} 1"
+            "quipu_http_client_requests_total{client=\"new-caller\",task=\"unattributed\",endpoint=\"/query\",outcome=\"ok\"} 1"
         ));
     assert!(
         text.contains(
@@ -144,7 +144,7 @@ fn client_cap_counts_clients_not_client_endpoint_pairs() {
         )
     );
     assert!(!text.contains(
-            "quipu_http_client_requests_total{client=\"other\",task=\"unattributed\",endpoint=\"/query\"}"
+            "quipu_http_client_requests_total{client=\"other\",task=\"unattributed\",endpoint=\"/query\",outcome=\"ok\"}"
         ));
 }
 
@@ -152,7 +152,7 @@ fn client_cap_counts_clients_not_client_endpoint_pairs() {
 fn task_cardinality_is_independent_capped_and_overflow_is_visible() {
     let m = Metrics::default();
     for i in 0..(MAX_TASKS * 2) {
-        m.observe_client("query-first", &format!("aegis-{i}"), "/query", 0.1);
+        m.observe_client("query-first", &format!("aegis-{i}"), "/query", 200, 0.1);
     }
     let text = m.render(0, 0, 0, None);
     let tasks: BTreeSet<&str> = text
@@ -228,13 +228,13 @@ fn store_time_separates_waiting_from_burning() {
 #[test]
 fn client_time_attribution_sums_and_start_time_is_absent_until_recorded() {
     let m = Metrics::default();
-    m.observe_client("yupana", "aegis-3aybc", "/query", 2.0);
-    m.observe_client("yupana", "aegis-3aybc", "/query", 3.0);
-    m.observe_client("bobbin", "unattributed", "/query", 1.0);
+    m.observe_client("yupana", "aegis-3aybc", "/query", 200, 2.0);
+    m.observe_client("yupana", "aegis-3aybc", "/query", 200, 3.0);
+    m.observe_client("bobbin", "unattributed", "/query", 200, 1.0);
     let text = m.render(0, 0, 0, None);
     assert!(
             text.contains(
-                "quipu_http_client_requests_total{client=\"yupana\",task=\"aegis-3aybc\",endpoint=\"/query\"} 2"
+                "quipu_http_client_requests_total{client=\"yupana\",task=\"aegis-3aybc\",endpoint=\"/query\",outcome=\"ok\"} 2"
             )
         );
     assert!(text.contains(
@@ -394,8 +394,8 @@ fn held_histogram_shows_a_per_request_bound_a_total_cannot() {
 fn caller_histograms_distinguish_equal_means_and_aggregate_tasks() {
     let m = Metrics::default();
     for (task, steady, tail) in [("first", 0.75, 0.25), ("second", 0.75, 1.25)] {
-        m.observe_client("steady", task, "/search", steady);
-        m.observe_client("tail", task, "/search", tail);
+        m.observe_client("steady", task, "/search", 200, steady);
+        m.observe_client("tail", task, "/search", 200, tail);
         m.observe_request("/search", 200, tail);
     }
     let text = m.render(0, 0, 0, None);
@@ -444,7 +444,7 @@ fn caller_histogram_cap_agrees_with_counters_across_tasks_and_routes() {
     let m = Metrics::default();
     for i in 0..MAX_CLIENTS * 4 {
         for route in ["/search", "/query"] {
-            m.observe_client(&format!("caller{i}"), &format!("task{i}"), route, 31.0);
+            m.observe_client(&format!("caller{i}"), &format!("task{i}"), route, 200, 31.0);
         }
     }
     let text = m.render(0, 0, 0, None);
@@ -531,4 +531,83 @@ fn monitored_query_outcomes_export_zero_before_the_first_request() {
             .render(0, 0, 0, None)
             .contains(&format!("{series} 1\n"))
     );
+}
+
+#[test]
+fn client_counter_exposes_bounded_outcome() {
+    let m = Metrics::default();
+    m.observe_client("probe", "test", "/query", 200, 0.1);
+    let text = m.render(0, 0, 0, None);
+    assert!(
+        text.lines()
+            .any(|line| line.starts_with("quipu_http_client_requests_total{")
+                && line.contains("client=\"probe\"")
+                && line.contains("outcome=\"ok\"")
+                && line.ends_with(" 1")),
+        "completed request lacks outcome: {text}"
+    );
+}
+
+#[test]
+fn client_outcomes_preserve_totals_durations_and_identity_caps() {
+    let m = Metrics::default();
+    for i in 0..MAX_CLIENTS * 4 {
+        for status in [200, 400, 408, 499, 503, 500] {
+            m.observe_client(&format!("caller{i}"), "test", "/query", status, 0.5);
+        }
+    }
+    let text = m.render(0, 0, 0, None);
+    let lines: Vec<_> = text
+        .lines()
+        .filter(|l| l.starts_with("quipu_http_client_requests_total{"))
+        .collect();
+    assert_eq!(lines.len(), MAX_CLIENTS * 6);
+    let sum: u64 = lines
+        .iter()
+        .map(|l| l.rsplit(' ').next().unwrap().parse::<u64>().unwrap())
+        .sum();
+    assert_eq!(sum as usize, MAX_CLIENTS * 4 * 6);
+    let seconds: f64 = text
+        .lines()
+        .filter(|l| l.starts_with("quipu_http_client_request_seconds_total{"))
+        .map(|l| {
+            assert!(!l.contains("outcome="));
+            l.rsplit(' ').next().unwrap().parse::<f64>().unwrap()
+        })
+        .sum();
+    assert_eq!(seconds, sum as f64 * 0.5);
+    assert!(lines.iter().any(|l| l.contains("client=\"other\"")));
+    assert!(!lines.iter().any(|l| l.contains("status=")));
+}
+
+#[test]
+fn successful_caller_exports_zero_failure_baselines() {
+    let m = Metrics::default();
+    m.observe_client("probe", "test", "/query", 200, 0.1);
+    let text = m.render(0, 0, 0, None);
+    for outcome in [
+        "client_error",
+        "timeout",
+        "client_closed",
+        "unavailable",
+        "server_error",
+    ] {
+        let line = text
+            .lines()
+            .find(|l| {
+                l.starts_with("quipu_http_client_requests_total{")
+                    && l.contains(&format!("outcome=\"{outcome}\""))
+            })
+            .unwrap();
+        assert!(line.ends_with(" 0"), "{line}");
+    }
+    m.observe_client("probe", "test", "/query", 408, 0.2);
+    let text = m.render(0, 0, 0, None);
+    let line = text
+        .lines()
+        .find(|l| {
+            l.starts_with("quipu_http_client_requests_total{") && l.contains("outcome=\"timeout\"")
+        })
+        .unwrap();
+    assert!(line.ends_with(" 1"), "{line}");
 }

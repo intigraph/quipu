@@ -99,6 +99,7 @@ impl Completion<'_> {
             &self.client,
             &self.task,
             &self.endpoint,
+            status,
             elapsed.as_secs_f64(),
         );
         self.metrics.observe_agent_query(
