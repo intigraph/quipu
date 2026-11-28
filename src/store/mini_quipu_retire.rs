@@ -55,7 +55,7 @@ BEGIN SELECT RAISE(ABORT, 'mini-quipu retire refused (retired-never-reopens)'); 
 /// Why the fork is retired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RetireReason {
-    /// After the final merge. The file head must be the merged head.
+    /// After the final merge. The file head must be merged with no held slots.
     FinalMerge,
     /// The owner abandons the fork. Unmerged local writes stay unmerged.
     Abandoned,
@@ -94,6 +94,8 @@ pub enum RetireRefusal {
     AlreadyRetired,
     /// `FinalMerge` with local writes after the last merge, or no merge.
     Unmerged,
+    /// The last partial merge still holds unresolved local slots.
+    HeldRemainder,
     /// The file is not this entry's mini-Quipu.
     ForeignFile,
 }
@@ -105,6 +107,7 @@ impl RetireRefusal {
             Self::NotRegistered => "not-registered",
             Self::AlreadyRetired => "retired-never-reopens",
             Self::Unmerged => "unmerged-local-writes",
+            Self::HeldRemainder => "held-remainder",
             Self::ForeignFile => "foreign-file",
         }
     }
@@ -205,6 +208,20 @@ fn retire(
         return Err(refused(
             RetireRefusal::AlreadyRetired,
             "a retired fork never reopens; a new fork is a new identity",
+        ));
+    }
+    // A partial merge records its head too. Matching heads alone does not
+    // establish that all local work reached home. Refuse before touching the
+    // mini file or the home registry; abandonment is the explicit discard path.
+    if req.reason == RetireReason::FinalMerge
+        && let Some(last) = entry.last_merge.as_ref().filter(|last| last.held > 0)
+    {
+        return Err(refused(
+            RetireRefusal::HeldRemainder,
+            &format!(
+                "{} held slot(s) remain; resolve the remainder or explicitly abandon",
+                last.held
+            ),
         ));
     }
     let mini = open_file(path, &entry)?;

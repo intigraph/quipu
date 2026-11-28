@@ -521,3 +521,94 @@ fn later_r13_a_remainder_that_writes_nothing_releases_the_hold() {
     assert_eq!(values(&p.home.legacy, "urn:z", ONE), ["mini"]);
     assert_eq!(values(&p.home.legacy, "urn:x", ONE), ["c"]);
 }
+
+// Retirement must distinguish a fully resolved merge from a partial merge
+// that recorded the same head while holding some local work back.
+use crate::store::graph_owner::graph_set::mini_fork::retire::{
+    RetireReason, RetireRequest, fenced, retire_on_legacy, retirement,
+};
+
+fn m5_retire(
+    p: &mut Pair,
+    reason: RetireReason,
+) -> crate::Result<super::super::super::retire::Retirement> {
+    retire_on_legacy(
+        &mut p.home.legacy,
+        &p.path,
+        &RetireRequest {
+            name: "agent-a",
+            reason,
+            timestamp: TT,
+        },
+    )
+}
+
+#[test]
+fn m5_final_retirement_refuses_held_slots_before_fencing_or_registry_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = conflict_pair(dir.path());
+    let first = merged(&mut p, &partial());
+    assert_eq!(first.held, 1);
+    let entry = super::super::super::mini_fork_entry(&p.home.legacy, "agent-a").unwrap();
+    let before = (footprint(&p.home.legacy), footprint(p.mini.store()));
+    let err = m5_retire(&mut p, RetireReason::FinalMerge).unwrap_err();
+    let text = err.to_string();
+    assert!(
+        text.contains("held-remainder") && text.contains("1 held slot"),
+        "{text}"
+    );
+    assert_eq!(
+        (footprint(&p.home.legacy), footprint(p.mini.store())),
+        before
+    );
+    assert_eq!(
+        super::super::super::mini_fork_entry(&p.home.legacy, "agent-a").unwrap(),
+        entry
+    );
+    assert!(fenced(p.mini.store()).unwrap().is_none());
+    assert!(retirement(&p.home.legacy, "agent-a").unwrap().is_none());
+    let status: String = p
+        .home
+        .legacy
+        .conn
+        .query_row(
+            "SELECT status FROM mini_quipu_forks WHERE name='agent-a'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(status, "open");
+}
+
+#[test]
+fn m5_final_retirement_accepts_the_same_head_after_resolving_held_slots() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = conflict_pair(dir.path());
+    let first = merged(&mut p, &partial());
+    assert_eq!(first.held, 1);
+    let head = p.mini.store().latest_tx_id().unwrap();
+    let res = ForkResolutions::from([(key(&p, "urn:x", ONE), vec![Value::Str("c".into())])]);
+    let rest = merged(&mut p, &decided(&res));
+    assert_eq!(rest.held, 0);
+    assert_eq!(p.mini.store().latest_tx_id().unwrap(), head);
+    let retired = m5_retire(&mut p, RetireReason::FinalMerge).unwrap();
+    assert_eq!(retired.last_merge, rest.merge_id);
+    assert!(fenced(p.mini.store()).unwrap().is_some());
+}
+
+#[test]
+fn m5_abandonment_explicitly_retires_a_fork_with_held_slots() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut p = conflict_pair(dir.path());
+    let first = merged(&mut p, &partial());
+    assert_eq!(first.held, 1);
+    let before = footprint(&p.home.legacy);
+    let retired = m5_retire(&mut p, RetireReason::Abandoned).unwrap();
+    assert_eq!(retired.last_merge, "abandoned");
+    assert_eq!(
+        retirement(&p.home.legacy, "agent-a").unwrap(),
+        Some(retired)
+    );
+    assert!(fenced(p.mini.store()).unwrap().is_some());
+    assert_eq!(footprint(&p.home.legacy), before);
+}
